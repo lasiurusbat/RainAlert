@@ -1,0 +1,236 @@
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background: url('image/rain-alert-bg.jpg') no-repeat center center fixed;
+    background-size: cover;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
+    align-items: center;
+    min-height: 100vh;
+    margin: 0;
+    /* Less bottom padding: the copyright line already provides separation
+       below the card, and this keeps a standard desktop view scroll-free. */
+    padding: 0.75rem 0 0.5rem;
+    box-sizing: border-box;
+}
+
+.page {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    /* Centre the content when it fits, but never push it above the scroll
+       origin when it does not - flex centring overflows in both directions
+       and the overflowing top becomes unreachable. */
+    margin: auto;
+}
+
+.container {
+    background: white;
+    padding: 1.75rem;
+    border-radius: 10px;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    /* Border-box so the 90% width includes the padding. With the default
+       content-box the card was 90% of the viewport *plus* the padding, which
+       pushed it past the screen edge on narrow viewports. */
+    box-sizing: border-box;
+    max-width: 564px;
+    width: 90%;
+}
+
+.copyright {
+    margin-top: 0.5rem;
+    color: #ffffff;
+    font-size: 0.8rem;
+    text-align: center;
+    /* The footer sits over the background photo, so it needs a shadow to stay
+       legible against the lighter parts of the image. */
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.7);
+}
+
+h1 {
+    color: #2c3e50;
+    text-align: center;
+}
+
+.form-group {
+    margin-bottom: 0.75rem;
+}
+
+input[type="text"] {
+    width: 100%;
+    padding: 0.5rem;
+    border: 1px solid #ddd;
+    border-radius: 5px;
+    box-sizing: border-box;
+}
+
+button {
+    width: 100%;
+    padding: 0.75rem;
+    background-color: #3498db;
+    color: white;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 1rem;
+}
+
+button:hover {
+    background-color: #2980b9;
+}
+
+.error {
+    color: #e74c3c;
+    font-weight: bold;
+    text-align: center;
+    margin: 20px 0;
+}
+
+.result {
+    margin-top: 1rem;
+    border-top: 1px solid #eee;
+    padding-top: 0.6rem;
+}
+
+.result h3 {
+    color: #2c3e50;
+    margin-top: 0;
+    /* The default h3 bottom margin is generous; trimming it keeps the whole
+       card inside a 768px-tall window once the forecast list is rendered. */
+    margin-bottom: 0.5rem;
+}
+
+.result-empty {
+    border-top-color: #eee;
+    text-align: center;
+}
+
+.result-empty p {
+    color: #7f8c8d;
+    margin: 0;
+}
+
+.weather-item {
+    /* Fallback band colours. A row always carries a severity-* class, which
+       overrides these; they only apply if that ever changes. */
+    --severity-text: #5d6d7e;
+    --severity-accent: #6c7a89;
+    --severity-tint: #f7f9fa;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.5rem 1rem;
+    /* Wrap rather than squeeze the two columns on narrow screens. */
+    flex-wrap: wrap;
+    padding: 0.45rem 0.75rem;
+    /* The negative margin lets the tint reach the card's padding edge, but
+       it must not push the row past the card, so the right margin cancels
+       the left one out. */
+    margin: 0 -0.75rem;
+    border-bottom: 1px solid #f9f9f9;
+    background: var(--severity-tint);
+    border-left: 3px solid var(--severity-accent);
+}
+
+/* The band classes are defined after .weather-item so they win the cascade
+   for a row that carries both, and so they can be used on their own by the
+   legend swatches. */
+.severity-low {
+    --severity-text: #5d6d7e;
+    --severity-accent: #6c7a89;
+    --severity-tint: #f7f9fa;
+}
+
+.severity-moderate {
+    --severity-text: #1a5e96;
+    --severity-accent: #2e86c1;
+    --severity-tint: #eef5fc;
+}
+
+.severity-high {
+    --severity-text: #a35c00;
+    --severity-accent: #d35400;
+    --severity-tint: #fdf3e6;
+}
+
+.severity-unknown {
+    --severity-text: #5d6d7e;
+    --severity-accent: #aab7b8;
+    --severity-tint: #f7f9fa;
+}
+
+.weather-item:last-child {
+    border-bottom: none;
+}
+
+.date {
+    font-weight: bold;
+    color: var(--severity-text);
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    min-width: 0;
+}
+
+/* The dot carries the band colour; the legend below the form explains what
+   each colour means, so severity never depends on colour alone. */
+.severity-dot {
+    width: 0.6rem;
+    height: 0.6rem;
+    flex: 0 0 auto;
+    border-radius: 50%;
+    background: var(--severity-accent);
+}
+
+/* The legend maps each band colour to a word, once, instead of repeating
+   the word on every row - seven repeated labels do not fit on one line
+   beside the date and would double the height of the list. */
+.severity-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.2rem 0.9rem;
+    margin: 0.15rem 0 0.35rem;
+    font-size: 0.72rem;
+    color: #5d6d7e;
+}
+
+.legend-item {
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+}
+
+.legend-item .severity-dot {
+    width: 0.5rem;
+    height: 0.5rem;
+}
+
+.rain-chance {
+    color: var(--severity-text);
+    font-weight: bold;
+    white-space: nowrap;
+}
+
+.umbrella {
+    margin-right: 0.2rem;
+    font-size: 1.05em;
+}
+
+.temp {
+    color: #5d6d7e;
+    font-weight: normal;
+}
+
+/* Visually hidden, but still read by screen readers. */
+.sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}

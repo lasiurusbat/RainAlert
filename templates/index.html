@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rain Alert</title>
+    <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="page">
+        <div class="container">
+            <h1>Rain Alert 🌧️</h1>
+            <form method="POST" action="">
+                <div class="form-group">
+                    <input type="text" name="city" placeholder="Enter city name (e.g., London)" value="{{ city or '' }}" required>
+                </div>
+                <button type="submit">Check Rain Chance</button>
+            </form>
+
+            {% if error %}
+                <p class="error" role="alert">{{ error }}</p>
+            {% endif %}
+
+            {% if weather_data %}
+                <div class="result">
+                    <h3>Forecast for {{ display_city }}:</h3>
+                    <div class="severity-legend">
+                        <span class="legend-item severity-low"><span class="severity-dot" aria-hidden="true"></span>Rain unlikely</span>
+                        <span class="legend-item severity-moderate"><span class="severity-dot" aria-hidden="true"></span>Rain possible</span>
+                        <span class="legend-item severity-high"><span class="severity-dot" aria-hidden="true"></span>Rain likely</span>
+                    </div>
+                    <div class="weather-list">
+                        {% for day in weather_data %}
+                        <div class="weather-item severity-{{ day.severity }}">
+                            <span class="date">
+                                <span class="severity-dot" aria-hidden="true"></span>
+                                {{ day.date }}
+                                <span class="sr-only">{{ day.severity_label }}.</span>
+                            </span>
+                            <span class="rain-chance">
+                                {% if day.umbrella %}<span class="umbrella" title="Take an umbrella">☔</span>{% endif %}
+                                {{ day.rain_label }}{% if day.temp_label %} <span class="temp">({{ day.temp_label }})</span>{% endif %}
+                            </span>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            {% elif city and not error %}
+                <div class="result result-empty">
+                    <p>No forecast data available for "{{ display_city }}". Try a more specific name like 'London, UK'.</p>
+                </div>
+            {% endif %}
+        </div>
+
+        <footer class="copyright">
+            Rain Alert © 2026. Vedad Dizdarevic. All rights reserved.
+        </footer>
+    </div>
+</body>
+</html>

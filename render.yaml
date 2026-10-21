@@ -1,0 +1,20 @@
+# Render Blueprint for RainAlert (free web service).
+# Nothing deploys until this repo is connected to Render and the Blueprint is
+# created there. autoDeploy is off so pushes do not trigger a deploy either.
+services:
+  - type: web
+    name: rainalert
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app:app --bind 0.0.0.0:$PORT
+    autoDeployTrigger: "off"
+    envVars:
+      - key: NOMINATIM_USER_AGENT
+        value: RainAlert_App_v1_2026
+      - key: GEOCODER_TIMEOUT
+        value: "10"
+      - key: WEATHER_TIMEOUT
+        value: "10"
+      - key: DATE_LOCALE
+        value: auto
