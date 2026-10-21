@@ -59,7 +59,20 @@
 
             {% if weather_data %}
                 <div class="result">
-                    <h3>Forecast for {{ display_city }}:</h3>
+                    <!-- The heading row. The export link sits on it, on the
+                         line the heading already takes, because the card has
+                         no vertical room for another line. -->
+                    <div class="result-head">
+                        <h3>Forecast for {{ display_city }}:</h3>
+                        <a class="calendar-export" id="calendar-export"
+                           data-app-days="{{ calendar_days }}"
+                           href="{{ url_for('calendar_export', city=city) }}"
+                           {% if not calendar_days %}hidden{% endif %}
+                           title="Put the days that reach your threshold into your own calendar.">
+                            <span class="calendar-icon" aria-hidden="true">📅</span>
+                            <span class="calendar-text">Add rainy days to my calendar</span>
+                        </a>
+                    </div>
                     {% if headline %}
                     <p class="headline severity-{{ headline.severity }}">{{ headline.text }}</p>
                     {% endif %}

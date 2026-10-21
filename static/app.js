@@ -105,6 +105,7 @@
     var status = document.getElementById("alert-status");
     var form = document.querySelector("form");
     var cityInput = form ? form.querySelector("input[name='city']") : null;
+    var calendarLink = document.getElementById("calendar-export");
 
     /* --- Remembering a city --------------------------------------------------
      * A city is only remembered once a search for it has actually worked. The
@@ -241,6 +242,41 @@
         status.textContent = text;
     }
 
+    /* --- The calendar export -------------------------------------------------
+     * A link that puts the rainy days into the reader's own calendar. The
+     * file itself is built on the server, so the rule that decides which
+     * days go into it lives there, behind the offline test suite. The
+     * browser's part is narrow: it says which threshold the reader is
+     * using, and it keeps the link away when there is nothing to export.
+     *
+     * The threshold in the link is the reader's own when they have set one,
+     * and the app's own when they have not - the same split the
+     * notifications use, for the same reason.
+     */
+    function updateCalendarLink(threshold, counts) {
+        if (!calendarLink) { return; }
+
+        var url = new URL(calendarLink.getAttribute("href"), window.location.href);
+        url.searchParams.delete("threshold");
+        if (threshold !== null) {
+            url.searchParams.set("threshold", String(threshold));
+        }
+        calendarLink.setAttribute("href", url.pathname + url.search);
+
+        if (threshold === null) {
+            /* Without a threshold of the reader's own, the export is the
+             * app's own advice, and the server has already worked out
+             * whether there is anything to put in it. */
+            var appDays = parseInt(calendarLink.getAttribute("data-app-days"), 10);
+            calendarLink.hidden = !appDays;
+            return;
+        }
+
+        /* With the reader's own threshold, the link is only worth offering
+         * when a day actually reaches it. */
+        calendarLink.hidden = counts.above === 0;
+    }
+
     function refresh() {
         var threshold = savedThreshold();
         if (thresholdInput && document.activeElement !== thresholdInput) {
@@ -248,6 +284,7 @@
         }
         var counts = applyThreshold(threshold);
         updateStatus(threshold, counts);
+        updateCalendarLink(threshold, counts);
     }
 
     /* --- Wiring -------------------------------------------------------------- */

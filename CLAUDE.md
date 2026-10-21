@@ -25,8 +25,8 @@ Serves on <http://127.0.0.1:5000>. `FLASK_DEBUG=1` enables the reloader and
 debugger.
 
 ```bash
-python -m unittest test_app    # offline suite, 233 tests, no network
-python -m unittest test_browser  # browser suite, 37 tests, needs Chrome
+python -m unittest test_app    # offline suite, 271 tests, no network
+python -m unittest test_browser  # browser suite, 44 tests, needs Chrome
 python -m unittest test_api     # live integration tests, hits both APIs
 ```
 
@@ -404,6 +404,49 @@ current hour, or rain starting within `NOTIFICATION_LEAD_HOURS`.
   only works while the tab is open. Real push is Tier 3 and needs a server, a
   database and a scheduler.
 
+**The calendar export is the last browser-side piece.** Tier 2's third half: a
+link on the forecast page that downloads an `.ics` file with one all-day event
+for every day that reaches the threshold. The reader's own calendar app then
+does the alerting, so RainAlert needs no server, no account and no scheduler
+for that — which is the whole of Tier 3 handed to software the reader
+already has.
+
+- **The file is built on the server.** `build_calendar()` in `app.py` writes
+  the whole iCalendar file, and `/calendar.ics` serves it. The browser only
+  says which threshold the reader is using, so the rule that decides which
+  days go in the file is behind the offline test suite and not inside a
+  string in `app.js` — the same split as the notification.
+- **The threshold is the reader's own when they have set one**, and the app's
+  umbrella threshold when they have not. That is the same split as the ▲
+  marker and the notification, for the same reason: the reader's limit and
+  the app's advice are two different answers and never stand in for each
+  other. `alert_threshold()` decides it, so the notification and the export
+  always draw the line in the same place.
+- **The days are the ones the page shows.** The comparison is against
+  `chance_number`, the whole number in the row, so the calendar and the list
+  can never disagree about which days are wet. A day the service did not
+  report is never in the file: an unknown chance is not a chance of
+  anything.
+- **The events are all-day events**, because the forecast is a daily maximum.
+  The file says which days are wet; the reader's calendar app decides when
+  to remind them about it. The event id is derived from the city and the
+  date, so importing the file again updates the same events instead of
+  adding a second copy of every one of them.
+- **The link sits on the forecast's heading row**, on the line the heading
+  already takes. The card is at its vertical limit — 702px, and the page
+  fits a 768px window with no scrollbar — so a new line would not fit, and
+  the link costs 0px: it is inside the heading's own line box.
+- **The link is hidden when there is nothing to export.** A link that would
+  download an empty calendar is not an offer, so the server leaves it
+  `hidden` when no day reaches the app's threshold, and the script takes it
+  away again when the reader's own higher threshold leaves nothing. The
+  `hidden` attribute needs its own CSS rule, or `display: inline-flex` would
+  win and the link would show anyway.
+- **The export is never cached, and never intercepted.** The file holds a
+  forecast, so a copy of one would be a lie: the response is `no-store`, and
+  the service worker skips `/calendar.ics` so that an offline page can never
+  be downloaded in its place.
+
 **The app is installable, and the two caching rules are the whole design.**
 `static/manifest.json` and `static/service-worker.js` are served from the
 **root** — `/manifest.json` and `/service-worker.js` — by two thin routes in
@@ -417,9 +460,10 @@ safe zone the generator keeps clear), and `templates/index.html` links it with
 
 - **The forecast is never cached.** A navigation is network-first and
   bypasses the browser's own cache as well (`fetch(request, {cache:
-  'no-store'})`), `/api/` is never intercepted at all, and `/` is deliberately
-  absent from the shell list — there is a test that asserts it. A rain chance
-  from yesterday is wrong, so it is never replayed.
+  'no-store'})`), `/api/` is never intercepted at all, `/calendar.ics` is
+  skipped for the same reason, and `/` is deliberately absent from the shell
+  list — there is a test that asserts it. A rain chance from yesterday is
+  wrong, so it is never replayed.
 - **The shell is cached**, so an installed app opens without a network and
   shows `static/offline.html` instead of the browser's error screen. The
   shell is the stylesheet, the script, the icons and the background photo:

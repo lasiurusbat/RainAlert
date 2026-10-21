@@ -62,8 +62,14 @@ These features keep state in the user's browser, so the server stays stateless.
     - **The shell is cached**, so the app opens without a network and shows a short offline page saying that the forecast cannot be fetched — not a stale forecast. The shell is the stylesheet, the script, the icons and the background photo: the files that make the page *look* like Rain Alert, and nothing that carries data.
     - **It still cannot reach a closed app.** The service worker caches files; it cannot wake the app and deliver a notification. That is the same Tier 3 gap as the browser notification, and the offline page is the honest face of it.
 - **Calendar export (.ics).** An "Add rainy days to my calendar" button that generates an `.ics` file with an event on each day over the threshold. The user's own calendar app does the alerting, with no notification infrastructure on your side.
+  - ✅ **Built.** A quiet "📅 Add rainy days to my calendar" link on the forecast's heading row downloads a standard iCalendar file from `/calendar.ics`, with one all-day event for every day that reaches the threshold.
+    - **The file is built on the server**, by `build_calendar()` in `app.py`, so the rule that decides which days go into it is behind the offline test suite. The browser's part is narrow: it says which threshold the reader is using, and it takes the link away when nothing reaches it — a link that would download an empty calendar is not an offer.
+    - **The reader's own threshold is used when they have set one**, and the event says so ("At or above your 40% alert threshold."). Without one it uses the app's umbrella threshold, and then it is the app's advice, umbrella and all — the same split as the ▲ marker and the notification, for the same reason.
+    - **The events are all-day events**, because the forecast is a daily maximum: the file says which days are wet, and the reader's own calendar app decides when to remind them about it. The event id is derived from the city and the date, so importing the file again updates the same events instead of adding a second copy of every one of them.
+    - **A day the service did not report is never in the file.** An unknown chance is not a chance of anything, so it is never counted as a wet day — and never as a dry one either.
+    - **This is the one alert that needs nothing from the app at all.** Once the file is in a calendar, the reminder comes from the calendar app: no tab to keep open, no server to keep running, no phone app to install. It is the whole of Tier 3 handed to software the reader already has.
 
-The saved city, the threshold, the browser notification and the installable PWA are built. The calendar export is not.
+The saved city, the threshold, the browser notification, the installable PWA and the calendar export are built. Tier 2 is finished.
 
 ## Tier 3: Server-pushed alerts (needs persistence and a scheduler)
 
@@ -95,17 +101,20 @@ Start with the cheap in-page wins, and add real push last, because that step is 
 4. Saved city and threshold in `localStorage` (Tier 2). — ✅ **Done.**
 5. Web notifications while the tab is open (Tier 2). — ✅ **Done.**
 6. Installable PWA (Tier 2). — ✅ **Done.**
-7. ntfy.sh or Telegram push (Tier 3), which needs only a SQLite table and one scheduled script. — ⬜ **Not started.**
+7. Calendar export (`.ics`) for rainy days (Tier 2). — ✅ **Done.**
+8. ntfy.sh or Telegram push (Tier 3), which needs only a SQLite table and one scheduled script. — ⬜ **Not started.**
 
 Steps 1 to 3 give an immediate "alert" feel in an afternoon, and together they
 finish Tier 1. Step 4 is the first Tier 2 feature: it is the one that makes
 the app remember you, and it needs no backend at all. Step 5 is the second
 half of Tier 2: the tab now says something even when the reader is looking at
 something else, which is as far as a browser can go on its own. Step 6
-finishes Tier 2: the app lives on a home screen and opens without a network,
-which is the last thing a browser can do by itself. Step 0 was not in the
+finishes what a browser can do by itself: the app lives on a home screen and
+opens without a network. Step 7 is the last Tier 2 piece, and the cheapest of
+them all — it hands the alerting to the reader's own calendar app, so it works
+with the tab closed and needs no server of ours. Step 0 was not in the
 original list, because the app was assumed to be up; it is now first, and
-step 7 is not worth building until there is a site to push to — a tab that
+step 8 is not worth building until there is a site to push to — a tab that
 is open can talk to the server, and a tab that is closed cannot.
 
 ## Codebase notes to keep in mind

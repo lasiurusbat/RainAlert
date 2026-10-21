@@ -100,5 +100,32 @@ class TestLiveUnknownCity(unittest.TestCase):
             rainalert.get_coordinates("Xqzxvwplkjhg")
 
 
+class TestLiveCalendarExport(unittest.TestCase):
+    """The export route, against the real services.
+
+    The threshold is 0 so that every day the service reports is in the
+    file: the point here is that the route works end to end, not which
+    days the weather happens to select.
+    """
+
+    def setUp(self):
+        rainalert.get_coordinates.cache_clear()
+        self.client = rainalert.app.test_client()
+
+    def test_the_export_is_a_calendar_file(self):
+        response = self.client.get("/calendar.ics?city=London&threshold=0")
+        self.assertEqual(response.status_code, 200)
+        body = response.get_data(as_text=True)
+        self.assertTrue(body.startswith("BEGIN:VCALENDAR"))
+        self.assertIn("END:VCALENDAR", body)
+        self.assertIn("DTSTART;VALUE=DATE:", body)
+        self.assertIn("BEGIN:VEVENT", body)
+        # The file is named after the place the geocoder resolved, which
+        # for "London" is "Greater London".
+        disposition = response.headers["Content-Disposition"]
+        self.assertIn("attachment", disposition)
+        self.assertIn(".ics", disposition)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

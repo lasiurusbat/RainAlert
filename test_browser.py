@@ -20,6 +20,7 @@ which turns a missing browser into a failure instead of a skip.
 
 import os
 import socket
+import tempfile
 import threading
 import time
 import unittest
@@ -53,6 +54,26 @@ FORECAST_PAYLOAD = {
         "time": ["2026-10-21", "2026-10-22", "2026-10-23", "2026-10-24",
                  "2026-10-25", "2026-10-26", "2026-10-27"],
         "precipitation_probability_max": [100, 86, 40, 15, 5, 60, None],
+        "temperature_2m_max": [11.1, 14.0, 16.7, 12.0, 10.0, 9.0, 8.0],
+        "temperature_2m_min": [8.5, 8.6, 10.3, 7.0, 6.0, 5.0, 4.0],
+    },
+    "hourly": {
+        "time": [f"2026-10-21T{hour:02d}:00" for hour in range(24)],
+        "precipitation_probability": [0] * 24,
+    },
+    "current": {"time": "2026-10-21T09:00"},
+    "utc_offset_seconds": 3600,
+}
+
+
+# A week that only just reaches the app's own threshold, so that a reader's
+# own higher threshold has nothing in it. It is the case where the export
+# link is on the page and the reader's own limit takes it away again.
+MILD_PAYLOAD = {
+    "daily": {
+        "time": ["2026-10-21", "2026-10-22", "2026-10-23", "2026-10-24",
+                 "2026-10-25", "2026-10-26", "2026-10-27"],
+        "precipitation_probability_max": [60, 40, 20, 15, 5, 0, None],
         "temperature_2m_max": [11.1, 14.0, 16.7, 12.0, 10.0, 9.0, 8.0],
         "temperature_2m_min": [8.5, 8.6, 10.3, 7.0, 6.0, 5.0, 4.0],
     },
@@ -423,6 +444,103 @@ class BrowserTestCase(BrowserServerMixin, unittest.TestCase):
             return row.querySelector('.alert-marker-text').textContent;
         """)
         self.assertEqual(spoken, "Above your 60% alert threshold.")
+
+    # -- the calendar export --------------------------------------------------
+
+    def export_link(self):
+        return self.driver.find_element(By.ID, "calendar-export")
+
+    def export_href(self):
+        return self.export_link().get_attribute("href")
+
+    def open_the_forecast(self, payload=None):
+        """Load a forecast page and wait for the list to be there."""
+        if payload is not None:
+            self.mock_get.return_value = FakeResponse(payload=payload)
+        self.driver.get(self.base + "/?city=London")
+        self.wait_for("return document.querySelector('.weather-list') !== null;")
+
+    def test_the_export_link_is_on_the_forecast_page(self):
+        self.open_the_forecast()
+        self.assertTrue(self.export_link().is_displayed())
+        self.assertIn("/calendar.ics?city=London", self.export_href())
+
+    def test_the_export_link_carries_the_readers_own_threshold(self):
+        """The reader's own limit is the one that goes into the file."""
+        self.open_the_forecast()
+        self.set_threshold(60)
+        self.wait_for("return document.getElementById('calendar-export')"
+                      ".getAttribute('href').indexOf('threshold=60') !== -1;")
+        self.assertIn("threshold=60", self.export_href())
+
+    def test_the_export_link_uses_the_apps_own_threshold_without_one(self):
+        """Without a threshold of the reader's own, the app's advice rules."""
+        self.open_the_forecast()
+        self.assertNotIn("threshold", self.export_href())
+
+    def test_the_export_link_goes_away_when_no_day_reaches_the_threshold(self):
+        """A link that would download an empty calendar is not an offer."""
+        self.open_the_forecast(MILD_PAYLOAD)
+        # The app's own threshold is reached, so the link is there.
+        self.assertTrue(self.export_link().is_displayed())
+        self.set_threshold(70)
+        self.wait_for("return document.getElementById('calendar-export').hidden;")
+        self.assertFalse(self.export_link().is_displayed())
+
+    def test_the_export_link_comes_back_when_the_threshold_is_lowered(self):
+        self.open_the_forecast(MILD_PAYLOAD)
+        self.set_threshold(70)
+        self.wait_for("return document.getElementById('calendar-export').hidden;")
+        self.set_threshold(50)
+        self.wait_for(
+            "return !document.getElementById('calendar-export').hidden;")
+        self.assertTrue(self.export_link().is_displayed())
+
+    def test_the_export_link_answers_with_a_calendar(self):
+        """The link really does produce a file with the wet days in it."""
+        self.open_the_forecast()
+        body = self.driver.execute_async_script("""
+            var done = arguments[arguments.length - 1];
+            var href = document.getElementById('calendar-export')
+                .getAttribute('href');
+            fetch(href).then(function (response) {
+                return response.text();
+            }).then(done, function () { done(''); });
+        """)
+        self.assertIn("BEGIN:VCALENDAR", body)
+        self.assertIn("DTSTART;VALUE=DATE:20261021", body)
+        self.assertIn("DTSTART;VALUE=DATE:20261022", body)
+
+    def test_clicking_the_link_downloads_the_calendar(self):
+        """The link really does download a file the reader can import."""
+        directory = tempfile.mkdtemp()
+        self.driver.execute_cdp_cmd("Browser.setDownloadBehavior", {
+            "behavior": "allow",
+            "downloadPath": directory,
+        })
+        self.open_the_forecast()
+        self.driver.find_element(By.ID, "calendar-export").click()
+
+        path = None
+        deadline = time.time() + 15
+        while time.time() < deadline and path is None:
+            names = [name for name in os.listdir(directory)
+                     if name.endswith(".ics")]
+            if names:
+                path = os.path.join(directory, names[0])
+            else:
+                time.sleep(0.2)
+        self.assertIsNotNone(path, "the calendar file was not downloaded")
+        # The file is named after the city, from the response's header.
+        self.assertEqual(os.path.basename(path), "rain-alert-london.ics")
+
+        with open(path, encoding="utf-8") as handle:
+            content = handle.read()
+        self.assertIn("BEGIN:VCALENDAR", content)
+        self.assertIn("DTSTART;VALUE=DATE:20261021", content)
+        # The reader is left on the page, not on a file.
+        self.assertIn("city=London", self.driver.current_url)
+        self.assertIn("weather-list", self.driver.page_source)
 
     # -- notifications --------------------------------------------------------
 

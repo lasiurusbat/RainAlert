@@ -182,5 +182,5 @@ setup is `v0.8`, to match `render.yaml`, which pins `0.8`.
 - **The test counts drift.** The count appears in **four** documents —
   `CLAUDE.md`, `README.md`, `DEPLOY.md` and `implementation-plan.md` — and
   they are updated together, but a test added without updating all four
-  leaves them disagreeing. The suite has 233 offline tests, 37 browser
-  tests and 6 live integration tests.
+  leaves them disagreeing. The suite has 271 offline tests, 44 browser
+  tests and 7 live integration tests.

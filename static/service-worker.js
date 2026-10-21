@@ -14,7 +14,7 @@
  * is refreshed in the background, so a reader gets the new files on the
  * load after the one that fetched them.
  */
-const CACHE_VERSION = 'v1';
+const CACHE_VERSION = 'v2';
 const CACHE_NAME = 'rainalert-shell-' + CACHE_VERSION;
 
 /* The shell: the files the page needs to look like Rain Alert. The
@@ -101,6 +101,11 @@ self.addEventListener('fetch', function (event) {
     /* The manifest and the worker itself are never served from a cache. */
     if (url.pathname === '/manifest.json'
             || url.pathname === '/service-worker.js') { return; }
+
+    /* The calendar export is live data: it is the forecast as it is at the
+     * moment the file is asked for. It is never cached, and it is never
+     * replaced by the offline page, which is not a calendar. */
+    if (url.pathname === '/calendar.ics') { return; }
 
     if (request.mode === 'navigate') {
         event.respondWith(networkFirst(request));

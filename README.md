@@ -68,6 +68,10 @@ user accounts, and nothing to configure before running it.
   its own icon, no browser chrome, and an offline page that says plainly that
   the forecast cannot be fetched. The forecast itself is never cached: a stale
   rain chance is worse than none.
+- **The rainy days in your own calendar.** A "📅 Add rainy days to my
+  calendar" link downloads a standard `.ics` file with one all-day event for
+  every day that reaches the threshold. Your calendar app then does the
+  alerting — no account here, no server, no phone app to install.
 - **Honest error handling.** A city that does not exist and a geocoder that is
   temporarily down produce different messages — a network blip never tells a
   user their valid city is missing.
@@ -103,9 +107,9 @@ Python 3.14.5.
 ## Running the tests
 
 ```bash
-python -m unittest test_app    # 233 offline tests, no network required
-python -m unittest test_browser  # 37 browser tests, needs Chrome
-python -m unittest test_api     # 6 live integration tests, hits both APIs
+python -m unittest test_app    # 271 offline tests, no network required
+python -m unittest test_browser  # 44 browser tests, needs Chrome
+python -m unittest test_api     # 7 live integration tests, hits both APIs
 ```
 
 `test_app.py` is the suite that gates changes. It mocks both HTTP services
@@ -464,6 +468,42 @@ cannot work.
 
 ---
 
+## The calendar export
+
+Next to the forecast's heading there is a quiet **📅 Add rainy days to my
+calendar** link. Click it and the browser downloads a standard `.ics` file
+with one all-day event for every day of the week that reaches the threshold.
+Import it into Google Calendar, Outlook, Apple Calendar or anything else that
+reads `.ics`, and the rainy days are in there.
+
+**Your own threshold is used, if you have set one.** The days that go into the
+file are the days the page marks with a ▲, and the event says which answer it
+is answering — "At or above your 40% alert threshold." Without a threshold of
+your own it uses the app's umbrella threshold, and then the events carry the
+app's advice, umbrella and all. The two never stand in for each other, the
+same as everywhere else on the page.
+
+**The file is built on the server.** `build_calendar()` in `app.py` writes the
+whole file and `/calendar.ics` serves it, so the rule that decides which days
+go into it is covered by the offline test suite rather than living in a string
+inside `app.js`. The browser's part is narrow: it says which threshold you
+are using, and it takes the link away when nothing reaches it — a link that
+would download an empty calendar is not an offer.
+
+**The events are all-day events**, because the forecast is a daily maximum:
+the file says which days are wet, and your calendar app decides when to
+remind you about it. Each event carries the day's own band and its chance —
+"Rain likely - 80% chance of rain" — so the calendar and the page never
+disagree. The event id is derived from the city and the date, so importing
+the file again updates the same events instead of adding a second copy of
+every one of them.
+
+**A day the service did not report is never in the file.** An unknown chance
+is not a chance of anything, so it is never counted as a wet day — and never
+as a dry one either.
+
+---
+
 ## Installing the app
 
 The app is a **Progressive Web App**: it can be installed on a phone's home
@@ -656,6 +696,30 @@ reader for:
 browser remembers, so the same event is not shown twice. The endpoint takes
 the city as a query parameter, because the page already knows it, and the
 reader's threshold as an optional second one.
+
+### The calendar export
+
+`/calendar.ics?city=London` answers with the calendar file. It takes the
+same two parameters as the alert endpoint — the city, and the reader's
+threshold if they have set one — and it is built by `build_calendar()` in
+`app.py`.
+
+The file is a plain iCalendar (RFC 5545) file: `VERSION`, `PRODID`,
+`CALSCALE`, `METHOD`, the calendar's name, and one `VEVENT` per day that
+reaches the threshold. Each event is an all-day event — `DTSTART;VALUE=DATE`
+and `DTEND;VALUE=DATE`, the end being the start of the next day — with a
+`UID` derived from the city and the date, so that importing the file again
+updates the same events rather than adding duplicates.
+
+Two details of the format matter. Text values are escaped, because a city
+name with a comma in it would otherwise split the value in two, and long
+lines are folded at 75 octets with a leading space, which is what the
+specification asks for and what calendar apps expect. The lines end in
+CRLF, for the same reason.
+
+The response is sent as a download (`Content-Disposition: attachment`) and
+is never cached: the file holds a forecast, so a copy of an old one would be
+a lie.
 
 ### The manifest and the service worker
 

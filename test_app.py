@@ -1428,37 +1428,37 @@ class TestBrowserPreferences(AppTestCase):
         self.assertIn('data-unit="fahrenheit"', body)
 
 
-class TestNotificationThreshold(unittest.TestCase):
+class TestAlertThreshold(unittest.TestCase):
     """Which rain chance is worth a notification."""
 
     def test_without_one_the_apps_own_threshold_is_used(self):
-        threshold, personal = rainalert.notification_threshold(None)
+        threshold, personal = rainalert.alert_threshold(None)
         self.assertEqual(threshold, rainalert.UMBRELLA_THRESHOLD)
         self.assertFalse(personal)
 
     def test_an_empty_threshold_is_the_apps_own(self):
-        threshold, personal = rainalert.notification_threshold("  ")
+        threshold, personal = rainalert.alert_threshold("  ")
         self.assertEqual(threshold, rainalert.UMBRELLA_THRESHOLD)
         self.assertFalse(personal)
 
     def test_the_readers_own_threshold_is_used_when_there_is_one(self):
-        threshold, personal = rainalert.notification_threshold(40)
+        threshold, personal = rainalert.alert_threshold(40)
         self.assertEqual(threshold, 40)
         self.assertTrue(personal)
 
     def test_a_threshold_of_zero_is_not_taken_for_missing(self):
         """Zero is a limit like any other, not an absent one."""
-        threshold, personal = rainalert.notification_threshold(0)
+        threshold, personal = rainalert.alert_threshold(0)
         self.assertEqual(threshold, 0)
         self.assertTrue(personal)
 
     def test_a_nonsense_threshold_falls_back_to_the_apps_own(self):
-        threshold, personal = rainalert.notification_threshold("wet")
+        threshold, personal = rainalert.alert_threshold("wet")
         self.assertEqual(threshold, rainalert.UMBRELLA_THRESHOLD)
         self.assertFalse(personal)
 
     def test_a_threshold_is_capped_at_a_hundred(self):
-        threshold, _ = rainalert.notification_threshold(150)
+        threshold, _ = rainalert.alert_threshold(150)
         self.assertEqual(threshold, 100)
 
 
@@ -1652,6 +1652,288 @@ class TestNotificationControl(AppTestCase):
     def test_there_is_no_button_on_the_start_page(self):
         body = self.client.get("/").get_data(as_text=True)
         self.assertNotIn('id="notify-toggle"', body)
+
+
+class TestCalendarFile(unittest.TestCase):
+    """The calendar file itself: the parts that do not need a server.
+
+    The format is iCalendar (RFC 5545), so a file that is nearly right is a
+    file that no calendar app can read.
+    """
+
+    def test_the_text_of_a_value_is_escaped(self):
+        """A comma would otherwise split the value in two."""
+        self.assertEqual(rainalert.calendar_escape("a,b"), "a\\,b")
+        self.assertEqual(rainalert.calendar_escape("a;b"), "a\\;b")
+        self.assertEqual(rainalert.calendar_escape("a\\b"), "a\\\\b")
+        self.assertEqual(rainalert.calendar_escape("a\nb"), "a\\nb")
+
+    def test_a_long_line_is_folded(self):
+        """A content line may not be longer than 75 octets."""
+        folded = rainalert.calendar_fold("x" * 200)
+        for line in folded.split("\r\n"):
+            self.assertLessEqual(len(line.encode("utf-8")), 75)
+        self.assertTrue(folded.split("\r\n")[1].startswith(" "))
+
+    def test_a_short_line_is_left_alone(self):
+        self.assertEqual(rainalert.calendar_fold("SUMMARY:Rain"), "SUMMARY:Rain")
+
+    def test_a_name_with_an_umlaut_is_not_cut_in_half(self):
+        """The length is counted in octets, not in characters."""
+        folded = rainalert.calendar_fold("SUMMARY:München" * 10)
+        for line in folded.split("\r\n"):
+            self.assertLessEqual(len(line.encode("utf-8")), 75)
+        self.assertIn("München", folded)
+
+    def test_a_date_becomes_an_icalendar_date(self):
+        self.assertEqual(rainalert.calendar_day("2026-10-21"), "20261021")
+        self.assertEqual(rainalert.calendar_next_day("2026-10-21"), "20261022")
+
+    def test_an_unreadable_date_is_left_out(self):
+        self.assertEqual(rainalert.calendar_day("not a date"), "")
+        self.assertEqual(rainalert.calendar_next_day("not a date"), "")
+
+    def test_the_file_name_is_safe(self):
+        self.assertEqual(rainalert.calendar_slug("London, England"), "london-england")
+        self.assertEqual(rainalert.calendar_slug("../../etc/passwd"), "etc-passwd")
+        self.assertEqual(rainalert.calendar_slug(""), "forecast")
+
+    def test_the_calendar_has_a_header_and_a_footer(self):
+        text = rainalert.build_calendar([], "London", 50)
+        self.assertTrue(text.startswith("BEGIN:VCALENDAR\r\n"))
+        self.assertTrue(text.endswith("END:VCALENDAR\r\n"))
+
+    def test_the_lines_end_with_carriage_returns(self):
+        """A calendar file is read line by line, and the lines end in CRLF."""
+        text = rainalert.build_calendar([], "London", 50)
+        self.assertIn("\r\n", text)
+        self.assertNotIn("\n\n", text)
+        for line in text.split("\r\n")[:-1]:
+            self.assertNotIn("\n", line)
+
+
+class TestCalendarExport(AppTestCase):
+    """Tier 2: the rainy days as a calendar file the reader can import.
+
+    The file is built on the server, so the rule that decides which days
+    go into it is tested here and not in the browser.
+    """
+
+    def payload(self, chances):
+        return {
+            "daily": {
+                "time": [f"2026-10-{21 + offset:02d}"
+                         for offset in range(len(chances))],
+                "precipitation_probability_max": chances,
+                "temperature_2m_max": [14.0] * len(chances),
+                "temperature_2m_min": [8.0] * len(chances),
+            }
+        }
+
+    def export(self, query="?city=London", chances=(100, 86, 40)):
+        self.mock_get.return_value = FakeResponse(
+            payload=self.payload(list(chances)))
+        return self.client.get("/calendar.ics" + query)
+
+    def text(self, query="?city=London", chances=(100, 86, 40)):
+        return self.export(query, chances).get_data(as_text=True)
+
+    def readable(self, query="?city=London", chances=(100, 86, 40)):
+        """The file with the folded lines joined back together.
+
+        A long description is split over several lines, so a sentence in it
+        is only whole again once the file has been unfolded.
+        """
+        lines = self.text(query, chances).split("\r\n")
+        joined = []
+        for line in lines:
+            if line.startswith(" ") and joined:
+                joined[-1] += line[1:]
+            else:
+                joined.append(line)
+        return "\r\n".join(joined)
+
+    # -- the request -----------------------------------------------------------
+
+    def test_it_needs_a_city(self):
+        response = self.export("?city=")
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("Please enter a city name.",
+                      response.get_data(as_text=True))
+
+    def test_the_file_is_a_calendar(self):
+        response = self.export()
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("text/calendar", response.headers["Content-Type"])
+
+    def test_the_file_is_offered_as_a_download(self):
+        response = self.export()
+        self.assertIn("attachment", response.headers["Content-Disposition"])
+        self.assertIn("rain-alert-london.ics",
+                      response.headers["Content-Disposition"])
+
+    def test_the_file_is_never_cached(self):
+        """It holds a forecast, so a copy of one would be a lie."""
+        response = self.export()
+        self.assertIn("no-store", response.headers["Cache-Control"])
+
+    def test_an_unknown_city_is_reported(self):
+        self.mock_geocode.return_value = None
+        response = self.export()
+        self.assertEqual(response.status_code, 404)
+        self.assertIn("City not found", response.get_data(as_text=True))
+
+    def test_a_geocoder_outage_is_not_reported_as_a_missing_city(self):
+        self.mock_geocode.side_effect = rainalert.GeocodingUnavailable("boom")
+        response = self.export()
+        self.assertEqual(response.status_code, 503)
+        self.assertIn("geocoding service is unavailable",
+                      response.get_data(as_text=True))
+
+    def test_a_weather_outage_is_reported(self):
+        self.mock_get.side_effect = rainalert.WeatherUnavailable("boom")
+        response = self.export()
+        self.assertEqual(response.status_code, 503)
+        self.assertIn("weather service is unavailable",
+                      response.get_data(as_text=True))
+
+    # -- which days go in ------------------------------------------------------
+
+    def test_a_wet_day_becomes_an_event(self):
+        text = self.text()
+        self.assertIn("BEGIN:VEVENT", text)
+        self.assertIn("DTSTART;VALUE=DATE:20261021", text)
+        self.assertIn("DTSTART;VALUE=DATE:20261022", text)
+
+    def test_a_dry_day_does_not(self):
+        """Only the days that reach the threshold are in the file."""
+        text = self.text(chances=(100, 86, 40))
+        self.assertEqual(text.count("BEGIN:VEVENT"), 2)
+        self.assertNotIn("DTSTART;VALUE=DATE:20261023", text)
+
+    def test_the_apps_own_threshold_is_used_without_one(self):
+        """Without a threshold of the reader's own, the app's advice rules."""
+        text = self.text(chances=(50, 49))
+        self.assertEqual(text.count("BEGIN:VEVENT"), 1)
+
+    def test_the_readers_own_threshold_is_used_when_it_is_sent(self):
+        text = self.text("?city=London&threshold=40", chances=(50, 39))
+        self.assertEqual(text.count("BEGIN:VEVENT"), 1)
+
+    def test_an_unreported_day_is_never_an_event(self):
+        """A missing value is not a chance of anything."""
+        text = self.text(chances=(80, None))
+        self.assertEqual(text.count("BEGIN:VEVENT"), 1)
+
+    def test_a_dry_week_produces_a_calendar_with_no_events(self):
+        """The file is still a calendar; it simply has nothing in it."""
+        text = self.text(chances=(5, 10))
+        self.assertNotIn("BEGIN:VEVENT", text)
+        self.assertIn("END:VCALENDAR", text)
+
+    # -- what the events say ----------------------------------------------------
+
+    def test_the_event_covers_the_whole_day(self):
+        """The end of an all-day event is the start of the next day."""
+        text = self.text(chances=(80,))
+        self.assertIn("DTEND;VALUE=DATE:20261022", text)
+
+    def test_the_summary_names_the_band_and_the_chance(self):
+        """The band is the one the row in the list carries."""
+        text = self.readable(chances=(80,))
+        self.assertIn("SUMMARY:Rain likely - 80% chance of rain", text)
+
+    def test_the_description_names_the_city_and_the_chance(self):
+        text = self.readable(chances=(80,))
+        self.assertIn("80% chance of rain in London on Wednesday 21.10.2026",
+                      text)
+
+    def test_the_apps_own_advice_brings_the_umbrella(self):
+        text = self.readable(chances=(80,))
+        self.assertIn("Bring an umbrella", text)
+
+    def test_the_readers_own_threshold_is_named_in_the_description(self):
+        text = self.readable("?city=London&threshold=40", chances=(80,))
+        self.assertIn("At or above your 40% alert threshold.", text)
+
+    def test_the_umbrella_is_not_mixed_into_the_readers_own_alert(self):
+        """The umbrella is the app's advice; the limit is the reader's."""
+        text = self.readable("?city=London&threshold=40", chances=(80,))
+        self.assertNotIn("Bring an umbrella", text)
+
+    def test_the_weather_data_is_credited(self):
+        """Open-Meteo's licence asks for the credit wherever the data goes."""
+        text = self.readable(chances=(80,))
+        self.assertIn("Open-Meteo.com", text)
+
+    def test_the_event_id_is_the_same_every_time(self):
+        """Importing the file again updates the events instead of adding
+        a second copy of every one of them."""
+        first = self.text(chances=(80,))
+        second = self.text(chances=(80,))
+        uid = [line for line in first.split("\r\n") if line.startswith("UID:")]
+        self.assertTrue(uid)
+        self.assertEqual(uid, [line for line in second.split("\r\n")
+                                if line.startswith("UID:")])
+
+    def test_the_calendar_is_named_after_the_city(self):
+        text = self.text(chances=(80,))
+        self.assertIn("X-WR-CALNAME:Rain forecast - London", text)
+
+
+class TestCalendarLink(AppTestCase):
+    """The link on the page that starts the export."""
+
+    def body_with_forecast(self, chances=(100, 86, 40)):
+        payload = {
+            "daily": {
+                "time": [f"2026-10-{21 + offset:02d}"
+                         for offset in range(len(chances))],
+                "precipitation_probability_max": chances,
+                "temperature_2m_max": [14.0] * len(chances),
+                "temperature_2m_min": [8.0] * len(chances),
+            }
+        }
+        self.mock_get.return_value = FakeResponse(payload=payload)
+        return self.client.post("/", data={"city": "London"}).get_data(as_text=True)
+
+    def test_the_link_is_on_the_forecast_page(self):
+        body = self.body_with_forecast()
+        self.assertIn('id="calendar-export"', body)
+        self.assertIn("Add rainy days to my calendar", body)
+
+    def test_the_link_carries_the_city(self):
+        body = self.body_with_forecast()
+        self.assertIn("/calendar.ics?city=London", body)
+
+    def test_the_link_sits_on_the_heading_row(self):
+        """It is on the line the heading already takes: the card has no
+        vertical room for another one."""
+        body = self.body_with_forecast()
+        head = body[body.index("result-head"):body.index("severity-legend")]
+        self.assertIn('id="calendar-export"', head)
+
+    def test_the_link_is_hidden_when_nothing_would_be_exported(self):
+        """A link that would download an empty calendar is not an offer."""
+        body = self.body_with_forecast(chances=(5, 10))
+        link = body[body.index('id="calendar-export"'):]
+        link = link[:link.index(">")]
+        self.assertIn("hidden", link)
+
+    def test_the_link_is_not_hidden_when_a_day_would_be_exported(self):
+        body = self.body_with_forecast(chances=(80, 10))
+        link = body[body.index('id="calendar-export"'):]
+        link = link[:link.index(">")]
+        self.assertNotIn("hidden", link)
+
+    def test_the_link_is_not_on_the_start_page(self):
+        body = self.client.get("/").get_data(as_text=True)
+        self.assertNotIn('id="calendar-export"', body)
+
+    def test_the_link_is_not_on_an_error_page(self):
+        self.mock_geocode.return_value = None
+        body = self.client.post("/", data={"city": "Nowhereville"}).get_data(as_text=True)
+        self.assertNotIn('id="calendar-export"', body)
 
 
 class TestAttribution(AppTestCase):

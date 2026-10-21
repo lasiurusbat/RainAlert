@@ -125,6 +125,51 @@ button:hover {
     margin-bottom: 0.35rem;
 }
 
+/* The heading row of the result. The export link sits on the right of it,
+   on the line the heading already takes, so the card does not grow by a
+   line for it - and the card has no room for one. */
+.result-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 0.5rem;
+}
+
+/* The heading takes the slack, so a long city name wraps the heading
+   rather than pushing the link off the card. */
+.result-head h3 {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+/* The calendar export: a quiet link that puts the rainy days into the
+   reader's own calendar. The calendar app then does the alerting, so
+   RainAlert needs no server and no account for that. */
+.calendar-export {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    flex: 0 0 auto;
+    color: #1a5e96;
+    font-size: 0.68rem;
+    font-weight: 600;
+    line-height: 1.2;
+    text-decoration: none;
+    white-space: nowrap;
+}
+
+.calendar-export:hover,
+.calendar-export:focus-visible {
+    text-decoration: underline;
+}
+
+/* The hidden attribute has to win against the display above, or the link
+   shows up before the script has worked out whether there is anything to
+   export. */
+.calendar-export[hidden] {
+    display: none;
+}
+
 /* The headline above the list: one line saying what the week looks like. It
    carries the same severity band as the rows below, but the band name is in
    the sentence too, so the meaning never rests on the colour alone. The
@@ -809,6 +854,16 @@ button:hover {
        columns at the right edge, as they are on a wide screen. */
     .rain-chance {
         margin-left: auto;
+    }
+
+    /* The heading and the export link do not fit on one line here, so the
+       link takes a line of its own, under the heading. */
+    .result-head {
+        flex-wrap: wrap;
+    }
+
+    .calendar-export {
+        flex: 1 0 100%;
     }
 }
 
