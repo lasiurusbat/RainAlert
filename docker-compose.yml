@@ -24,6 +24,9 @@ services:
       NOMINATIM_USER_AGENT: RainAlert_App_v1_2026
       GEOCODER_TIMEOUT: "10"
       WEATHER_TIMEOUT: "10"
+      # Optional donation link. Compose fills this in from the shell or from
+      # the .env file next to this file; empty (the default) hides the link.
+      DONATION_URL: ${DONATION_URL:-}
     restart: unless-stopped
     healthcheck:
       # The app has no dedicated health endpoint, so this asks for the home

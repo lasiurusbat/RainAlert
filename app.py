@@ -501,6 +501,161 @@ def severity_label(band):
     }.get(band, "Unknown")
 
 
+# --- The headline ------------------------------------------------------------
+# One line above the daily list that says what the week looks like. It names
+# the first day worth mentioning: a day that reaches the umbrella threshold,
+# a day that is merely possible, or the week as a whole when no day is.
+#
+# The band name in the sentence is the same one the row in the list carries,
+# so the banner and the list never disagree about how wet a day is.
+
+
+def forecast_day_label(iso_date, index, locale_name=None):
+    """How the headline names a day of the forecast.
+
+    The first two days are "today" and "tomorrow", in the city's local time -
+    the same local time the daily list is dated in, so the banner and the
+    list never call different days "today". Later days are named by their
+    weekday, localised like the dates in the list.
+    """
+    if index == 0:
+        return "today"
+    if index == 1:
+        return "tomorrow"
+    try:
+        parsed = date.fromisoformat(str(iso_date))
+    except (TypeError, ValueError):
+        return f"in {index} days"
+    return f"on {weekday_names(locale_name)[parsed.weekday()]}"
+
+
+def remaining_hour_chance(hours):
+    """The highest rain chance among the hours that are still to come.
+
+    ``None`` means the service reported no usable value for any of them.
+    """
+    chances = [rain_chance(hour.get("chance")) for hour in hours or []]
+    known = [chance for chance in chances if chance is not None]
+    if not known:
+        return None
+    return max(known)
+
+
+def forecast_headline(forecast, locale_name=None, remaining_hours=None):
+    """The one-line summary of the forecast, or ``None`` if there is none.
+
+    The sentence names the first day worth mentioning:
+
+    * a day at or above the umbrella threshold - "Rain likely tomorrow
+      (80%). Bring an umbrella.";
+    * a day that is merely possible - "Rain possible on Thursday (45%).";
+    * otherwise the week as a whole - "No rain likely for the next 7 days."
+
+    The band in the sentence is the day's own band, the same one its row in
+    the list carries, so the banner and the list never disagree about how
+    wet a day is. The umbrella follows the same threshold as the icon on the
+    row, and the wording follows the hourly summary above the strip.
+
+    Today is the one day that needs care. The daily maximum covers the whole
+    day, so at 18:00 it still counts the morning's downpour, while the
+    reader can only walk into the evening. Today is therefore judged on the
+    hours that are left, and the sentence says which figure it is using:
+    "Rain likely for the rest of today (80%)." The hourly figures and the
+    daily figure are two different quantities, and each one is labelled with
+    which it is. When today is over, it is left out of the banner entirely:
+    the reader wants to know about the days ahead, not about a day that has
+    been and gone.
+
+    A day whose chance the service did not report is never counted as dry.
+    When the week is quiet but some days are unreported, the sentence says
+    "most of" rather than claiming the whole week is dry - and when more of
+    the week is unreported than is known to be dry, it says the chance is
+    unknown instead, because "no rain likely for most of" would be a claim
+    about days nobody reported.
+    """
+    if not forecast:
+        return None
+
+    today_over = False
+    days = []
+    for index, day in enumerate(forecast):
+        chance = rain_chance(day.get("chance"))
+        when = forecast_day_label(day.get("iso_date"), index, locale_name)
+        if index == 0 and remaining_hours is not None:
+            # Judge today on the hours that are left, not on the whole day.
+            if not remaining_hours:
+                today_over = True
+                continue
+            remaining = remaining_hour_chance(remaining_hours)
+            if remaining is not None:
+                days.append((day, remaining, "for the rest of today"))
+                continue
+        days.append((day, chance, when))
+
+    known = [entry for entry in days if entry[1] is not None]
+    wet = next((entry for entry in known
+                 if entry[1] >= UMBRELLA_THRESHOLD), None)
+    possible = next((entry for entry in known
+                     if severity_band(entry[1]) == "moderate"), None)
+
+    if wet is not None:
+        day, chance, when = wet
+        band = severity_band(chance)
+        return {
+            "text": f"{_headline_sentence(band, when, chance)} Bring an umbrella.",
+            "severity": band,
+            "umbrella": True,
+        }
+
+    if possible is not None:
+        day, chance, when = possible
+        band = severity_band(chance)
+        return {
+            "text": _headline_sentence(band, when, chance),
+            "severity": band,
+            "umbrella": False,
+        }
+
+    count = len(days)
+    span = "the rest of the week" if today_over else f"the next {count} days"
+    unknown = count - len(known)
+    if not known:
+        return {
+            "text": f"Rain chance unknown for {span}.",
+            "severity": "unknown",
+            "umbrella": False,
+        }
+
+    if unknown > len(known):
+        # More of the week is unreported than is known to be dry, so the
+        # honest answer is that the chance is mostly unknown.
+        return {
+            "text": f"Rain chance unknown for most of {span}.",
+            "severity": "unknown",
+            "umbrella": False,
+        }
+
+    if unknown:
+        return {
+            "text": f"No rain likely for most of {span}.",
+            "severity": "low",
+            "umbrella": False,
+        }
+
+    return {
+        "text": f"No rain likely for {span}.",
+        "severity": "low",
+        "umbrella": False,
+    }
+
+
+def _headline_sentence(band, when, chance):
+    """The sentence naming one day: "Rain likely tomorrow (80%)."."""
+    sentence = (f"{severity_label(band).lower()} {when} "
+                f"({round_half_up(chance)}%).")
+    return f"{sentence[0].upper()}{sentence[1:]}"
+
+
 # --- Data sources ------------------------------------------------------------
 @lru_cache(maxsize=256)
 def get_coordinates(city_name):
@@ -591,6 +746,9 @@ def fetch_weather(latitude, longitude, locale_name=None):
         band = severity_band(chance)
         forecast.append({
             "date": format_date(day, locale_name),
+            # The raw date, kept so the headline can name the weekday without
+            # having to take the formatted date apart again.
+            "iso_date": day,
             "rain_label": format_rain_chance(chance),
             "temp_label": format_temperature(
                 highs[index] if index < len(highs) else None,
@@ -628,6 +786,7 @@ def index():
     weather_data = None
     hourly_data = None
     hourly_summary = None
+    headline = None
     error = None
     city = None
     display_city = None
@@ -639,9 +798,16 @@ def index():
         else:
             try:
                 latitude, longitude, display_city = get_coordinates(city)
+                locale_name = requested_locale()
                 weather_data, hourly_data = fetch_weather(
-                    latitude, longitude, requested_locale())
+                    latitude, longitude, locale_name)
                 hourly_summary = summarise_hours(hourly_data or [])
+                # The umbrella advice is about the hours ahead, so the
+                # headline is told which of today's hours are still to come.
+                remaining_hours = [hour for hour in (hourly_data or [])
+                                   if not hour.get("past")]
+                headline = forecast_headline(
+                    weather_data or [], locale_name, remaining_hours)
             except CityNotFound:
                 error = "City not found. Please try a different name (e.g., 'Paris')."
             except GeocodingUnavailable:
@@ -658,6 +824,7 @@ def index():
         weather_data=weather_data,
         hourly_data=hourly_data,
         hourly_summary=hourly_summary,
+        headline=headline,
         error=error,
         city=city,
         display_city=display_city or city,

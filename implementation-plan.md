@@ -30,7 +30,7 @@ file is itself untracked.
 - [x] Geocoding cache, explicit timeouts, configuration through environment variables
 - [x] City-local dates (`timezone=auto`) and localised weekday names with a safe English fallback
 - [x] Temperature rounding fix (round half up)
-- [x] Offline unit tests (110) and live API tests (6)
+- [x] Offline unit tests (133) and live API tests (6)
 - [x] Comprehensive `README.md` with screenshot, `CLAUDE.md` project notes
 
 ### Alert ideas, Tier 1 (partly done)
@@ -109,7 +109,7 @@ Order follows the ideas document. Tier 1 and 2 need no database and no new
 costs. Tier 3 is the step that makes the app a real alert service.
 
 ### Tier 1: in-page
-- [ ] Headline banner above the list ("Rain likely tomorrow (80%). Bring an umbrella." / "No rain expected for the next 7 days.")
+- [x] Headline banner above the list ("Rain likely tomorrow (80%). Bring an umbrella." / "No rain likely for the next 7 days."). Built in `forecast_headline()`. The band name in the sentence is the day's own band, the same one its row in the list carries, so the banner and the list never disagree. Today is judged on the hours that are left, not on the daily maximum, and the sentence says which figure it is using ("Rain likely for the rest of today (80%)"); a day that is over drops out, and a missing chance is never counted as dry.
 - [x] Hour-by-hour strip for today using Open-Meteo hourly precipitation: 24 bars for the city's local day, colour-coded on the same severity bands as the daily list, with a one-line summary ("Rain likely from about 15:00 to 18:00, up to 83%. Bring an umbrella.")
 - [ ] Tab title and favicon change when rain is coming
 

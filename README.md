@@ -19,6 +19,11 @@ user accounts, and nothing to configure before running it.
 
 - **Seven-day forecast** for any city the geocoder recognises, with the daily
   maximum rain probability and the high/low temperature.
+- **A one-line headline** above the list says what the week looks like: "Rain
+  likely tomorrow (80%). Bring an umbrella." or "No rain likely for the next
+  7 days." It names the first day worth mentioning, and today's figure comes
+  from the hours that are left rather than from a day maximum that includes
+  the morning.
 - **Hour-by-hour strip for today.** One bar per hour of the city's local day,
   coloured on the same scale as the daily list, with a pulsing dot on the
   current hour. A one-line summary says when the rain is expected — "Rain
@@ -69,7 +74,7 @@ Python 3.14.5.
 ## Running the tests
 
 ```bash
-python -m unittest test_app    # 110 offline tests, no network required
+python -m unittest test_app    # 133 offline tests, no network required
 python -m unittest test_api     # 6 live integration tests, hits both APIs
 ```
 
@@ -131,8 +136,17 @@ picks that file up automatically.
 docker run --rm -p 8000:8000 \
   -e DATE_LOCALE=auto \
   -e NOMINATIM_USER_AGENT="RainAlert/1.0 (https://rainalert.live)" \
+  -e DONATION_URL=https://buymeacoffee.com/rainalert \
   rainalert
 ```
+
+With plain Docker, `--env-file .env` passes every variable in your `.env` file
+to the container at once. The image never contains the file itself:
+`.dockerignore` keeps it out of the build.
+
+In Compose, only the variables listed under `environment:` in
+`docker-compose.yml` reach the container. `DONATION_URL` is listed and is read
+from your `.env` file or your shell, so putting it in `.env` is enough.
 
 The port mapping is `host:container`. The container listens on `8000`; change
 the host side if `8000` is already taken.
@@ -171,7 +185,7 @@ in a `.env` file (the app loads one via `python-dotenv`).
 | `SEVERITY_LOW_MAX` | `30` | Rain chance below which a day is banded *low* |
 | `SEVERITY_MODERATE_MAX` | `60` | Rain chance below which a day is banded *moderate* |
 | `UMBRELLA_THRESHOLD` | `50` | Rain chance at or above which the ☔ icon appears |
-| `DONATION_URL` | empty | An `https://` link to a donation page. When set, a short "Buy me a coffee" line appears under the forecast and in the footer. When empty, nothing renders. Anything that is not an absolute `https://` URL is ignored. See [Donations and data credits](#donations-and-data-credits) |
+| `DONATION_URL` | empty | An `https://` link to a donation page. When set, a short "Buy me a coffee" line appears under the search button and in the footer. When empty, nothing renders. Anything that is not an absolute `https://` URL is ignored. See [Donations and data credits](#donations-and-data-credits) |
 
 Example `.env`:
 
@@ -183,6 +197,37 @@ UMBRELLA_THRESHOLD=40
 
 > `.env` is already in `.gitignore`, so a local one stays out of version
 > control. `.env.example` is not ignored, if you want to ship a template.
+
+---
+
+## The headline banner
+
+One line above the list says what the week looks like: the first day worth
+mentioning, and what to do about it.
+
+| Situation | The banner says |
+|---|---|
+| A day at or above the umbrella threshold | "Rain likely tomorrow (80%). Bring an umbrella." |
+| A day that is only possible | "Rain possible on Thursday (45%)." |
+| A quiet week | "No rain likely for the next 7 days." |
+| A quiet week with a day the API did not report | "No rain likely for most of the next 7 days." |
+| Nothing reported at all | "Rain chance unknown for the next 7 days." |
+
+Three details are deliberate:
+
+- **The band in the sentence is the day's own band**, the same one its row
+  in the list carries, so the banner and the list never disagree about how
+  wet a day is. The colour follows the band, and the band name is in the
+  text, so the meaning never rests on the colour alone.
+- **Today is judged on the hours that are left.** The daily maximum covers
+  the whole day, so at 18:00 it still counts the morning's downpour while
+  the reader can only walk into the evening. Today's figure in the banner
+  comes from the hours ahead and says so — "Rain likely for the rest of
+  today (80%)" — while its row in the list keeps the daily maximum. The two
+  are different quantities, and each is labelled with which one it is. When
+  the day is over it drops out of the banner entirely.
+- **A missing value is never counted as dry.** A week where one day was not
+  reported is "most of", not "all of".
 
 ---
 
@@ -244,12 +289,12 @@ have not happened yet — a window that has already passed is not an alert.
 ## Donations and data credits
 
 **Donation link.** Set `DONATION_URL` to your donation page (the live site uses
-<https://buymeacoffee.com/rainalert>) and the page shows one quiet line under
-the forecast, plus a link in the footer. It is a plain text link, not an
-embedded widget, so no third-party script is loaded and no consent notice is
-needed. It opens in a new tab. It never appears on error pages, on the
-"no forecast data" page, or next to the search form. With the variable empty,
-the page is exactly as it was without the feature.
+<https://buymeacoffee.com/rainalert>) and the page shows one quiet line just
+under the "Check Rain Chance" button, plus a link in the footer. It is a plain
+text link, not an embedded widget, so no third-party script is loaded and no
+consent notice is needed. It opens in a new tab. It is a site-wide link, so it
+appears on every page, including the error pages. With the variable empty, the
+page is exactly as it was without the feature.
 
 **Keep donations voluntary and one-off.** Open-Meteo's free API is for
 non-commercial use. Its terms allow voluntary donations but treat advertising

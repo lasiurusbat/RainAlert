@@ -569,6 +569,186 @@ class TestHourlySummary(AppTestCase):
         self.assertIn("No rain likely", summary)
 
 
+class TestForecastHeadline(AppTestCase):
+    """The one-line headline above the daily list."""
+
+    def setUp(self):
+        super().setUp()
+        locale_patcher = mock.patch.object(rainalert, "DATE_LOCALE", "en_US")
+        locale_patcher.start()
+        self.addCleanup(locale_patcher.stop)
+
+    def _forecast(self, chances, days=None):
+        """A forecast list in the shape app.py builds it."""
+        dates = days or [f"2026-10-{21 + offset:02d}" for offset in range(len(chances))]
+        forecast = []
+        for day, chance in zip(dates, chances):
+            band = rainalert.severity_band(chance)
+            forecast.append({
+                "date": rainalert.format_date(day, "en_US"),
+                "iso_date": day,
+                "rain_label": rainalert.format_rain_chance(chance),
+                "chance": chance,
+                "severity": band,
+                "severity_label": rainalert.severity_label(band),
+                "umbrella": rainalert.needs_umbrella(chance),
+            })
+        return forecast
+
+    def _headline(self, chances, days=None, hours=None):
+        return rainalert.forecast_headline(
+            self._forecast(chances, days), "en_US", hours)
+
+    def test_a_wet_day_names_the_day_and_the_chance(self):
+        headline = self._headline([0, 80, 0, 0, 0, 0, 0])
+        self.assertIn("Rain likely tomorrow", headline["text"])
+        self.assertIn("80%", headline["text"])
+        self.assertIn("Bring an umbrella", headline["text"])
+        self.assertEqual(headline["severity"], "high")
+        self.assertTrue(headline["umbrella"])
+
+    def test_today_is_named_today(self):
+        headline = self._headline([80, 0, 0, 0, 0, 0, 0])
+        self.assertIn("today", headline["text"])
+
+    def test_a_later_day_is_named_by_its_weekday(self):
+        """Beyond tomorrow the banner names the weekday, like the list does."""
+        # 2026-10-24 is a Saturday.
+        headline = self._headline([0, 0, 0, 55, 0, 0, 0])
+        self.assertIn("Saturday", headline["text"])
+        self.assertIn("55%", headline["text"])
+
+    def test_the_first_wet_day_wins(self):
+        headline = self._headline([0, 60, 90, 0, 0, 0, 0])
+        self.assertIn("tomorrow", headline["text"])
+        self.assertIn("60%", headline["text"])
+        self.assertNotIn("90%", headline["text"])
+
+    def test_a_possible_day_says_possible(self):
+        """Below the umbrella threshold the banner does not urge an umbrella."""
+        headline = self._headline([0, 45, 0, 0, 0, 0, 0])
+        self.assertIn("Rain possible tomorrow", headline["text"])
+        self.assertIn("45%", headline["text"])
+        self.assertNotIn("umbrella", headline["text"].lower())
+        self.assertEqual(headline["severity"], "moderate")
+        self.assertFalse(headline["umbrella"])
+
+    def test_a_dry_week_says_so(self):
+        headline = self._headline([0, 5, 10, 0, 0, 0, 0])
+        self.assertIn("No rain likely for the next 7 days", headline["text"])
+        self.assertEqual(headline["severity"], "low")
+        self.assertFalse(headline["umbrella"])
+
+    def test_a_week_with_an_unknown_day_is_not_called_dry(self):
+        """A missing value is not a 0% chance, so the week is not all dry."""
+        headline = self._headline([0, 5, None, 0, 0, 0, 0])
+        self.assertIn("most of", headline["text"])
+        self.assertNotIn("No rain likely for the next", headline["text"])
+
+    def test_a_week_with_no_values_at_all_says_the_chance_is_unknown(self):
+        headline = self._headline([None] * 7)
+        self.assertIn("unknown", headline["text"])
+        self.assertEqual(headline["severity"], "unknown")
+
+    def test_a_week_that_is_mostly_unknown_says_so(self):
+        """A claim about "most of" would be a claim about unreported days."""
+        headline = self._headline([5, None, None, None, None, None, None])
+        self.assertIn("unknown", headline["text"])
+        self.assertEqual(headline["severity"], "unknown")
+        self.assertNotIn("No rain likely", headline["text"])
+
+    def test_today_is_judged_on_the_hours_that_are_left(self):
+        """The daily maximum covers the whole day, but the reader has today."""
+        hours = [{"chance": 5, "past": False}]
+        # The daily maximum is 100, but only a dry evening is left.
+        headline = self._headline([100, 0, 0, 0, 0, 0, 0], hours=hours)
+        self.assertNotIn("Rain likely today", headline["text"])
+
+    def test_todays_sentence_says_which_figure_it_uses(self):
+        """The hourly figure and the daily figure are different quantities."""
+        hours = [{"chance": 80, "past": False}]
+        headline = self._headline([100, 0, 0, 0, 0, 0, 0], hours=hours)
+        self.assertIn("for the rest of today", headline["text"])
+        self.assertIn("80%", headline["text"])
+        # The daily maximum is 100, and the sentence does not quote it.
+        self.assertNotIn("100%", headline["text"])
+
+    def test_the_hours_that_are_left_can_still_make_today_wet(self):
+        hours = [{"chance": 80, "past": False}]
+        headline = self._headline([100, 0, 0, 0, 0, 0, 0], hours=hours)
+        self.assertIn("Rain likely for the rest of today", headline["text"])
+        self.assertIn("80%", headline["text"])
+
+    def test_the_umbrella_advice_is_dropped_when_today_is_already_over(self):
+        """The rain is behind us, so an umbrella would be no use."""
+        hours = [{"chance": 0, "past": False}]
+        headline = self._headline([80, 0, 0, 0, 0, 0, 0], hours=hours)
+        self.assertNotIn("today", headline["text"])
+        self.assertNotIn("umbrella", headline["text"].lower())
+        self.assertFalse(headline["umbrella"])
+
+    def test_today_is_left_out_once_the_day_is_over(self):
+        """A day that has been and gone is not worth the banner's one line."""
+        headline = self._headline([80, 40, 0, 0, 0, 0, 0], hours=[])
+        self.assertIn("tomorrow", headline["text"])
+        self.assertNotIn("today", headline["text"])
+
+    def test_the_week_is_described_as_the_rest_of_it_when_today_is_over(self):
+        headline = self._headline([80, 5, 0, 0, 0, 0, 0], hours=[])
+        self.assertIn("the rest of the week", headline["text"])
+
+    def test_the_umbrella_advice_stays_for_a_later_day(self):
+        """Only today's advice is affected by the hours that are left."""
+        hours = [{"chance": 0, "past": False}]
+        headline = self._headline([0, 80, 0, 0, 0, 0, 0], hours=hours)
+        self.assertIn("Bring an umbrella", headline["text"])
+
+    def test_an_empty_forecast_has_no_headline(self):
+        self.assertIsNone(rainalert.forecast_headline([], "en_US"))
+
+    def test_the_sentence_ends_in_a_period(self):
+        for chances in ([0, 80, 0], [0, 45, 0], [0, 5, 0], [None, None]):
+            with self.subTest(chances=chances):
+                headline = self._headline(chances)
+                self.assertTrue(headline["text"].endswith("."))
+
+    def test_the_sentence_starts_with_a_capital(self):
+        headline = self._headline([0, 80, 0, 0, 0, 0, 0])
+        self.assertTrue(headline["text"][0].isupper())
+
+    def test_the_banner_appears_above_the_list(self):
+        body = self.client.post("/", data={"city": "London"}).get_data(as_text=True)
+        self.assertIn("headline", body)
+        self.assertLess(body.index("headline"), body.index("weather-list"))
+        self.assertLess(body.index("headline"), body.index("hourly-strip"))
+
+    def test_the_banner_is_absent_without_a_forecast(self):
+        body = self.client.get("/").get_data(as_text=True)
+        self.assertNotIn("headline", body)
+
+    def test_the_banner_is_absent_on_an_error_page(self):
+        self.mock_geocode.return_value = None
+        body = self.client.post("/", data={"city": "Nowhereville"}).get_data(as_text=True)
+        self.assertIn('class="error"', body)
+        self.assertNotIn("headline", body)
+
+    def test_the_banner_agrees_with_the_row_it_names(self):
+        """The banner and the list must not disagree about a day."""
+        body = self.client.post("/", data={"city": "London"}).get_data(as_text=True)
+        # The mocked forecast is wet today and tomorrow, and the mocked
+        # current time is 09:00 with a dry day ahead, so the banner names
+        # tomorrow - the same 86% the row for tomorrow carries.
+        self.assertIn("Rain likely tomorrow (86%)", body)
+        self.assertIn("86% chance of rain", body)
+
+    def test_the_band_is_in_the_sentence_not_only_in_the_colour(self):
+        """Severity never rests on the colour alone."""
+        body = self.client.post("/", data={"city": "London"}).get_data(as_text=True)
+        # The banner carries a band class, but the sentence names the band.
+        banner = body.split('class="headline')[1][:400]
+        self.assertIn("Rain likely", banner)
+
+
 class TestHourlyParsing(unittest.TestCase):
     """The hourly parsing itself, without the HTTP layer."""
 
@@ -882,20 +1062,22 @@ class TestDonationLink(AppTestCase):
                 self.assertNotIn("Buy me a coffee", body)
                 self.assertNotIn('class="donate"', body)
 
-    def test_start_page_has_only_the_footer_link(self):
+    def test_start_page_has_the_line_and_the_footer_link(self):
         with mock.patch.object(rainalert, "DONATION_URL", DONATION_URL):
             body = self.client.get("/").get_data(as_text=True)
-        self.assertEqual(body.count(DONATION_HREF), 1)
-        self.assertNotIn('class="donate"', body)
+        self.assertEqual(body.count(DONATION_HREF), 2)
+        self.assertIn('class="donate"', body)
 
-    def test_forecast_page_has_the_line_under_the_results_and_the_footer_link(self):
+    def test_forecast_page_has_the_line_under_the_button_and_the_footer_link(self):
         with mock.patch.object(rainalert, "DONATION_URL", DONATION_URL):
             body = self.post()
         self.assertEqual(body.count(DONATION_HREF), 2)
         self.assertIn("Saved you from getting wet?", body)
         self.assertIn("help keep Rain Alert free", body)
-        # The line sits after the forecast list and before the footer.
-        self.assertLess(body.index("weather-list"), body.index('class="donate"'))
+        # The line sits between the button and the forecast, and before the
+        # footer link.
+        self.assertLess(body.index("Check Rain Chance"), body.index('class="donate"'))
+        self.assertLess(body.index('class="donate"'), body.index("weather-list"))
         self.assertLess(body.index('class="donate"'), body.index("<footer"))
 
     def test_link_opens_safely_in_a_new_tab(self):
@@ -915,21 +1097,21 @@ class TestDonationLink(AppTestCase):
             body = self.post()
         self.assertIn("(donation, opens in a new tab)", body)
 
-    def test_no_line_under_the_results_on_error_pages(self):
+    def test_the_line_is_on_error_pages_too(self):
         with mock.patch.object(rainalert, "DONATION_URL", DONATION_URL):
             empty = self.client.post("/", data={"city": ""}).get_data(as_text=True)
             self.mock_geocode.return_value = None
             missing = self.post("Nowhereville")
         for body in (empty, missing):
             self.assertIn('class="error"', body)
-            self.assertNotIn('class="donate"', body)
+            self.assertIn('class="donate"', body)
 
-    def test_no_line_under_the_results_when_there_is_no_forecast(self):
+    def test_the_line_is_shown_when_there_is_no_forecast(self):
         self.mock_get.return_value = FakeResponse({"daily": {}})
         with mock.patch.object(rainalert, "DONATION_URL", DONATION_URL):
             body = self.post()
         self.assertIn("No forecast data available", body)
-        self.assertNotIn('class="donate"', body)
+        self.assertIn('class="donate"', body)
 
     def test_an_unsafe_value_in_the_environment_is_ignored(self):
         self.assertEqual(rainalert.clean_donation_url("javascript:alert(1)"), "")

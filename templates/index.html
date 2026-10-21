@@ -18,6 +18,14 @@
                 <button type="submit">Check Rain Chance</button>
             </form>
 
+            {% if donation_url %}
+            <p class="donate">
+                Saved you from getting wet?
+                <a href="{{ donation_url }}" target="_blank" rel="noopener noreferrer">Buy me a coffee<span class="sr-only"> (donation, opens in a new tab)</span></a>
+                and help keep Rain Alert free.
+            </p>
+            {% endif %}
+
             {% if error %}
                 <p class="error" role="alert">{{ error }}</p>
             {% endif %}
@@ -25,6 +33,9 @@
             {% if weather_data %}
                 <div class="result">
                     <h3>Forecast for {{ display_city }}:</h3>
+                    {% if headline %}
+                    <p class="headline severity-{{ headline.severity }}">{{ headline.text }}</p>
+                    {% endif %}
                     {% if hourly_data %}
                     <div class="hourly">
                         <h4 class="hourly-title">Today, hour by hour</h4>
@@ -89,13 +100,6 @@
                         </div>
                         {% endfor %}
                     </div>
-                    {% if donation_url %}
-                    <p class="donate">
-                        Saved you from getting wet?
-                        <a href="{{ donation_url }}" target="_blank" rel="noopener noreferrer">Buy me a coffee<span class="sr-only"> (donation, opens in a new tab)</span></a>
-                        and help keep Rain Alert free.
-                    </p>
-                    {% endif %}
                 </div>
             {% elif city and not error %}
                 <div class="result result-empty">

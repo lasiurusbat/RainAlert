@@ -10,7 +10,7 @@ RainAlert is pull-only: users must open it, type a city and read a seven-day lis
 
 The ideas below are grouped by cost: in-page changes first, then browser-side features, then server-pushed notifications.
 
-**Where it stands now:** two of the four Tier 1 ideas are built — the page colour-codes rain risk and shows an hour-by-hour strip for today with a "bring an umbrella" summary. The app is still pull-only in the sense that matters here: nothing reaches a user who is not already looking at the page, and there is still no database, account or background job.
+**Where it stands now:** three of the four Tier 1 ideas are built — the page colour-codes rain risk, shows an hour-by-hour strip for today with a "bring an umbrella" summary, and leads with a one-line headline about the week. The app is still pull-only in the sense that matters here: nothing reaches a user who is not already looking at the page, and there is still no database, account or background job.
 
 ## Tier 1: In-page alerts (no new infrastructure)
 
@@ -19,7 +19,9 @@ Four changes make the page itself feel like an alert, and all of them stay insid
 - **Visual rain severity.** Colour-code each day by `precipitation_probability_max`: grey under 30%, blue at 30-60%, strong blue or amber above 60%. Add an umbrella icon on days over a threshold. This is mostly CSS classes in `style.css` plus one class on each `.weather-item`.
   - ✅ **Built.** Three bands — *rain unlikely* / *rain possible* / *rain likely* — plus a separate *unknown* band, because a missing value is not the same as a 0% chance. Grey, blue and amber as proposed, with the band names carried in a legend above the list and in a screen-reader-only span on each row, so severity is never colour alone. Tinted rows, a left border and a dot per day. The umbrella icon appears at the `UMBRELLA_THRESHOLD` (50%), and the thresholds are environment variables.
 - **Headline banner above the list.** For example "Rain likely tomorrow (80%). Bring an umbrella." or "No rain expected for the next 7 days." It takes a few lines in `fetch_forecast` to find the first day over a threshold, and fits the English-sentence convention.
-  - ⬜ **Not built yet.** This is the next Tier 1 item. The hourly strip below already answers the "should I take an umbrella now" question for today; the banner would do the same for the next few days.
+  - ✅ **Built.** One line above the list, in `forecast_headline()`. It names the first day worth mentioning — a day at or above the umbrella threshold, a day that is only *possible*, or the week as a whole when no day is. The band name in the sentence is the day's own band, the same one its row in the list carries, so the banner and the list never disagree; the colour follows the band and the band name is in the text, so the meaning never rests on the colour alone.
+    - **Today is judged on the hours that are left.** The daily maximum covers the whole day, so at 18:00 it still counts the morning's downpour while the reader can only walk into the evening. Today's figure in the banner comes from the remaining hours and says so — "Rain likely for the rest of today (80%)" — while its row keeps the daily maximum. The two are different quantities and each is labelled with which one it is.
+    - When the day is over it drops out of the banner entirely, and a missing chance is never counted as dry: a quiet week with one unreported day is "most of", not "all of".
 - **Hour-by-hour strip for today.** Open-Meteo also provides `hourly=precipitation_probability`. A row such as "Rain from about 15:00 to 18:00" is more actionable than a daily maximum, which cannot tell you whether to leave now or in an hour.
   - ✅ **Built.** 24 bars for the city's local day, coloured on the same severity bands as the daily list, with the bar height giving the chance. It comes from `hourly=precipitation_probability` in the *same* request as the daily fields, so the page still makes one upstream call, not two.
     - The summary is one line, in the sentence convention above: "Rain likely from about 15:00 to 18:00, up to 83%. Bring an umbrella." It uses the umbrella threshold, so it agrees with the ☔ icon on the daily list, and it only looks at hours that have not happened yet.
@@ -63,7 +65,7 @@ None of these are built yet, and Tier 3 is the step that decides whether the app
 
 Start with the cheap in-page wins, and add real push last, because that step is what makes the name honest.
 
-1. Headline banner and colour-coding (Tier 1). — 🟡 **Half done.** Colour-coding is built; the banner is not.
+1. Headline banner and colour-coding (Tier 1). — ✅ **Done.**
 2. Hour-by-hour "today's rain" strip (Tier 1). — ✅ **Done.**
 3. Saved city and threshold in `localStorage` (Tier 2). — ⬜ **Not started.**
 4. ntfy.sh or Telegram push (Tier 3), which needs only a SQLite table and one scheduled script. — ⬜ **Not started.**

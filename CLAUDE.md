@@ -19,7 +19,7 @@ Serves on <http://127.0.0.1:5000>. `FLASK_DEBUG=1` enables the reloader and
 debugger.
 
 ```bash
-python -m unittest test_app    # offline suite, 110 tests, no network
+python -m unittest test_app    # offline suite, 133 tests, no network
 python -m unittest test_api     # live integration tests, hits both APIs
 ```
 
@@ -125,6 +125,29 @@ in the tooltip and in the table view, so the rounding never hides a value.
 A **known 0% still gets a 2px stub** — a hole in the strip reads as
 missing data rather than as "no rain".
 
+**The headline banner is one sentence above the list.** `forecast_headline()`
+picks the first day worth mentioning: a day at or above `UMBRELLA_THRESHOLD`,
+a day that is only *possible*, or the week as a whole. The band name in the
+sentence is the day's own band — the same one its row in the list carries —
+so the banner and the list never disagree. The colour follows the band and
+the band name is in the text, so the meaning never rests on colour alone.
+
+**Today is judged on the hours that are left, not on the daily maximum.**
+The daily maximum covers the whole day, so at 18:00 it still counts the
+morning's downpour while the reader can only walk into the evening. When
+the hourly data is available, the banner's figure for today comes from the
+remaining hours and says so — "Rain likely for the rest of today (80%)" —
+while the row in the list keeps the daily maximum. The two are different
+quantities and each is labelled with which one it is. When the day is over
+it drops out of the banner entirely. A missing chance is never counted as
+dry: a quiet week with one unreported day is "most of", not "all of".
+
+**The donation link sits under the button, not under the forecast.** It is
+on every page, including error pages, because it is a site-wide link rather
+than part of the result. The band name in the headline is a sentence, not a
+badge, and the ☔ icon in the list keeps its own meaning — one icon for one
+meaning — so the banner carries no icon of its own.
+
 **Deployment runs a prebuilt image, not a build.** `render.yaml` uses
 `runtime: image` pointing at `docker.io/lasiurusbat/rainalert:0.8`. Render
 pulls that image; it never runs the `Dockerfile`. A release is therefore a
@@ -149,9 +172,9 @@ deploy, so the secrets are only touched on a tag run.
 whitespace, quotes or angle brackets and returns `""` for anything else. A
 context processor passes it to every template as `donation_url`, reading the
 module global on each request so tests can patch `rainalert.DONATION_URL`.
-When it is empty no donation markup renders at all. The link appears under the
-forecast (only when there is a forecast) and in the footer. It is a plain link
-with `rel="noopener noreferrer"`, never an embedded widget or script.
+When it is empty no donation markup renders at all. The link appears just
+under the search button and in the footer. It is a plain link with
+`rel="noopener noreferrer"`, never an embedded widget or script.
 
 **The weather data licence limits what the site may do.** Open-Meteo's free API
 is non-commercial. Voluntary donations are allowed; advertising, affiliate
@@ -195,6 +218,14 @@ tests; do not remove them.
   `scrollHeight - clientHeight` in a real browser after changing any of
   them — a stock GitHub runner has a different viewport than the
   developer box, and the CI image is where the tests run.
+- **The headline banner is paid for out of the card's own padding.** It is
+  21px tall, and the h1 margin, the `.container` padding, the `.result`
+  margin and the `.hourly` padding were all trimmed to pay for it: the
+  card was 718px and is now 696px, so the page fits a 768px window with
+  no scrollbar. The levers, in the order they were used: `h1` margin
+  (0.5rem/0.6rem), `.container` padding (`1.4rem 1.75rem`), `.result`
+  margin-top (0.7rem) and padding-top (0.5rem), `.hourly` padding. The
+  list rows themselves are already at their thinnest.
 - **The hourly axis labels sit on the hour boundary, not on the bar.** Each
   label is positioned at the left edge of its own cell, so "06" is under
   the gap before the 06:00 bar rather than under the middle of it. The
