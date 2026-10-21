@@ -1,10 +1,31 @@
 # Deploying RainAlert to Render (free) at rainalert.live
 
-The Docker half of this has been exercised locally: the image builds, both
-test suites pass inside it, and a forecast renders with English weekday
-names. The Render and GitHub Actions half has **not** been run — the service,
-the domain and the first tag push are still ahead. `render.yaml` points at
-the Docker Hub image `lasiurusbat/rainalert:0.8`, which does not exist yet.
+**The site is not live.** The Docker half of this has been exercised
+locally: the image builds, both test suites pass inside it, and a forecast
+renders with English weekday names. The CI workflow itself has run and is
+green on every push to `main`, but the **tag-gated half has never fired** —
+no release has been pushed and no deploy has been requested.
+
+State of the world, checked on 2026-10-21:
+
+- **No release tag exists** (`git tag -l` is empty), so the image has never
+  been pushed.
+- **The Docker Hub repository `lasiurusbat/rainalert` exists and is
+  public, but it has zero tags.** `render.yaml` points at
+  `lasiurusbat/rainalert:0.8`, which does not exist.
+- **A Render service named `rainalert` answers at
+  <https://rainalert.onrender.com>, but it is not this app.** Its `/`
+  returns the JSON `{"message": "Rain Alert API is running", "status":
+  "ok"}`; this app's `/` renders the HTML page. It looks like a minimal
+  service that happens to share the name, and it has to be replaced or
+  repointed at the real image.
+- **`rainalert.live` is on Namecheap URL forwarding and answers nothing.**
+  The forwarding 302s to `www.rainalert.live`, whose A record is
+  `0.0.0.0`. No Render address is in the DNS.
+
+The order matters: the image has to exist on Docker Hub before Render can
+pull it, and the domain has to be attached before the workflow's smoke test
+can pass.
 
 ## 1. Build and push the image (manual, first release)
 
@@ -128,10 +149,16 @@ setup is `v0.8`, to match `render.yaml`, which pins `0.8`.
 ### Known limits
 
 - **Not run yet.** The image builds and the tests pass inside it locally,
-  but the workflow itself has never executed, and neither has a Render
-  deploy. Expect to fix small things on the first run, and use a throwaway
-  tag for it. The image `lasiurusbat/rainalert:0.8` does not exist on Docker
-  Hub yet, so section 1 is still ahead.
+  and the CI workflow runs green on every push to `main`, but the tag-gated
+  half — the push and the deploy — has never executed. Expect to fix small
+  things on the first release, and use a throwaway tag for it. The image
+  `lasiurusbat/rainalert:0.8` does not exist on Docker Hub yet, so section 1
+  is still ahead.
+- **The smoke test will fail on the first release.** It hits
+  `https://rainalert.live/`, which still answers nothing while the domain
+  is on Namecheap forwarding. The deploy can succeed and the run still ends
+  red. Attach the domain first, or read the failed smoke test as "the
+  domain is not attached yet" rather than "the deploy broke".
 - **Action versions are not verified as the latest.** The workflow uses
   `actions/checkout@v4`, `docker/setup-buildx-action@v3`,
   `docker/build-push-action@v6` and `docker/login-action@v3`.

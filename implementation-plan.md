@@ -5,24 +5,22 @@ the repository. Unchecked items (`[ ]`) are open. Items marked **(verify)** may
 already be done, but nothing in the repository proves it, so they stay open
 until confirmed.
 
-Live site: <https://rainalert.live> (planned). Image: `lasiurusbat/rainalert`.
-Repository: <https://github.com/lasiurusbat/RainAlert>.
+Live site: <https://rainalert.live> — **planned, not live.** Image:
+`lasiurusbat/rainalert` (repository exists, no tags). Repository:
+<https://github.com/lasiurusbat/RainAlert>.
 
 ## 1. Where we are
 
 The app works locally, is containerised, has a CI/CD pipeline and Dependabot
 committed and pushed to GitHub, and has a deployment runbook. No release tag
-exists yet, so nothing is confirmed live. Tier 1 of the alert ideas is now
-complete: the page colour-codes rain risk, shows an hour-by-hour strip for
-today with a "bring an umbrella" summary, leads with a one-line headline, and
-renames the browser tab and swaps the favicon when rain is coming. The app is
-still pull-only in the sense that matters: nothing yet reaches a user who is
-not already looking at the page.
-
-The hourly-strip work and the donation/attribution work are both in the
-working tree and not in a commit yet. `app.py`, the template, the stylesheet,
-`render.yaml`, both test suites and the screenshot are modified, and this plan
-file is itself untracked.
+exists yet, no image has been pushed, and the domain answers nothing, so
+**the app is local-only** — it reaches nobody who is not already looking at
+the page. Tier 1 of the alert ideas is complete: the page colour-codes rain
+risk, shows an hour-by-hour strip for today with a "bring an umbrella"
+summary, leads with a one-line headline, and renames the browser tab and
+swaps the favicon when rain is coming. Tier 2 is also built: the reader's
+city and their own rain threshold live in the browser's `localStorage`, and
+the site stays stateless.
 
 ## 2. Finished
 
@@ -61,16 +59,16 @@ file is itself untracked.
 
 These steps use accounts and dashboards I cannot see from the repository.
 
-- [ ] Docker Hub: create the `lasiurusbat/rainalert` repository (public) and an access token with Read & Write scope. Confirmed 2026-10-21: neither exists yet.
+- [ ] Docker Hub: create an access token with Read & Write scope. Confirmed 2026-10-21: the `lasiurusbat/rainalert` repository exists and is public, but it has **zero tags** — no image has ever been pushed.
 - [ ] **(verify)** GitHub secrets set: `DOCKERHUB_USERNAME`, `DOCKERHUB_TOKEN`, `RENDER_DEPLOY_HOOK_URL`
-- [ ] Render: create the Blueprint from the repository so the service `rainalert` exists. Confirmed 2026-10-21: it does not exist yet.
+- [ ] Render: the service `rainalert` exists at <https://rainalert.onrender.com>, but it serves a JSON stub (`{"message": "Rain Alert API is running", "status": "ok"}`), not this app. Repoint it at the real image or replace it with one created from the Blueprint.
 - [ ] Confirm the free Render service has a deploy hook (docs do not say) and add its URL as a GitHub secret. If not, plan on manual redeploys.
-- [ ] Note the order: the image must exist on Docker Hub before the Render Blueprint is created, or Render's first deploy fails to pull it
-- [ ] **(verify)** Domain: `rainalert.live` added in Render, `AAAA` records removed, DNS records added, verified, HTTPS working
+- [ ] Note the order: the image must exist on Docker Hub before Render can pull it, or the first deploy fails
+- [ ] **(verify)** Domain: `rainalert.live` added in Render, the Namecheap URL-forwarding records replaced, DNS records added, verified, HTTPS working. Confirmed 2026-10-21: the domain is on Namecheap forwarding and answers nothing — it 302s to a `www` host whose A record is `0.0.0.0`.
 - [ ] GitHub: protect `main`, require the `build-test-push` check, optionally add a reviewer to the `production` environment
 - [ ] Review and merge (or close) the open Dependabot pull request once its checks pass
 - [ ] Cut the first release: tag `v0.8` on `main` and push it (no tag exists yet)
-- [ ] Watch the first pipeline run, fix anything small it turns up (workflow has never been executed)
+- [ ] Watch the first release run, fix anything small it turns up. The workflow itself is green on every push to `main`; only the tag-gated half — the push and the deploy — has never run. The smoke test will fail until the domain is attached.
 - [ ] Open the live site, search a city, confirm forecast and English weekday names
 - [ ] Optional: free uptime pinger on `https://rainalert.live/` to avoid the one-minute cold start
 

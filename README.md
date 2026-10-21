@@ -12,6 +12,12 @@ and swaps the favicon when rain is coming.
 Both APIs are free, keyless, and need no signup. There is no database, no
 user accounts, and nothing to configure before running it.
 
+> **The site is not live yet.** `rainalert.live` does not serve this app, no
+> release tag has been cut, and no image has been pushed to Docker Hub. The
+> app runs locally — see [Quick start](#quick-start). The deployment
+> machinery is written and committed; the one-time setup that would put it
+> online is still ahead. `DEPLOY.md` is the runbook.
+
 ![Rain Alert showing a 7-day forecast for London](docs/screenshot.png)
 
 ---
@@ -412,9 +418,10 @@ addition, not a requirement.
 
 ## Donations and data credits
 
-**Donation link.** Set `DONATION_URL` to your donation page (the live site uses
-<https://buymeacoffee.com/rainalert>) and the page shows one quiet line just
-under the "Check Rain Chance" button, plus a link in the footer. It is a plain
+**Donation link.** Set `DONATION_URL` to your donation page — for this site
+that is <https://buymeacoffee.com/rainalert>, which exists but is not yet
+linked from a live site. The page then shows one quiet line just under the
+"Check Rain Chance" button, plus a link in the footer. It is a plain
 text link, not an embedded widget, so no third-party script is loaded and no
 consent notice is needed. It opens in a new tab. It is a site-wide link, so it
 appears on every page, including the error pages. With the variable empty, the
@@ -565,6 +572,23 @@ exception text is always logged, never rendered on the page.
 ---
 
 ## Deployment
+
+**Nothing is deployed yet.** The app runs locally, from `python app.py` or
+`docker compose up`. The pieces below are written and committed, but the
+one-time setup that would put it online has not been done — checked on
+2026-10-21:
+
+- No release tag has ever been cut (`git tag -l` is empty), so the
+  push-and-deploy half of the CI workflow has never fired.
+- The Docker Hub repository `lasiurusbat/rainalert` exists but has **zero
+  tags**, so the image `render.yaml` names cannot be pulled.
+- A Render service answers at <https://rainalert.onrender.com>, but it
+  serves a JSON stub (`{"message": "Rain Alert API is running", "status":
+  "ok"}`), not this app — this app's `/` renders the HTML page.
+- `rainalert.live` is registered at Namecheap with URL forwarding, and
+  nothing is hosted behind it.
+
+The rest of this section describes the intended setup.
 
 `render.yaml` describes a free-tier [Render](https://render.com) web service
 that runs a prebuilt image from Docker Hub:

@@ -8,6 +8,12 @@ Enter a city name → geocoded to coordinates via **Nominatim** (OpenStreetMap) 
 Both APIs are free, keyless, and need no signup. There is no database and no
 user account system.
 
+**The app runs locally only.** Nothing is deployed: `rainalert.live` does not
+serve this app, no release tag has ever been cut, and no image has been
+pushed to Docker Hub. The deployment machinery is written and committed, but
+it has never been run end to end. `DEPLOY.md` is the runbook, and the
+"Still to do" section below is the list of what is actually ahead.
+
 ## Running it
 
 ```bash
@@ -43,6 +49,50 @@ in the app, so there is no locale data to compile. `DEPLOY.md` is the
 deployment runbook, and `.github/workflows/ci-cd.yml` runs the tests inside
 the built image before any release is pushed.
 
+## Deployment status
+
+**The app is not live.** Checked on 2026-10-21, and every one of these is
+still true:
+
+- **No release tag exists.** `git tag -l` is empty. The workflow only pushes
+  and deploys on a `v*` tag, so nothing has ever been released.
+- **The Docker Hub image does not exist.** The repository
+  `lasiurusbat/rainalert` is there, with **zero tags** — so the
+  `docker.io/lasiurusbat/rainalert:0.8` that `render.yaml` points at cannot
+  be pulled.
+- **The Render service is not serving this app.** A service named
+  `rainalert` answers at <https://rainalert.onrender.com>, but its `/`
+  returns the JSON `{"message": "Rain Alert API is running", "status":
+  "ok"}` behind gunicorn. This app's `/` renders the HTML page. It is a
+  different, minimal service that happens to share the name.
+- **`rainalert.live` points nowhere useful.** The domain is at Namecheap
+  with URL forwarding: `rainalert.live` is an A record to a Namecheap
+  forwarder that 302s to `www.rainalert.live`, whose own A record is
+  `0.0.0.0`. No Render address appears in the DNS at all.
+- **CI itself has run, and is green.** The workflow builds the image, runs
+  the offline suite inside it and the browser suite on the runner. Only the
+  tag-gated half — the push and the deploy — has never fired.
+
+So the app is served by `python app.py` or `docker compose up`, and by
+nothing else.
+
+### Still to do
+
+- [ ] Cut the first release tag (`git tag v0.8 && git push origin v0.8`),
+      which builds, tests, pushes and deploys in one workflow run.
+- [ ] Confirm the Docker Hub credentials and the Render deploy hook are set
+      as GitHub secrets, and that the free Render plan includes a hook.
+- [ ] Point the domain at Render: add `rainalert.live` to the service,
+      then replace the Namecheap forwarding records with the DNS records
+      Render gives, and verify HTTPS.
+- [ ] Replace the `0.8` fallback in `render.yaml` if the first release is
+      not `0.8`.
+- [ ] Re-check the smoke test in the workflow: it only proves
+      `https://rainalert.live/` answers, not that it answers with the new
+      version. **It will fail on the first tag run** as long as the domain
+      is still on Namecheap forwarding, so the first release ends red even
+      when the deploy itself worked.
+
 ## Layout
 
 | Path | Purpose |
@@ -60,7 +110,7 @@ the built image before any release is pushed.
 | `requirements-dev.txt` | Development-only dependencies (selenium) |
 | `Dockerfile` | Two-stage container image |
 | `docker-compose.yml` | Local container setup: the app and a test service |
-| `render.yaml` | Render Blueprint; runs a prebuilt image, not a build |
+| `render.yaml` | Render Blueprint; runs a prebuilt image, not a build (not deployed yet) |
 | `DEPLOY.md` | Deployment runbook: Render setup, domain, CI/CD, releases |
 | `.github/workflows/ci-cd.yml` | CI on every PR and push; release on a git tag |
 | `.github/dependabot.yml` | Weekly grouped PRs for actions, pip and the base image |
@@ -234,7 +284,9 @@ scale the reader chose.
 `runtime: image` pointing at `docker.io/lasiurusbat/rainalert:0.8`. Render
 pulls that image; it never runs the `Dockerfile`. A release is therefore a
 pushed image tag, not a merged commit. The old `runtime: python` shape,
-where Render ran `pip install` and gunicorn itself, is gone.
+where Render ran `pip install` and gunicorn itself, is gone. None of this
+has happened yet — the image does not exist and no tag has been cut. See
+"Deployment status" above.
 
 **CI runs the tests inside the built image.** `.github/workflows/ci-cd.yml`
 builds for `linux/amd64` and runs `python -m unittest test_app` in the
@@ -255,7 +307,8 @@ suite still runs in the image, because that one can be.
 commit already on `main`, builds and tests the image, pushes it to Docker
 Hub as the version without the `v`, and calls Render's deploy hook with an
 `imgURL` parameter naming that exact tag. Pull requests never push and never
-deploy, so the secrets are only touched on a tag run.
+deploy, so the secrets are only touched on a tag run. **No tag has been
+pushed yet**, so the push-and-deploy half of the workflow has never run.
 
 **The donation link is opt-in.** `DONATION_URL` is read once at import through
 `clean_donation_url()`, which accepts only absolute `https://` URLs without
@@ -410,6 +463,14 @@ anything loses the feature instead of breaking the page.
 - **Render does not redeploy an image service when a new image appears.**
   A new tag on Docker Hub is not enough on its own; the deploy hook has to
   be called with the `imgURL` parameter naming the tag. See `DEPLOY.md`.
+- **`rainalert.onrender.com` is not this app.** It answers with a JSON
+  `{"message": "Rain Alert API is running", "status": "ok"}`; this app's `/`
+  renders HTML. Do not read a 200 from that URL as "the site is up" — check
+  for the HTML page, or a `Forecast for …` heading.
+- **The domain is on Namecheap URL forwarding, not on Render.** The
+  forwarding 302s to a `www` host whose A record is `0.0.0.0`, so the site
+  does not answer at all. DNS has to be changed before the domain works,
+  and the workflow's smoke test fails until it is.
 - **Open-Meteo has gone down before** (TCP 443 unreachable while DNS still
   resolved). When the forecast endpoint fails, the app correctly shows "The
   weather service is unavailable right now" — that is the app behaving
