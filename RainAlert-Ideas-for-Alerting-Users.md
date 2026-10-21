@@ -40,11 +40,17 @@ Four changes make the page itself feel like an alert, and all of them stay insid
 These features keep state in the user's browser, so the server stays stateless.
 
 - **Saved city and threshold in `localStorage`.** "Remember my city" and "Alert me above X%". The page checks automatically on load, so there is no retyping.
+  - ✅ **Built.** Both preferences live in the browser's `localStorage`, in `static/app.js`. The server never sees either one and stays stateless.
+    - A city is only remembered **once a search for it has actually worked**: the submitted city waits in `sessionStorage` until the result page confirms the search was good. A typo is never remembered, and a failed search does not destroy the city that was already saved.
+    - The start page loads the remembered city by itself, so there is no retyping. A page that already shows a forecast is left alone — reloading it would throw the reader's forecast away.
+    - The threshold is marked with **its own symbol and its own words** (a ▲), because it answers a different question from the umbrella. The umbrella, the banner, the ☔ icon and the tab title are the app's advice and all fire at the same `UMBRELLA_THRESHOLD`; the reader's own limit is a second, separate answer, and the two never stand in for each other.
+    - The threshold is compared against the number the page shows, so the marker and the percentage can never disagree. A day the service did not report is never counted as a dry day, and never marked as a wet one either.
+    - Without JavaScript the preferences row is hidden and the page is exactly what it was before. The server tells the page what kind of page it is through three attributes on `<body>`: `data-autoload`, `data-search` and `data-city`.
 - **Web Notifications while the tab is open.** A small JS timer re-fetches every 30 minutes and fires a notification such as "Rain starts in about 1 hour". It is simple, but only works while the tab is open.
 - **Installable PWA.** Add a `manifest.json` and a service worker so users can install the app on a phone home screen. True push when the app is closed needs the server-side component in Tier 3.
 - **Calendar export (.ics).** An "Add rainy days to my calendar" button that generates an `.ics` file with an event on each day over the threshold. The user's own calendar app does the alerting, with no notification infrastructure on your side.
 
-None of these are built yet.
+Only the saved city and the threshold are built. The other three are not.
 
 ## Tier 3: Server-pushed alerts (needs persistence and a scheduler)
 
@@ -72,11 +78,12 @@ Start with the cheap in-page wins, and add real push last, because that step is 
 1. Headline banner and colour-coding (Tier 1). — ✅ **Done.**
 2. Hour-by-hour "today's rain" strip (Tier 1). — ✅ **Done.**
 3. Tab title and favicon as the alert (Tier 1). — ✅ **Done.**
-4. Saved city and threshold in `localStorage` (Tier 2). — ⬜ **Not started.**
+4. Saved city and threshold in `localStorage` (Tier 2). — ✅ **Done.**
 5. ntfy.sh or Telegram push (Tier 3), which needs only a SQLite table and one scheduled script. — ⬜ **Not started.**
 
 Steps 1 to 3 give an immediate "alert" feel in an afternoon, and together they
-finish Tier 1.
+finish Tier 1. Step 4 is the first Tier 2 feature: it is the one that makes
+the app remember you, and it needs no backend at all.
 
 ## Codebase notes to keep in mind
 

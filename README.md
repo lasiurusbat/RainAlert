@@ -6,7 +6,8 @@ by how wet each day is expected to be.
 Type a city name → the app geocodes it to coordinates via
 **[Nominatim](https://nominatim.org/)** (OpenStreetMap) → fetches a 7-day
 forecast from **[Open-Meteo](https://open-meteo.com/)** → renders a list of
-daily rain chances with a visual severity scale.
+daily rain chances with a visual severity scale, and renames the browser tab
+and swaps the favicon when rain is coming.
 
 Both APIs are free, keyless, and need no signup. There is no database, no
 user accounts, and nothing to configure before running it.
@@ -46,6 +47,11 @@ user accounts, and nothing to configure before running it.
   is English throughout, so a German date inside it would be a half-translated
   page; the seven names are hard-coded rather than taken from the C library's
   locale data, so they never depend on the host.
+- **Remembers your city and your own rain threshold.** Tick "Remember this
+  city" and the next visit loads your forecast by itself — no retyping. Set
+  an "Alert me above" percentage and the days that reach it are marked with a
+  ▲ and a count of how many qualify. Both live in your browser's
+  `localStorage`; the server never sees them and the site stays stateless.
 - **Honest error handling.** A city that does not exist and a geocoder that is
   temporarily down produce different messages — a network blip never tells a
   user their valid city is missing.
@@ -81,13 +87,20 @@ Python 3.14.5.
 ## Running the tests
 
 ```bash
-python -m unittest test_app    # 169 offline tests, no network required
+python -m unittest test_app    # 183 offline tests, no network required
+python -m unittest test_browser  # 17 browser tests, needs Chrome
 python -m unittest test_api     # 6 live integration tests, hits both APIs
 ```
 
 `test_app.py` is the suite that gates changes. It mocks both HTTP services
 at the `requests` boundary, so it runs in under a second and never fails
 because an upstream is down.
+
+`test_browser.py` drives a real headless Chrome against the app, because the
+saved city and the alert threshold live in the browser's `localStorage` and
+no HTTP test client can see them. It needs Chrome and selenium
+(`pip install -r requirements-dev.txt`), and skips itself when either is
+missing.
 
 `test_api.py` checks the real response shapes against the live services and
 needs them to be reachable.
@@ -167,9 +180,11 @@ the host side if `8000` is already taken.
   One worker keeps the geocoding cache warm and avoids duplicate Nominatim
   lookups, since the app is I/O-bound on two keyless APIs.
 
-The image carries the test suites as well, so
+The image carries the HTTP test suites as well, so
 `docker run --rm rainalert python -m unittest test_app` runs the same tests
-against the same image that gets deployed.
+against the same image that gets deployed. The browser suite is not in the
+image — it needs a real Chrome, and the image installs no system packages on
+purpose — so it runs on the host instead.
 
 ---
 
@@ -361,6 +376,40 @@ have not happened yet — a window that has already passed is not an alert.
 
 ---
 
+## Saved city and personal threshold
+
+Two preferences live in the browser, under the search form: **"Remember this
+city"** and **"Alert me above"** a percentage you choose. Both are stored in
+`localStorage`, which means the server never sees either one. There is no
+account, no database, and no cookie — the site is exactly as stateless as it
+was before, and clearing your browser data forgets everything.
+
+**Remembering a city is not the same as remembering the last search.** A city
+is only saved once a search for it has actually worked. The submitted name
+waits in `sessionStorage` until the result page confirms the search was
+good, so a typo is never remembered, and a failed search leaves the city you
+had saved alone. Unticking the box forgets it immediately.
+
+The start page loads your remembered city by itself, so there is no retyping.
+A page that already shows a forecast is left alone — reloading it would
+throw away the forecast you came for.
+
+**Your threshold is a second answer, not a second umbrella.** The ☔ icon, the
+headline banner and the tab title are the app's advice: they all fire at the
+same threshold, so they can never disagree with each other. Your own limit
+answers a different question, so it is marked differently — a ▲ after the
+date, with a count of how many days qualify ("3 days above 60%"). The
+marker is not carried by colour alone, and the percentage it compares
+against is the same number the row shows, so the two can never disagree
+either. A day the forecast service did not report is never counted as a dry
+day.
+
+**Without JavaScript, the page is unchanged.** The preferences row is hidden
+and everything else works exactly as before; the two preferences are an
+addition, not a requirement.
+
+---
+
 ## Donations and data credits
 
 **Donation link.** Set `DONATION_URL` to your donation page (the live site uses
@@ -392,6 +441,7 @@ RainAlert/
 │   └── index.html               # the single page
 ├── static/
 │   ├── style.css                # all styling
+│   ├── app.js                   # saved city and personal alert threshold
 │   ├── favicon.svg              # tab icon
 │   ├── favicon-rain.svg         # the tab icon when rain is coming
 │   └── image/
@@ -399,8 +449,10 @@ RainAlert/
 ├── docs/
 │   └── screenshot.png           # the image above
 ├── test_app.py                  # offline unit tests, HTTP fully mocked
+├── test_browser.py              # browser tests, real headless Chrome
 ├── test_api.py                  # live integration tests
-├── requirements.txt             # pinned dependencies
+├── requirements.txt             # pinned runtime dependencies
+├── requirements-dev.txt         # development-only dependencies (selenium)
 ├── Dockerfile                   # multi-stage container image
 ├── docker-compose.yml           # local container setup, app + test services
 ├── .dockerignore                # keeps the build context small
@@ -440,6 +492,45 @@ and `temperature_2m_min` with `timezone=auto`. The API then returns each date
 already expressed in the queried city's local time — a forecast for Tokyo is
 dated in Tokyo's days. Those dates are never converted to the viewer's
 timezone, because that would be a bug, not a feature.
+
+### The tab title and the favicon
+
+`tab_alert()` looks at the same forecast the banner uses and returns the
+first day worth mentioning, or `None`. The route turns that into two
+template variables: `page_title` and `favicon`.
+
+The title names the day rather than the date — "Rain tomorrow - Rain
+Alert", "Rain today - Rain Alert", or the weekday beyond that — because a
+tab title is read at a glance, and "tomorrow" is what a reader is asking
+about. A dry week, an unreported week, an empty search and an error page
+all keep the plain "Rain Alert" title and the default icon.
+
+The favicon is a second file, `static/favicon-rain.svg`, rather than the
+default `static/favicon.svg` with different contents. Browsers cache a
+favicon by its URL, so changing the contents of one file changes nothing
+until the cache is cleared; two files with two URLs swap immediately.
+
+### The browser half
+
+`static/app.js` is the only JavaScript in the project, and it is a
+progressive enhancement: without it, the page works exactly as it did
+before, minus the two preferences. The server's part is small — it tells
+the page what kind of page it is through three attributes on `<body>`:
+
+| Attribute | Values | What it means |
+|---|---|---|
+| `data-autoload` | `1` / `0` | May this page load a remembered city by itself? Only the start page may. |
+| `data-search` | `ok` / `error` / `none` | Was the last search worth remembering? |
+| `data-city` | the city | The city the forecast is for, for the label. |
+
+The threshold is compared against the `data-chance` attribute on each row,
+which is the same whole number the row displays — so the marker and the
+percentage on the page can never disagree.
+
+Every `localStorage` access goes through a try/except. A browser in private
+mode, or one where the reader has blocked site data, throws on the first
+access; the helpers swallow that, so such a browser loses the feature
+instead of breaking the page.
 
 ### Weekday names
 
@@ -522,6 +613,19 @@ same command.
 - **`round()` is not what you want for temperatures.** Python uses banker's
   rounding, so `round(8.5)` is `8`. Use the `round_half_up()` helper.
 - **Never call `.title()` on user input.**
+- **The browser half is optional.** `static/app.js` is a progressive
+  enhancement, and the preferences row is hidden without it. Keep it that
+  way: the page must work with JavaScript disabled.
+- **Every `localStorage` access goes through a try/except.** Private mode
+  and blocked site data both throw on the first access, and a browser that
+  refuses to store anything should lose the feature, not the page.
+- **The saved city and the personal threshold are the reader's own.** They
+  never leave the browser, and the server never sees them. Do not add a
+  server-side store for them without asking.
+- **A favicon is cached by its URL, not by its contents.** To show a
+  different icon, add a second file — do not rewrite the contents of
+  `static/favicon.svg`, or the browser keeps showing the old one until the
+  cache is cleared.
 - **The background photograph is not yours to redistribute.** It is privately
   owned and covered by the restriction in the License section below. Replace
   it with an image you have the right to use, or get written approval
@@ -537,7 +641,8 @@ codebase before.
 
 Copyright © 2026 Vedad Dizdarevic. All rights reserved.
 
-The favicon (`static/favicon.svg`) is original to this project.
+The favicons (`static/favicon.svg` and `static/favicon-rain.svg`) are
+original to this project.
 
 **The background photograph is privately owned.** The image in
 `static/image/rain-alert-bg.jpg` is a privately held work, not a

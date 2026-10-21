@@ -27,7 +27,7 @@ body {
 
 .container {
     background: white;
-    padding: 1.4rem 1.75rem;
+    padding: 1.15rem 1.75rem;
     border-radius: 10px;
     box-shadow: 0 4px 6px rgba(0,0,0,0.1);
     /* Border-box so the 90% width includes the padding. With the default
@@ -73,12 +73,12 @@ h1 {
     text-align: center;
     /* The default h1 margins are generous. Trimming them keeps the card
        inside a 768px-tall window now that the headline banner is one more
-       line in it. */
-    margin: 0.5rem 0 0.6rem;
+       line in it, and now that the preferences row is another. */
+    margin: 0.35rem 0 0.45rem;
 }
 
 .form-group {
-    margin-bottom: 0.6rem;
+    margin-bottom: 0.45rem;
 }
 
 input[type="text"] {
@@ -112,9 +112,9 @@ button:hover {
 }
 
 .result {
-    margin-top: 0.7rem;
+    margin-top: 0.6rem;
     border-top: 1px solid #eee;
-    padding-top: 0.5rem;
+    padding-top: 0.4rem;
 }
 
 .result h3 {
@@ -344,7 +344,7 @@ button:hover {
    and in the screen-reader text, never only in the bar. */
 .hourly {
     margin: 0.2rem 0 0.35rem;
-    padding: 0.3rem 0.6rem 0.3rem;
+    padding: 0.25rem 0.6rem;
     background: #f8fafb;
     border-radius: 6px;
 }
@@ -597,7 +597,7 @@ button:hover {
 /* The optional donation line under the "Check Rain Chance" button. It is quiet
    on purpose: one short sentence, no box and no button. */
 .donate {
-    margin: 0.6rem 0 0;
+    margin: 0.5rem 0 0;
     font-size: 0.75rem;
     line-height: 1.3;
     text-align: center;
@@ -624,6 +624,79 @@ button:hover {
     white-space: nowrap;
     text-align: right;
     flex: 0 0 5.25rem;
+}
+
+/* --- The browser-side preferences -------------------------------------------
+   The row under the search form: which city to remember, and the reader's
+   own rain threshold. Both are kept in the browser's localStorage, so the
+   server stays stateless and learns nothing about the reader.
+
+   Without JavaScript neither control can do anything, so the row stays
+   hidden until the script has run. */
+.no-js .prefs {
+    display: none;
+}
+
+.prefs {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.25rem 0.9rem;
+    margin: 0.3rem 0 0;
+    font-size: 0.78rem;
+    color: #4a5a6a;
+    /* The preferences are a feature, not a footnote, so they are set in
+       bold. At this size a quiet weight was easy to walk past, and the
+       whole point of the row is that a reader notices it exists. */
+    font-weight: 600;
+}
+
+.pref {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    white-space: nowrap;
+}
+
+.pref input[type="checkbox"] {
+    width: auto;
+    margin: 0;
+}
+
+.pref input[type="number"] {
+    width: 3.4rem;
+    padding: 0.1rem 0.25rem;
+    border: 1px solid #d7dee3;
+    border-radius: 4px;
+    font-size: 0.78rem;
+    font-weight: 600;
+    text-align: center;
+    box-sizing: border-box;
+}
+
+.pref input[type="number"]:focus-visible {
+    border-color: #2c3e50;
+    outline: none;
+}
+
+/* The percent sign sits tight against the field, not at the row's gap. */
+.pref-unit {
+    margin-left: -0.15rem;
+}
+
+.pref-status {
+    color: #4a5a6a;
+}
+
+/* The marker for a day that reaches the reader's own threshold.
+
+   It has its own symbol and its own words, because it answers a different
+   question from the umbrella: the umbrella is the app's advice, the triangle
+   is the reader's own limit. The two never stand in for each other. */
+.alert-marker {
+    color: #c0392b;
+    font-size: 0.7em;
+    line-height: 1;
 }
 
 /* --- Narrow screens --------------------------------------------------------

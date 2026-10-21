@@ -69,6 +69,7 @@ pull request / push to main          push of a tag such as v0.9
         |                                      |
   build image (linux/amd64)             build image (linux/amd64)
   run unit tests inside it              run unit tests inside it
+  run browser tests on the runner       run browser tests on the runner
         |                               verify the tag is on main
       done                              docker push lasiurusbat/rainalert:0.9
                                                 |
@@ -83,6 +84,11 @@ pull request / push to main          push of a tag such as v0.9
   that the weekday names are hard-coded, so it would pass on a stock GitHub
   runner too. It still runs in the built image, because that is what makes
   the tested artefact and the shipped artefact the same one.
+- **The browser tests run on the runner.** `test_browser.py` drives a real
+  headless Chrome, and the image installs no system packages on purpose, so
+  Chrome cannot be in it. The runner has Chrome already, so that suite runs
+  there instead, against the same source. It runs **before** the push, so a
+  failing browser test means the image is never pushed at all.
 - **One build, tested then pushed.** The image that passed the tests is the
   one that is pushed. It is not rebuilt for the push.
 - **Releases are git tags.** Push `v0.9` and the image is tagged `0.9`.
@@ -149,5 +155,5 @@ setup is `v0.8`, to match `render.yaml`, which pins `0.8`.
 - **The test counts drift.** The count appears in **four** documents —
   `CLAUDE.md`, `README.md`, `DEPLOY.md` and `implementation-plan.md` — and
   they are updated together, but a test added without updating all four
-  leaves them disagreeing. The suite has 169 offline tests and 6 live
-  integration tests.
+  leaves them disagreeing. The suite has 183 offline tests, 17 browser
+  tests and 6 live integration tests.

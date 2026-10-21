@@ -19,18 +19,21 @@ Serves on <http://127.0.0.1:5000>. `FLASK_DEBUG=1` enables the reloader and
 debugger.
 
 ```bash
-python -m unittest test_app    # offline suite, 169 tests, no network
+python -m unittest test_app    # offline suite, 183 tests, no network
+python -m unittest test_browser  # browser suite, 17 tests, needs Chrome
 python -m unittest test_api     # live integration tests, hits both APIs
 ```
 
 The offline suite is the one that gates changes. `test_api.py` requires the
-upstream services to be reachable.
+upstream services to be reachable. `test_browser.py` needs Chrome and
+selenium (`pip install -r requirements-dev.txt`) and skips itself when
+either is missing.
 
 ## Running it in Docker
 
 ```bash
 docker compose up --build       # http://localhost:8000
-docker compose run --rm tests   # both suites in the same image
+docker compose run --rm tests   # the two HTTP suites in the same image
 ```
 
 `Dockerfile` is a two-stage build; the runtime image has no compiler, runs as
@@ -47,11 +50,14 @@ the built image before any release is pushed.
 | `app.py` | The whole app: routes, geocoding, forecast fetching, formatting |
 | `templates/index.html` | Single page; inline styles are out, classes live in `style.css` |
 | `static/style.css` | All styling |
+| `static/app.js` | The browser half: saved city and personal alert threshold |
 | `static/image/` | Background photo |
 | `static/favicon.svg` | Tab icon |
 | `static/favicon-rain.svg` | Tab icon when rain is coming |
 | `test_app.py` | Offline unit tests, HTTP fully mocked |
+| `test_browser.py` | Browser tests, real headless Chrome, no network |
 | `test_api.py` | Live integration tests |
+| `requirements-dev.txt` | Development-only dependencies (selenium) |
 | `Dockerfile` | Two-stage container image |
 | `docker-compose.yml` | Local container setup: the app and a test service |
 | `render.yaml` | Render Blueprint; runs a prebuilt image, not a build |
@@ -153,7 +159,9 @@ the ☔ icon and the banner's "Bring an umbrella", so the tab, the banner and
 the row can never disagree about whether rain is worth noticing. The title
 names the day — "Rain tomorrow - Rain Alert" — rather than the date, because
 a tab title is read at a glance and "tomorrow" is the thing a reader is
-asking about.
+asking about. The app name is kept as a suffix, in the usual
+"page - site" order, so that a reader with a row of tabs open can still
+tell which one is Rain Alert.
 
 Today is judged on the hours that are left here too, exactly as the banner
 judges it, so the title does not still say "Rain today" at 18:00 when the
@@ -236,6 +244,13 @@ push. The suite needs no locale data any more, so it would also pass on a
 stock runner; the reason for running it in the image is that it tests the
 shipped artefact, not the developer's machine.
 
+**The browser suite runs on the runner, not in the image.** `test_browser.py`
+drives a real headless Chrome, and the image installs no system packages on
+purpose, so Chrome cannot be in it. The suite therefore runs as a step on
+the GitHub runner, against the same source, **before** the push — so a
+failing browser test means the image is never pushed at all. The offline
+suite still runs in the image, because that one can be.
+
 **Releases are git tags.** A tag matching `v0.9` or `v1.2.3`, pointing at a
 commit already on `main`, builds and tests the image, pushes it to Docker
 Hub as the version without the `v`, and calls Render's deploy hook with an
@@ -258,6 +273,49 @@ Open-Meteo plan. The donation page must stay one-off donations only. The footer
 credits for Open-Meteo (CC BY 4.0) and OpenStreetMap are required and have
 tests; do not remove them.
 
+**The saved city and the personal threshold live in the browser, not on the
+server.** `static/app.js` keeps both in `localStorage`, and the server
+stays stateless: it never sees either value, and a first-time visitor sees
+exactly the page a returning one does. The server's only job is to tell the
+page what kind of page it is, through three attributes on `<body>`:
+`data-autoload` (may this page load a remembered city by itself?),
+`data-search` (`ok`, `error` or `none` — was the last search worth
+remembering?) and `data-city`. Without JavaScript neither control can do
+anything, so the preferences row is hidden by the `.no-js` class and the
+page is exactly what it was before.
+
+**A city is only remembered once a search for it has actually worked.** The
+submitted city waits in `sessionStorage` until the result page confirms the
+search was good, so a typo is never remembered and a failed search does not
+destroy the city that was already saved. Unticking the box forgets the city
+straight away.
+
+**The personal threshold is a second answer, not a second umbrella.** The
+umbrella, the banner, the ☔ icon and the tab title are the app's advice and
+all fire at `UMBRELLA_THRESHOLD`. The reader's own threshold is marked
+differently — a ▲ with its own words — because it answers a different
+question. The two never stand in for each other, and the marker is not
+carried by colour alone.
+
+**The preferences row is set in bold.** It is a feature, not a footnote:
+at the quiet weight it started at, a reader walked straight past it and
+did not know the app could remember anything. The row is also slightly
+larger and darker than the surrounding text (`0.78rem` at `#4a5a6a`, a
+7:1 contrast ratio) so it reads as a control rather than as a caption.
+The row costs 2px of the card's vertical budget, and the card still fits
+a 768px window with no scrollbar.
+
+**The threshold is compared against the number the page shows.** The row
+carries `data-chance`, the same whole number `format_rain_chance()` renders,
+so the threshold and the number on the page can never disagree. A day the
+service did not report has no `data-chance` at all, so it is never counted
+as a dry day and never marked as a wet one either.
+
+**Every `localStorage` access goes through a try/except.** A browser in
+private mode, or one where the reader has blocked site data, throws on the
+first access. The helpers swallow that, so a browser that refuses to store
+anything loses the feature instead of breaking the page.
+
 ## Gotchas
 
 - **`strftime('%A')` follows the process locale**, which is why the weekday
@@ -271,8 +329,28 @@ tests; do not remove them.
 - **The CSS file once contained a literal `\n`** (backslash-n, not a
   newline) that silently swallowed the next declaration. If `background-size`
   ever stops applying, check for stray escape sequences in the raw bytes.
+- **The browser suite needs Chrome and selenium, and skips without them.**
+  `test_browser.py` is not in the image: the image installs no system
+  packages, so there is no Chrome in it. It runs on the CI runner instead,
+  where Chrome is already installed. Install the driver locally with
+  `pip install -r requirements-dev.txt`. The suite skips itself when
+  selenium or Chrome is missing, so a plain `python -m unittest` never
+  fails because of it — but a skipped suite is not a passing suite, so
+  check that it actually ran before trusting it.
 - **Jinja caches templates when debug mode is off.** Restart the server after
   editing `index.html`, or run with `FLASK_DEBUG=1`.
+- **A browser caches a favicon by its URL, not by its contents.** Rewriting
+  `static/favicon.svg` in place changes nothing until the cache is cleared,
+  so the rain icon is a **second file** with a second URL
+  (`static/favicon-rain.svg`). If the icon ever stops swapping, look for a
+  reused URL before suspecting the code.
+- **The `<title>` and the icon are template variables, not static markup.**
+  `index()` passes `page_title` and `favicon` to the template, so any route
+  that renders `index.html` has to pass them too — otherwise the title
+  renders empty and the icon URL breaks. There is one route today, and it
+  keeps the plain "Rain Alert" title and the default icon whenever there is
+  no forecast, which is the case for the empty page and for every error
+  page.
 - **The page is a `.page` flex wrapper around `.container` plus the
   copyright footer.** `margin: auto` lives on `.page`, not on `.container`.
   The footer sits over the background photo, so it is white text with a
@@ -345,6 +423,10 @@ tests; do not remove them.
 - Log with `app.logger`, never `print()`.
 - New user-visible strings belong in the template or in `app.py`, and the
   UI text is English, and so are the weekday names.
+- **The tab title, the favicon, the ☔ icon and the banner are one alert.**
+  They all read the same forecast and fire at the same `UMBRELLA_THRESHOLD`.
+  Do not give any of them a threshold of its own — the moment two of them
+  disagree, the page starts lying to the reader.
 - **Do not bump the image tag in `render.yaml` by hand as part of a normal
   change.** Releases are cut by pushing a `v*` tag; the workflow derives the
   image tag from it. The tag in `render.yaml` is only the fallback for a

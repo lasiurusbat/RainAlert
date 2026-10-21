@@ -210,6 +210,20 @@ def rain_chance(value):
         return None
 
 
+def chance_number(value):
+    """The rain chance as the whole number the page shows, or ``None``.
+
+    This is the number the reader sees next to the date, and it is the number
+    a personal alert threshold is compared against, so the two can never
+    disagree: a row shown as "45%" is 45 here, not 44.6. A value the service
+    did not report is ``None``, so it is never counted as a dry day.
+    """
+    probability = rain_chance(value)
+    if probability is None:
+        return None
+    return round_half_up(probability)
+
+
 def severity_band(chance):
     """Classify a rain chance into a severity band.
 
@@ -779,6 +793,11 @@ def fetch_weather(latitude, longitude, unit=None):
                 lows[index] if index < len(lows) else None,
             ),
             "chance": chance,
+            # The number the row shows, and the number a personal alert
+            # threshold in the browser is compared against. The browser
+            # reads it from the markup, so the threshold and the number on
+            # the page are always the same value.
+            "chance_number": chance_number(chance),
             "severity": band,
             "severity_label": severity_label(band),
             "umbrella": needs_umbrella(chance),
@@ -865,6 +884,23 @@ def index():
             error = ("The weather service is unavailable right now. "
                      "Please try again in a moment.")
 
+    # The saved city and the personal alert threshold live in the browser's
+    # localStorage, so the server has to tell the page what kind of page it
+    # is. A start page - no city at all - may load a remembered city by
+    # itself; any other page already shows what the reader came for, and
+    # reloading it would throw their forecast away.
+    autoload = not city and error is None
+
+    # Whether the page carries a forecast, an error, or nothing at all. The
+    # browser uses it to decide whether a search that was just submitted
+    # should be remembered: only a search that worked is worth remembering.
+    if error:
+        search_status = "error"
+    elif weather_data:
+        search_status = "ok"
+    else:
+        search_status = "none"
+
     return render_template(
         'index.html',
         weather_data=weather_data,
@@ -878,6 +914,8 @@ def index():
         temperature_units=TEMPERATURE_UNITS,
         page_title=(alert["title"] if alert else DEFAULT_TAB_TITLE),
         favicon=(FAVICON_RAIN if alert else FAVICON_DEFAULT),
+        autoload=autoload,
+        search_status=search_status,
     )
 
 

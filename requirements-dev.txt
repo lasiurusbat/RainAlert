@@ -1,0 +1,13 @@
+# Development-only dependencies.
+#
+# The app itself needs nothing from this file: requirements.txt is the whole
+# runtime. The browser suite drives a real headless Chrome, so it needs
+# selenium. It is kept apart so that the runtime image stays at five
+# dependencies and installs no system packages.
+#
+#   pip install -r requirements-dev.txt
+#   python -m unittest test_browser
+#
+# The suite skips itself when selenium or Chrome is missing, so this file is
+# optional: it is only needed to actually run the browser tests.
+selenium==4.44.0

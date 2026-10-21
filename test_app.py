@@ -1316,6 +1316,117 @@ class TestDonationLink(AppTestCase):
             self.assertNotIn("javascript:", self.post())
 
 
+class TestBrowserPreferences(AppTestCase):
+    """Tier 2: the saved city and the personal alert threshold.
+
+    Both live in the browser's localStorage, so the server's part is small:
+    the page has to carry the controls, the numbers the threshold is
+    compared against, and enough for the script to know what kind of page
+    it is looking at. The script's own behaviour is tested in
+    test_browser.py, which drives a real browser.
+    """
+
+    def _body_for(self, chances):
+        """A forecast page with the given daily rain chances."""
+        payload = {
+            "daily": {
+                "time": [f"2026-10-{21 + offset:02d}"
+                         for offset in range(len(chances))],
+                "precipitation_probability_max": chances,
+                "temperature_2m_max": [14.0] * len(chances),
+                "temperature_2m_min": [8.0] * len(chances),
+            }
+        }
+        self.mock_get.return_value = FakeResponse(payload=payload)
+        return self.client.post("/", data={"city": "London"}).get_data(as_text=True)
+
+    # -- the controls ---------------------------------------------------------
+
+    def test_the_preferences_row_is_on_the_page(self):
+        body = self.client.get("/").get_data(as_text=True)
+        self.assertIn('id="remember-city"', body)
+        self.assertIn('id="alert-threshold"', body)
+
+    def test_the_preferences_row_is_on_the_forecast_page(self):
+        body = self.client.post("/", data={"city": "London"}).get_data(as_text=True)
+        self.assertIn('id="remember-city"', body)
+        self.assertIn('id="alert-threshold"', body)
+
+    def test_the_threshold_is_a_percentage(self):
+        body = self.client.get("/").get_data(as_text=True)
+        self.assertIn('id="alert-threshold" min="0" max="100"', body)
+
+    def test_the_script_is_loaded(self):
+        body = self.client.get("/").get_data(as_text=True)
+        self.assertIn("app.js", body)
+        self.assertIn("defer", body)
+
+    def test_the_row_starts_hidden_without_javascript(self):
+        """Without the script neither control can do anything."""
+        body = self.client.get("/").get_data(as_text=True)
+        self.assertIn('class="no-js"', body)
+
+    # -- the numbers the threshold is compared against ------------------------
+
+    def test_each_day_carries_the_number_it_shows(self):
+        """The threshold and the number on the page are the same value."""
+        body = self._body_for([10, 45, 80])
+        for chance in (10, 45, 80):
+            self.assertIn(f'data-chance="{chance}"', body)
+
+    def test_the_number_is_the_rounded_one(self):
+        """A day shown as 45% is 45 here, not 44.6."""
+        body = self._body_for([44.6, 46.5])
+        self.assertIn('data-chance="45"', body)
+        self.assertIn('data-chance="47"', body)
+        self.assertNotIn('data-chance="44.6"', body)
+
+    def test_an_unreported_day_carries_no_number(self):
+        """A missing value is never counted as a dry day."""
+        body = self._body_for([None, 80])
+        self.assertNotIn('data-chance="None"', body)
+        self.assertEqual(body.count('data-chance="'), 1)
+        self.assertIn('data-chance="80"', body)
+
+    # -- what kind of page is this --------------------------------------------
+
+    def test_the_start_page_may_load_a_remembered_city(self):
+        body = self.client.get("/").get_data(as_text=True)
+        self.assertIn('data-autoload="1"', body)
+
+    def test_a_forecast_page_does_not_load_a_remembered_city(self):
+        """The reader is already looking at a forecast."""
+        body = self.client.post("/", data={"city": "London"}).get_data(as_text=True)
+        self.assertIn('data-autoload="0"', body)
+
+    def test_an_error_page_does_not_load_a_remembered_city(self):
+        self.mock_geocode.return_value = None
+        body = self.client.post("/", data={"city": "Nowhereville"}).get_data(as_text=True)
+        self.assertIn('data-autoload="0"', body)
+
+    def test_the_page_says_whether_the_search_worked(self):
+        """Only a search that worked is worth remembering."""
+        start = self.client.get("/").get_data(as_text=True)
+        self.assertIn('data-search="none"', start)
+
+        good = self.client.post("/", data={"city": "London"}).get_data(as_text=True)
+        self.assertIn('data-search="ok"', good)
+
+        self.mock_geocode.return_value = None
+        bad = self.client.post("/", data={"city": "Nowhereville"}).get_data(as_text=True)
+        self.assertIn('data-search="error"', bad)
+
+    def test_the_page_says_which_city_was_searched(self):
+        """The script compares it with the city that was submitted."""
+        body = self.client.post("/", data={"city": "London"}).get_data(as_text=True)
+        self.assertIn('data-city="London"', body)
+
+    def test_the_page_says_which_temperature_unit_is_in_use(self):
+        """The remembered city is loaded in the scale the page is in."""
+        body = self.client.get("/?unit=fahrenheit").get_data(as_text=True)
+        self.assertIn('data-unit="fahrenheit"', body)
+
+
 class TestAttribution(AppTestCase):
     """Open-Meteo's licence (CC BY 4.0) requires a credit; OSM data needs one too."""
 

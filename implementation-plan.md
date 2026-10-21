@@ -32,7 +32,7 @@ file is itself untracked.
 - [x] Geocoding cache, explicit timeouts, configuration through environment variables
 - [x] City-local dates (`timezone=auto`) and English weekday names
 - [x] Temperature rounding fix (round half up)
-- [x] Offline unit tests (169) and live API tests (6)
+- [x] Offline unit tests (183), browser tests (17) and live API tests (6)
 - [x] Comprehensive `README.md` with screenshot, `CLAUDE.md` project notes
 
 ### Alert ideas, Tier 1 (done)
@@ -116,7 +116,7 @@ costs. Tier 3 is the step that makes the app a real alert service.
 - [x] Tab title and favicon change when rain is coming. Built in `tab_alert()`, which fires at the same `UMBRELLA_THRESHOLD` as the ☔ icon and the banner, so the tab, the banner and the row can never disagree. The title names the day ("Rain tomorrow - Rain Alert") rather than the date, today is judged on the hours that are left exactly as the banner judges it, and the two favicons are separate files because browsers cache a favicon by its URL.
 
 ### Tier 2: browser-side
-- [ ] Remember city and threshold in `localStorage`, check on page load
+- [x] Remember city and threshold in `localStorage`, check on page load. Built in `static/app.js`. Both preferences live in the browser and the server stays stateless; the server only tells the page what kind of page it is through `data-autoload`, `data-search` and `data-city` on `<body>`. A city is only remembered once a search for it has actually worked (the submitted city waits in `sessionStorage` until the result page confirms it), so a typo is never remembered and a failed search does not destroy the saved city. The threshold is marked with its own symbol and its own words, because it answers a different question from the umbrella, and it is compared against the number the page shows so the two can never disagree. Without JavaScript the preferences row is hidden.
 - [ ] Web Notifications while the tab is open
 - [ ] Installable PWA: manifest, service worker, icons
 - [ ] Calendar export (`.ics`) for rainy days

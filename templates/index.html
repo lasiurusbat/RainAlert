@@ -1,13 +1,14 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="no-js">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{ page_title }}</title>
     <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename=favicon) }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <script src="{{ url_for('static', filename='app.js') }}" defer></script>
 </head>
-<body>
+<body data-autoload="{{ '1' if autoload else '0' }}" data-search="{{ search_status }}" data-city="{{ city }}" data-unit="{{ unit }}">
     <div class="page">
         <div class="container">
             <h1>Rain Alert 🌧️</h1>
@@ -26,6 +27,26 @@
                 and help keep Rain Alert free.
             </p>
             {% endif %}
+
+            <!-- The browser-side preferences. Both are kept in the browser's
+                 localStorage, so the server never sees them; without
+                 JavaScript neither control can do anything, and the row
+                 stays hidden. -->
+            <div class="prefs">
+                <label class="pref" for="remember-city">
+                    <input type="checkbox" id="remember-city">
+                    <span class="pref-label" id="remember-label">Remember this city</span>
+                </label>
+                <label class="pref" for="alert-threshold">
+                    <span class="pref-label">Alert me above</span>
+                    <input type="number" id="alert-threshold" min="0" max="100" step="1"
+                           inputmode="numeric" size="3" placeholder="--"
+                           aria-label="Alert me above, in percent"
+                           aria-describedby="alert-status">
+                    <span class="pref-unit" aria-hidden="true">%</span>
+                </label>
+                <span class="pref-status" id="alert-status" role="status"></span>
+            </div>
 
             {% if error %}
                 <p class="error" role="alert">{{ error }}</p>
@@ -100,7 +121,7 @@
                     </div>
                     <div class="weather-list">
                         {% for day in weather_data %}
-                        <div class="weather-item severity-{{ day.severity }}">
+                        <div class="weather-item severity-{{ day.severity }}"{% if day.chance_number is not none %} data-chance="{{ day.chance_number }}"{% endif %}>
                             <span class="date">
                                 <span class="severity-dot" aria-hidden="true"></span>
                                 {{ day.date }}
