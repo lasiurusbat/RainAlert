@@ -1,0 +1,75 @@
+# --- Python -------------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+.eggs/
+.installed.cfg
+*.egg
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# --- Local configuration ------------------------------------------------------
+# Never commit .env - it may hold a deployment-specific Nominatim user agent
+# or other settings that should not be shared.
+.env
+.env.*
+!.env.example
+
+# --- Testing and coverage -----------------------------------------------------
+.pytest_cache/
+.tox/
+.nox/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+.cache
+
+# --- Tooling caches -----------------------------------------------------------
+.mypy_cache/
+.dmypy.json
+.dmypy.toml
+.ruff_cache/
+.pyre/
+.pytype/
+
+# --- Flask --------------------------------------------------------------------
+# Instance folders are runtime state, not source.
+instance/
+.webassets-cache
+*.log
+
+# --- Docker -------------------------------------------------------------------
+# The build context exclusions live in .dockerignore, which IS committed:
+# without it a clone would send .git, .env and the venv to the daemon.
+# Only local Docker variants and machine-specific overrides are ignored.
+Dockerfile.*
+!Dockerfile
+docker-compose*.override.yml
+
+# --- Editors and IDEs ---------------------------------------------------------
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.\#*
+\#*\#
+
+# --- Operating systems --------------------------------------------------------
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# --- Documentation build output ------------------------------------------------
+_site/

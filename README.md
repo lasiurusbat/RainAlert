@@ -33,7 +33,8 @@ user accounts, and nothing to configure before running it.
   temporarily down produce different messages — a network blip never tells a
   user their valid city is missing.
 - **No build step, no bundler, no database.** Five Python dependencies, all
-  pinned.
+  pinned. A container image is included if you would rather not set up a
+  Python environment.
 
 ---
 
@@ -63,7 +64,7 @@ Python 3.14.5.
 ## Running the tests
 
 ```bash
-python -m unittest test_app    # 51 offline tests, no network required
+python -m unittest test_app    # 53 offline tests, no network required
 python -m unittest test_api     # 4 live integration tests, hits both APIs
 ```
 
@@ -73,6 +74,80 @@ because an upstream is down.
 
 `test_api.py` checks the real response shapes against the live services and
 needs them to be reachable.
+
+The offline suite expects German weekday names, so it needs the `de_DE`
+locale to be installed. On Windows and macOS that is the default; on a bare
+Linux box it is not, and the localisation tests fail until you install it
+(`apt-get install locales && localedef -i de_DE -f UTF-8 de_DE.UTF-8`).
+The Docker image installs it for you.
+
+---
+
+## Running with Docker
+
+If you would rather not manage a Python environment, the repository ships a
+`Dockerfile` and a `docker-compose.yml`. The image contains the app, its
+dependencies, and the locale data the weekday names need.
+
+### With Compose (recommended)
+
+```bash
+docker compose up --build       # start the app on http://localhost:8000
+docker compose down             # stop and remove the container
+```
+
+The Compose file builds the image once and shares it between two services:
+
+- `rainalert` — the app, published on <http://localhost:8000>.
+- `tests` — a one-shot service that runs both test suites in the same image.
+  It is behind a profile, so it does not start with `up`:
+
+  ```bash
+  docker compose run --rm tests
+  ```
+
+  The `tests` service runs the live integration suite too, which needs
+  Nominatim and Open-Meteo to be reachable from the container.
+
+### With plain Docker
+
+```bash
+docker build -t rainalert .
+docker run --rm -p 8000:8000 -e DATE_LOCALE=auto rainalert
+```
+
+### Configuration
+
+The container reads the same environment variables as a local run. Pass them
+with `-e`, or put them in a `.env` file next to the Compose file — Compose
+picks that file up automatically.
+
+```bash
+docker run --rm -p 8000:8000 \
+  -e DATE_LOCALE=auto \
+  -e NOMINATIM_USER_AGENT="RainAlert/1.0 (https://rainalert.live)" \
+  rainalert
+```
+
+The port mapping is `host:container`. The container listens on `8000`; change
+the host side if `8000` is already taken.
+
+### What is in the image
+
+- **Two stages.** The build stage compiles the dependency wheels; the runtime
+  stage installs from those wheels and carries no compiler.
+- **A non-root user.** The app runs as `rainalert` (uid 1001) and needs no
+  write access anywhere.
+- **The locales.** The locale data is compiled in from the app's own
+  language tables, so the image can never drift from what the code claims to
+  support.
+- **gunicorn**, bound to `0.0.0.0:8000` with one worker and four threads.
+  One worker keeps the geocoding cache warm and avoids duplicate Nominatim
+  lookups, since the app is I/O-bound on two keyless APIs.
+
+The image carries the test suites as well, so
+`docker run --rm rainalert python -m unittest test_app` runs the same tests
+against the same image that gets deployed.
 
 ---
 
@@ -100,8 +175,8 @@ SEVERITY_LOW_MAX=25
 UMBRELLA_THRESHOLD=40
 ```
 
-> This repository has no `.gitignore`. If you create a `.env`, keep it out of
-> version control — add `.env` to a `.gitignore` before your first commit.
+> `.env` is already in `.gitignore`, so a local one stays out of version
+> control. `.env.example` is not ignored, if you want to ship a template.
 
 ---
 
@@ -141,19 +216,25 @@ RainAlert/
 │   ├── style.css                # all styling
 │   ├── favicon.svg              # tab icon
 │   └── image/
-│       └── rain-alert-bg.jpg    # background photo
+│       └── rain-alert-bg.jpg    # background photo (privately owned, see License)
 ├── docs/
 │   └── screenshot.png           # the image above
 ├── test_app.py                  # offline unit tests, HTTP fully mocked
 ├── test_api.py                  # live integration tests
 ├── requirements.txt             # pinned dependencies
+├── Dockerfile                   # multi-stage container image
+├── docker-compose.yml           # local container setup, app + test services
+├── .dockerignore                # keeps the build context small
+├── .gitignore                   # keeps local artefacts out of version control
 ├── render.yaml                  # Render deployment blueprint
+├── .github/                     # CI workflow and Dependabot config
+├── DEPLOY.md                    # the deployment runbook
 ├── CLAUDE.md                    # notes for AI assistants working in this repo
 └── RainAlert-Ideas-for-Alerting-Users.md
 ```
 
 `app.py` holds the entire application — routes, geocoding, forecast fetching,
-formatting and localisation — in about 390 lines. There is no package
+formatting and localisation — in about 400 lines. There is no package
 structure to navigate; a single module is the right size for an app this
 small.
 
@@ -189,6 +270,12 @@ locale, so the locale is switched only while the names are read and the
 previous value is always restored in a `finally` block. The result is cached,
 so the switch happens once per locale rather than once per rendered row.
 
+The C library does not agree on how a locale is spelled. Windows accepts the
+bare name `de_DE`, while glibc usually wants a codeset suffix and rejects the
+bare form even when that locale is installed. The app tries the bare name
+first and then the `.UTF-8` and `.utf8` spellings, so the same code produces
+localised weekday names on a developer machine and in the container.
+
 An unavailable locale falls back to English with a logged warning rather than
 raising.
 
@@ -210,15 +297,20 @@ exception text is always logged, never rendered on the page.
 
 ## Deployment
 
-`render.yaml` describes a free-tier [Render](https://render.com) web service:
+`render.yaml` describes a free-tier [Render](https://render.com) web service
+that runs a prebuilt image from Docker Hub:
 
 ```yaml
-startCommand: gunicorn app:app --bind 0.0.0.0:$PORT
+runtime: image
+image:
+  url: docker.io/lasiurusbat/rainalert:0.8
 ```
 
-Nothing deploys until the repository is connected to Render and the Blueprint
-is created there; `autoDeployTrigger` is off, so pushes do not deploy on their
-own.
+Render pulls the image; it does not build the Dockerfile. Releases are cut by
+building an image, pushing it with a new tag, and telling Render to deploy
+that tag. The GitHub Actions workflow in `.github/workflows/ci-cd.yml` does
+exactly that, and `DEPLOY.md` is the runbook for the one-time setup — Docker
+Hub credentials, the Render deploy hook, and the release steps.
 
 For any other host, the app is a standard WSGI application:
 
@@ -228,7 +320,8 @@ gunicorn app:app --bind 0.0.0.0:$PORT
 
 gunicorn is a Unix server and will not run on Windows. It is in
 `requirements.txt` because the deployment targets are Linux; for local
-development on Windows, use `python app.py`.
+development on Windows, use `python app.py`. The container image uses the
+same command.
 
 ### Before deploying anywhere
 
@@ -238,6 +331,9 @@ development on Windows, use `python app.py`.
   default identifies the development copy.
 - The built-in Flask server is for development only. Use gunicorn or
   equivalent in production.
+- **Make sure the locales are present.** The Docker image compiles them in.
+  A hand-rolled Linux deployment needs the locale data installed, or weekday
+  names silently fall back to English.
 
 ---
 
@@ -253,6 +349,10 @@ development on Windows, use `python app.py`.
 - **`round()` is not what you want for temperatures.** Python uses banker's
   rounding, so `round(8.5)` is `8`. Use the `round_half_up()` helper.
 - **Never call `.title()` on user input.**
+- **The background photograph is not yours to redistribute.** It is privately
+  owned and covered by the restriction in the License section below. Replace
+  it with an image you have the right to use, or get written approval
+  first.
 
 `CLAUDE.md` in this repository documents the architecture, the design
 decisions behind each of these, and the gotchas that have bitten this
@@ -264,9 +364,19 @@ codebase before.
 
 Copyright © 2026 Vedad Dizdarevic. All rights reserved.
 
-The favicon is original to this project. The background photograph in
-`static/image/rain-alert-bg.jpg` is a third-party asset — it carries no
-embedded attribution, and its origin is not recorded anywhere in this
-repository. If you plan to publish or redistribute this app, confirm where
-that image came from and its licence, and either record it here or replace
-it with one you have the right to use.
+The favicon (`static/favicon.svg`) is original to this project.
+
+**The background photograph is privately owned.** The image in
+`static/image/rain-alert-bg.jpg` is a privately held work, not a
+third-party or openly licensed asset. It may not be used, copied, modified,
+redistributed or sublicensed by anyone other than the copyright holder
+without prior written approval. This applies to forks, mirrors, Docker
+images, redistributed copies of the app, and any derivative work that
+includes the file.
+
+If you want to publish, redistribute or build on this project, you need
+permission for the photograph first. The practical options are to replace
+`static/image/rain-alert-bg.jpg` with an image you have the right to use, or
+to obtain written approval from the copyright holder. Everything else in the
+repository — the code, the styles, the favicon and the documentation — is
+covered by the copyright above.

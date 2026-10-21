@@ -422,16 +422,52 @@ class TestLocalisation(unittest.TestCase):
         self.assertEqual(
             rainalert.format_date("2026-10-21", "xx_XX"), "Wednesday 21.10.2026")
 
+    def test_locale_name_variants_are_tried(self):
+        """A locale must be found however the platform spells it.
+
+        Windows accepts the bare name ``de_DE``; glibc usually wants a
+        codeset suffix and rejects the bare form even when the locale is
+        installed. The bare name has to work on both, and an explicit
+        codeset must not be mangled.
+        """
+        candidates = list(rainalert._locale_candidates("de_DE"))
+        self.assertEqual(candidates[0], "de_DE")
+        self.assertIn("de_DE.UTF-8", candidates)
+        self.assertIn("de_DE.utf8", candidates)
+
+        # A name that already carries a codeset is left alone.
+        self.assertEqual(
+            list(rainalert._locale_candidates("de_DE.UTF-8")), ["de_DE.UTF-8"])
+
+    def test_locale_with_codeset_still_localises(self):
+        self.assertEqual(
+            rainalert.weekday_names("de_DE.UTF-8")[2], "Mittwoch")
+
     def test_ambient_locale_is_restored(self):
         """Formatting must not leave the process locale switched."""
         import locale as locale_module
 
         previous = locale_module.setlocale(locale_module.LC_TIME, None)
+        # The accepted spelling differs per platform, so use one this system
+        # actually takes. The bare name works on Windows; glibc wants a
+        # codeset suffix.
+        ambient = None
+        for candidate in rainalert._locale_candidates("fr_FR"):
+            try:
+                locale_module.setlocale(locale_module.LC_TIME, candidate)
+                ambient = candidate
+                break
+            except locale_module.Error:
+                continue
+        self.assertIsNotNone(ambient, "fr_FR should be available on this system")
+
         try:
-            locale_module.setlocale(locale_module.LC_TIME, "fr_FR")
+            # Clear the cache, or the cached names are returned without the
+            # locale ever being switched and the test proves nothing.
+            rainalert.weekday_names.cache_clear()
             rainalert.format_date("2026-10-21", "de_DE")
             self.assertEqual(
-                locale_module.setlocale(locale_module.LC_TIME, None), "fr_FR")
+                locale_module.setlocale(locale_module.LC_TIME, None), ambient)
         finally:
             locale_module.setlocale(locale_module.LC_TIME, previous)
 

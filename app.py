@@ -159,6 +159,21 @@ def format_date(value, locale_name=None):
     return f"{weekday} {parsed.strftime('%d.%m.%Y')}"
 
 
+def _locale_candidates(locale_name):
+    """The names to try when switching to a locale, in order.
+
+    The C library does not agree on how a locale is spelled. Windows accepts
+    the bare name (``de_DE``), while glibc usually wants a codeset suffix
+    (``de_DE.UTF-8`` or ``de_DE.utf8``) and rejects the bare form even when
+    that locale is installed. Rather than pick one platform's convention, try
+    the bare name first and then the two common codeset spellings.
+    """
+    yield locale_name
+    if "." not in locale_name:
+        yield f"{locale_name}.UTF-8"
+        yield f"{locale_name}.utf8"
+
+
 @lru_cache(maxsize=32)
 def weekday_names(locale_name=None):
     """Return the seven weekday names, Monday first, for a locale.
@@ -173,9 +188,14 @@ def weekday_names(locale_name=None):
         return tuple(date(2026, 1, 5 + offset).strftime("%A") for offset in range(7))
 
     previous = locale.setlocale(locale.LC_TIME, None)
-    try:
-        locale.setlocale(locale.LC_TIME, locale_name)
-    except locale.Error:
+    for candidate in _locale_candidates(locale_name):
+        try:
+            locale.setlocale(locale.LC_TIME, candidate)
+            break
+        except locale.Error:
+            continue
+    else:
+        locale.setlocale(locale.LC_TIME, previous)
         app.logger.warning(
             "Locale %r is not available on this system; using English weekday names",
             locale_name,

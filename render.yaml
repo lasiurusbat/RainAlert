@@ -1,20 +1,30 @@
-# Render Blueprint for RainAlert (free web service).
+# Render Blueprint for RainAlert (free web service, prebuilt Docker Hub image).
 # Nothing deploys until this repo is connected to Render and the Blueprint is
-# created there. autoDeploy is off so pushes do not trigger a deploy either.
+# created there. Render does not rebuild anything: it pulls the image below.
+# To release a new version, push a new tag to Docker Hub, change the tag here,
+# and redeploy.
+#
+# If the Docker Hub repository is private, add a registry credential in Render
+# (Workspace Settings) and add under `image:`
+#   creds:
+#     fromRegistryCreds:
+#       name: <credential name>
 services:
   - type: web
     name: rainalert
-    runtime: python
+    runtime: image
     plan: free
-    buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn app:app --bind 0.0.0.0:$PORT
-    autoDeployTrigger: "off"
+    image:
+      url: docker.io/lasiurusbat/rainalert:0.8
     envVars:
       - key: NOMINATIM_USER_AGENT
-        value: RainAlert_App_v1_2026
+        value: "RainAlert/1.0 (https://rainalert.live)"
       - key: GEOCODER_TIMEOUT
         value: "10"
       - key: WEATHER_TIMEOUT
         value: "10"
+      # Follow the visitor's Accept-Language header for weekday names. The
+      # image compiles in every locale the app supports, so this cannot fall
+      # back to English for a supported language.
       - key: DATE_LOCALE
         value: auto

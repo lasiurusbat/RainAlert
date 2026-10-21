@@ -1,0 +1,48 @@
+# Keep the build context small. Everything here is either irrelevant to the
+# image or a local artefact that would only bloat the build.
+
+.git
+.gitignore
+.github
+
+# The test suites are copied into the image so that
+# "docker compose run --rm tests" can run them against the deployed image,
+# so they are deliberately NOT ignored here.
+
+# Local configuration and secrets
+.env
+.env.*
+!.env.example
+
+# Virtual environments
+.venv
+venv
+env
+
+# Python bytecode and caches
+__pycache__
+*.py[cod]
+*.egg-info
+.pytest_cache
+.mypy_cache
+.ruff_cache
+.coverage
+htmlcov
+
+# Documentation and project notes
+docs
+README.md
+CLAUDE.md
+RainAlert-Ideas-for-Alerting-Users.md
+render.yaml
+
+# Editor and OS noise
+.idea
+.vscode
+.DS_Store
+Thumbs.db
+*.swp
+
+# The compose file and this file are not needed inside the image
+docker-compose.yml
+.dockerignore

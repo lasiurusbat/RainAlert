@@ -19,12 +19,26 @@ Serves on <http://127.0.0.1:5000>. `FLASK_DEBUG=1` enables the reloader and
 debugger.
 
 ```bash
-python -m unittest test_app    # offline suite, 41 tests, no network
+python -m unittest test_app    # offline suite, 53 tests, no network
 python -m unittest test_api     # live integration tests, hits both APIs
 ```
 
 The offline suite is the one that gates changes. `test_api.py` requires the
 upstream services to be reachable.
+
+## Running it in Docker
+
+```bash
+docker compose up --build       # http://localhost:8000
+docker compose run --rm tests   # both suites in the same image
+```
+
+`Dockerfile` is a two-stage build; the runtime image has no compiler, runs as
+the non-root user `rainalert` (uid 1001), and serves with gunicorn on port
+8000. The locales are compiled in from the app's own language tables, so the
+image cannot drift from the supported set. `DEPLOY.md` is the deployment
+runbook, and `.github/workflows/ci-cd.yml` runs the tests inside the built
+image before any release is pushed.
 
 ## Layout
 
@@ -37,6 +51,12 @@ upstream services to be reachable.
 | `static/favicon.svg` | Tab icon |
 | `test_app.py` | Offline unit tests, HTTP fully mocked |
 | `test_api.py` | Live integration tests |
+| `Dockerfile` | Two-stage container image |
+| `docker-compose.yml` | Local container setup: the app and a test service |
+| `render.yaml` | Render Blueprint; runs a prebuilt image, not a build |
+| `DEPLOY.md` | Deployment runbook: Render setup, domain, CI/CD, releases |
+| `.github/workflows/ci-cd.yml` | CI on every PR and push; release on a git tag |
+| `.github/dependabot.yml` | Weekly grouped PRs for actions, pip and the base image |
 
 ## Architecture notes
 
@@ -86,6 +106,25 @@ The bands are named **Rain unlikely / Rain possible / Rain likely**, not
 probability does not predict an intensity — the scale has to stay honest
 about what a percentage can tell you.
 
+**Deployment runs a prebuilt image, not a build.** `render.yaml` uses
+`runtime: image` pointing at `docker.io/lasiurusbat/rainalert:0.8`. Render
+pulls that image; it never runs the `Dockerfile`. A release is therefore a
+pushed image tag, not a merged commit. The old `runtime: python` shape,
+where Render ran `pip install` and gunicorn itself, is gone.
+
+**CI runs the tests inside the built image.** `.github/workflows/ci-cd.yml`
+builds for `linux/amd64` and runs `python -m unittest test_app` in the
+container. That is deliberate: the suite asserts German weekday names, which
+need the `de_DE` locale that the image installs and a stock GitHub runner
+does not have. The image that passes the tests is the image that is pushed —
+it is not rebuilt for the push.
+
+**Releases are git tags.** A tag matching `v0.9` or `v1.2.3`, pointing at a
+commit already on `main`, builds and tests the image, pushes it to Docker
+Hub as the version without the `v`, and calls Render's deploy hook with an
+`imgURL` parameter naming that exact tag. Pull requests never push and never
+deploy, so the secrets are only touched on a tag run.
+
 ## Gotchas
 
 - **`strftime('%A')` follows the process locale**, which is why the weekday
@@ -119,6 +158,29 @@ about what a percentage can tell you.
 - **`locale.with_locale` is unavailable** in this Python build, and
   `locale.format_string` raises on a `date` argument. Use
   `locale.setlocale` with a save/restore, as `weekday_names()` does.
+- **The C library spells locales differently per platform.** Windows accepts
+  the bare name `de_DE`; glibc wants a codeset suffix and rejects the bare
+  form even when the locale is installed, so the container rendered English
+  weekday names until this was fixed. `_locale_candidates()` yields the bare
+  name, then `.UTF-8`, then `.utf8` — use it rather than calling
+  `setlocale` with a hardcoded name, in the app and in the tests alike.
+- **The offline suite needs the `de_DE` locale.** It asserts German weekday
+  names. The Docker image installs it; a bare Linux box does not have it.
+- **Do not `apt-get purge locales` in the Dockerfile.** The compiled locale
+  data lives in `/usr/lib/locale`, which the `locales` package owns, so
+  purging it deletes the data that was just generated. Only the apt lists and
+  `/usr/share/locale/locale.alias` are safe to remove.
+- **`localedef -i` needs the full locale name.** `-i de` fails with "cannot
+  open locale definition file 'de'"; the definitions in
+  `/usr/share/i18n/locales` are named with the whole code, so use `-i de_DE`.
+- **gunicorn 26 needs a writable home.** It opens a control socket at
+  `$HOME/.gunicorn/gunicorn.ctl` (or `$XDG_RUNTIME_DIR/gunicorn.ctl`) and
+  fails with "Permission denied" on a user created without `--create-home`.
+  The image creates `/home/rainalert` and sets
+  `XDG_RUNTIME_DIR=/run/rainalert`, both owned by uid 1001.
+- **Render does not redeploy an image service when a new image appears.**
+  A new tag on Docker Hub is not enough on its own; the deploy hook has to
+  be called with the `imgURL` parameter naming the tag. See `DEPLOY.md`.
 - **Open-Meteo has gone down before** (TCP 443 unreachable while DNS still
   resolved). When the forecast endpoint fails, the app correctly shows "The
   weather service is unavailable right now" — that is the app behaving
@@ -132,3 +194,9 @@ about what a percentage can tell you.
 - Log with `app.logger`, never `print()`.
 - New user-visible strings belong in the template or in `app.py`, and the
   UI text is English even when weekday names are localised.
+- **Do not bump the image tag in `render.yaml` by hand as part of a normal
+  change.** Releases are cut by pushing a `v*` tag; the workflow derives the
+  image tag from it. The tag in `render.yaml` is only the fallback for a
+  manual deploy, and `DEPLOY.md` explains when to update it.
+- **The test count appears in three documents** — `README.md`, `CLAUDE.md` and
+  `DEPLOY.md`. They drift. Update all three when tests are added.

@@ -1,0 +1,57 @@
+# RainAlert — local Docker setup
+#
+#   docker compose up --build      start the app on http://localhost:8000
+#   docker compose run --rm tests  run the test suites inside the image
+#   docker compose down            stop and remove the container
+#
+# The app is stateless, so there is no database service to run.
+
+services:
+  rainalert:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: rainalert:latest
+    container_name: rainalert
+    ports:
+      # host:container. Change the host side if 8000 is already in use.
+      - "8000:8000"
+    environment:
+      # Follow the browser's Accept-Language header for weekday names.
+      DATE_LOCALE: auto
+      # Identify this deployment to Nominatim. Its usage policy asks callers
+      # to say who they are, and the default identifies the development copy.
+      NOMINATIM_USER_AGENT: RainAlert_App_v1_2026
+      GEOCODER_TIMEOUT: "10"
+      WEATHER_TIMEOUT: "10"
+    restart: unless-stopped
+    healthcheck:
+      # The app has no dedicated health endpoint, so this asks for the home
+      # page. A 200 means the server is up and serving.
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request, sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/', timeout=5).status == 200 else 1)"
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # A one-shot service that runs the test suites in the same image. It shares
+  # the build, so the image is built once and the tests exercise exactly what
+  # gets deployed.
+  tests:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: rainalert:latest
+    profiles: ["test"]
+    environment:
+      # The offline suite asserts German weekday names, so it needs a fixed
+      # locale rather than "auto", which would follow the (absent) browser
+      # header and fall back to English.
+      DATE_LOCALE: de_DE
+      NOMINATIM_USER_AGENT: RainAlert_App_v1_2026
+    command: >
+      sh -c "python -m unittest test_app -v && python -m unittest test_api -v"

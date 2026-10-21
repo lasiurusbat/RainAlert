@@ -1,0 +1,36 @@
+# Dependabot opens pull requests for outdated dependencies. Each PR runs the
+# ci-cd workflow (build + tests in the image), so a bump only merges if it passes.
+version: 2
+updates:
+  # Versions of the actions used in .github/workflows/
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "07:00"
+      timezone: Europe/Berlin
+    groups:
+      actions:
+        patterns: ["*"]
+
+  # Pinned packages in requirements.txt
+  - package-ecosystem: pip
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "07:00"
+      timezone: Europe/Berlin
+    groups:
+      python-dependencies:
+        patterns: ["*"]
+
+  # Base images in the Dockerfile (python:3.14-slim)
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "07:00"
+      timezone: Europe/Berlin
