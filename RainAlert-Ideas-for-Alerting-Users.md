@@ -8,9 +8,11 @@ Oct 21, 2026 · @Vedad
 
 RainAlert is pull-only: users must open it, type a city and read a seven-day list, so nothing in it actually alerts anyone. It is also stateless, with no accounts, database or background jobs, so most real alerting ideas need one small piece of persistence.
 
+**One thing to keep in mind while reading this document: the app is not deployed.** As of 2026-10-21 there is no release tag, no image on Docker Hub, and `rainalert.live` does not serve RainAlert — it runs locally, from `python app.py` or `docker compose up`. So "pull-only" currently means "pull-only by a developer on their own machine", and there are no users to alert at all. Every tier below is a design that has to survive being put online first, not a feature waiting for a user. The deployment steps are in `DEPLOY.md`.
+
 The ideas below are grouped by cost: in-page changes first, then browser-side features, then server-pushed notifications.
 
-**Where it stands now:** all four Tier 1 ideas are built — the page colour-codes rain risk, shows an hour-by-hour strip for today with a "bring an umbrella" summary, leads with a one-line headline about the week, and renames the browser tab and swaps the favicon when rain is coming. The app is still pull-only in the sense that matters here: nothing reaches a user who is not already looking at the page, and there is still no database, account or background job.
+**Where it stands now:** all four Tier 1 ideas are built — the page colour-codes rain risk, shows an hour-by-hour strip for today with a "bring an umbrella" summary, leads with a one-line headline about the week, and renames the browser tab and swaps the favicon when rain is coming. The first Tier 2 idea is built too: the reader's city and their own rain threshold live in the browser's `localStorage`, and the server stays stateless. The app is still pull-only in the sense that matters here: nothing reaches a user who is not already looking at the page — and nothing reaches anyone at all until it is deployed — and there is still no database, account or background job.
 
 ## Tier 1: In-page alerts (no new infrastructure)
 
@@ -46,6 +48,7 @@ These features keep state in the user's browser, so the server stays stateless.
     - The threshold is marked with **its own symbol and its own words** (a ▲), because it answers a different question from the umbrella. The umbrella, the banner, the ☔ icon and the tab title are the app's advice and all fire at the same `UMBRELLA_THRESHOLD`; the reader's own limit is a second, separate answer, and the two never stand in for each other.
     - The threshold is compared against the number the page shows, so the marker and the percentage can never disagree. A day the service did not report is never counted as a dry day, and never marked as a wet one either.
     - Without JavaScript the preferences row is hidden and the page is exactly what it was before. The server tells the page what kind of page it is through three attributes on `<body>`: `data-autoload`, `data-search` and `data-city`.
+    - One limitation to carry into Tier 3: `localStorage` follows the **browser**, not the person. A reader who switches device, or opens the site in a private window, gets a blank slate — the saved city does not follow them. That is the same gap Tier 3's server-side table would close, and it is the strongest argument for having one.
 - **Web Notifications while the tab is open.** A small JS timer re-fetches every 30 minutes and fires a notification such as "Rain starts in about 1 hour". It is simple, but only works while the tab is open.
 - **Installable PWA.** Add a `manifest.json` and a service worker so users can install the app on a phone home screen. True push when the app is closed needs the server-side component in Tier 3.
 - **Calendar export (.ics).** An "Add rainy days to my calendar" button that generates an `.ics` file with an event on each day over the threshold. The user's own calendar app does the alerting, with no notification infrastructure on your side.
@@ -75,6 +78,7 @@ None of these are built yet, and Tier 3 is the step that decides whether the app
 
 Start with the cheap in-page wins, and add real push last, because that step is what makes the name honest.
 
+0. **Put the app online.** — ⬜ **Not started.** Nothing below can alert a user who cannot reach the page. This is a release tag, a Docker Hub image, a Render service and the domain's DNS — no code, but it is ahead of every other item here.
 1. Headline banner and colour-coding (Tier 1). — ✅ **Done.**
 2. Hour-by-hour "today's rain" strip (Tier 1). — ✅ **Done.**
 3. Tab title and favicon as the alert (Tier 1). — ✅ **Done.**
@@ -83,7 +87,9 @@ Start with the cheap in-page wins, and add real push last, because that step is 
 
 Steps 1 to 3 give an immediate "alert" feel in an afternoon, and together they
 finish Tier 1. Step 4 is the first Tier 2 feature: it is the one that makes
-the app remember you, and it needs no backend at all.
+the app remember you, and it needs no backend at all. Step 0 was not in the
+original list, because the app was assumed to be up; it is now first, and
+step 5 is not worth building until there is a site to push to.
 
 ## Codebase notes to keep in mind
 
