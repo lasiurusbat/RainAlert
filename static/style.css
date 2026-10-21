@@ -247,6 +247,48 @@ button:hover {
     height: 0.5rem;
 }
 
+/* The temperature switch sits at the right end of the same row as the
+   legend. It is pushed there with margin-left:auto, so it lines up with
+   the right edge of the card however wide the legend text is. */
+.unit-switch {
+    display: flex;
+    align-items: center;
+    gap: 0.15rem;
+    margin-left: auto;
+    padding-left: 0.6rem;
+}
+
+.unit-option {
+    display: inline-block;
+    padding: 0.05rem 0.35rem;
+    border: 1px solid #d7dee3;
+    border-radius: 4px;
+    color: #5d6d7e;
+    text-decoration: none;
+    line-height: 1.4;
+}
+
+/* The active scale is filled, so the current unit is clear at a glance
+   and not only from the colour. */
+.unit-option.is-active {
+    background: #2c3e50;
+    border-color: #2c3e50;
+    color: #ffffff;
+    font-weight: 600;
+}
+
+.unit-option:hover,
+.unit-option:focus-visible {
+    border-color: #2c3e50;
+}
+
+.unit-option.is-active:hover,
+.unit-option.is-active:focus-visible {
+    background: #34495e;
+    border-color: #34495e;
+    color: #ffffff;
+}
+
 .rain-chance {
     color: var(--severity-text);
     font-weight: bold;

@@ -15,6 +15,7 @@
                 <div class="form-group">
                     <input type="text" name="city" placeholder="Enter city name (e.g., London)" value="{{ city or '' }}" required>
                 </div>
+                <input type="hidden" name="unit" value="{{ unit }}">
                 <button type="submit">Check Rain Chance</button>
             </form>
 
@@ -84,6 +85,15 @@
                         <span class="legend-item severity-low"><span class="severity-dot" aria-hidden="true"></span>Rain unlikely</span>
                         <span class="legend-item severity-moderate"><span class="severity-dot" aria-hidden="true"></span>Rain possible</span>
                         <span class="legend-item severity-high"><span class="severity-dot" aria-hidden="true"></span>Rain likely</span>
+                        <span class="unit-switch" role="group" aria-label="Temperature unit">
+                            {% for option in temperature_units %}
+                            <a class="unit-option{% if unit == option %} is-active{% endif %}"
+                               href="{{ url_for('index', city=city, unit=option) }}"
+                               {% if unit == option %}aria-current="true"{% endif %}>
+                                {{ "°C" if option == "celsius" else "°F" }}
+                            </a>
+                            {% endfor %}
+                        </span>
                     </div>
                     <div class="weather-list">
                         {% for day in weather_data %}

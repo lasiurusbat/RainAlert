@@ -19,7 +19,7 @@ Serves on <http://127.0.0.1:5000>. `FLASK_DEBUG=1` enables the reloader and
 debugger.
 
 ```bash
-python -m unittest test_app    # offline suite, 133 tests, no network
+python -m unittest test_app    # offline suite, 146 tests, no network
 python -m unittest test_api     # live integration tests, hits both APIs
 ```
 
@@ -147,6 +147,18 @@ on every page, including error pages, because it is a site-wide link rather
 than part of the result. The band name in the headline is a sentence, not a
 badge, and the ☔ icon in the list keeps its own meaning — one icon for one
 meaning — so the banner carries no icon of its own.
+
+**The temperature switch asks the service to convert, not the app.** The
+Open-Meteo request carries `temperature_unit`, and the service returns the
+values in that scale. The app never does the arithmetic: a hand-rolled
+conversion rounds differently from the service's, and the two would disagree
+on the same day. The unit arrives as a `unit` parameter — in the query string
+on a GET, in the form on a POST — and anything unrecognised falls back to
+`DEFAULT_TEMPERATURE_UNIT` rather than failing the page. The switch is a
+pair of links, not a form with a submit button, so it works without
+JavaScript; a GET with a city re-runs the forecast in the other scale. The
+search form carries the unit in a hidden field, so a new search keeps the
+scale the reader chose.
 
 **Deployment runs a prebuilt image, not a build.** `render.yaml` uses
 `runtime: image` pointing at `docker.io/lasiurusbat/rainalert:0.8`. Render

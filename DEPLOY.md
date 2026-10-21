@@ -149,5 +149,5 @@ setup is `v0.8`, to match `render.yaml`, which pins `0.8`.
   does not expose its version. If that matters, add a `/healthz` route that
   returns the version.
 - **The test counts in `CLAUDE.md`, `README.md` and this file drift.** The suite
-  has 133 offline tests and 6 live integration tests; the three documents
+  has 146 offline tests and 6 live integration tests; the three documents
   should be updated together when tests are added.

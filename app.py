@@ -54,6 +54,14 @@ SEVERITY_MODERATE_MAX = int(os.getenv("SEVERITY_MODERATE_MAX", "60"))
 # enough to change what you wear.
 UMBRELLA_THRESHOLD = int(os.getenv("UMBRELLA_THRESHOLD", "50"))
 
+# The temperature scale. The forecast service converts the values itself
+# when the unit is asked for, so the app never does the arithmetic and the
+# numbers are the service's own. The default is the one the service uses.
+TEMPERATURE_UNITS = ("celsius", "fahrenheit")
+DEFAULT_TEMPERATURE_UNIT = os.getenv("TEMPERATURE_UNIT", "celsius")
+if DEFAULT_TEMPERATURE_UNIT not in TEMPERATURE_UNITS:
+    DEFAULT_TEMPERATURE_UNIT = "celsius"
+
 
 def clean_donation_url(value):
     """Return ``value`` if it is a usable https link, otherwise ``""``.
@@ -256,8 +264,13 @@ def format_rain_chance(value):
         return "chance of rain unknown"
 
 
-def format_temperature(high, low):
-    """Compact high/low temperature label, or an empty string when unknown."""
+def format_temperature(high, low, unit="celsius"):
+    """Compact high/low temperature label, or an empty string when unknown.
+
+    The unit letter is not appended: the row shows "12° / 9°" and the
+    switch beside the legend says which scale those numbers are in. That
+    keeps the row narrow, and the two would be redundant anyway.
+    """
     parts = []
     for value in (high, low):
         if value is None:
@@ -689,17 +702,17 @@ def get_coordinates(city_name):
     return location.latitude, location.longitude, label
 
 
-def fetch_forecast(latitude, longitude, locale_name=None):
+def fetch_forecast(latitude, longitude, locale_name=None, unit=None):
     """Return the daily forecast as a list of dicts.
 
     An empty list means the service responded but had no forecast for the
     location; transport and payload problems raise :class:`WeatherUnavailable`.
     """
-    forecast, _ = fetch_weather(latitude, longitude, locale_name)
+    forecast, _ = fetch_weather(latitude, longitude, locale_name, unit)
     return forecast
 
 
-def fetch_weather(latitude, longitude, locale_name=None):
+def fetch_weather(latitude, longitude, locale_name=None, unit=None):
     """Return the daily forecast and today's hourly rain chances.
 
     Both come from a single request: Open-Meteo serves the daily and the
@@ -710,6 +723,9 @@ def fetch_weather(latitude, longitude, locale_name=None):
     it, so it may be empty when the service omits the hourly block, but a
     transport or payload problem raises :class:`WeatherUnavailable` and the
     page shows the error rather than a half-rendered forecast.
+
+    ``unit`` is the temperature scale to ask the service for. The service
+    converts the values itself, so the app never does the arithmetic.
     """
     params = {
         "latitude": latitude,
@@ -718,6 +734,7 @@ def fetch_weather(latitude, longitude, locale_name=None):
         "hourly": HOURLY_FIELDS,
         "current": HOURLY_FIELDS,
         "timezone": "auto",
+        "temperature_unit": unit or DEFAULT_TEMPERATURE_UNIT,
     }
     try:
         response = requests.get(FORECAST_URL, params=params, timeout=WEATHER_TIMEOUT)
@@ -781,6 +798,20 @@ def inject_donation_url():
     return {"donation_url": DONATION_URL}
 
 
+def temperature_unit_from_request():
+    """The temperature scale this request asks for.
+
+    The unit comes from the query string on a GET and from the form on a
+    POST. Anything unrecognised falls back to the default rather than
+    failing: a stray query parameter should not break the page.
+    """
+    source = request.form if request.method == "POST" else request.args
+    unit = (source.get("unit") or "").strip().lower()
+    if unit in TEMPERATURE_UNITS:
+        return unit
+    return DEFAULT_TEMPERATURE_UNIT
+
+
 @app.route('/', methods=['GET', 'POST'])
 def index():
     weather_data = None
@@ -788,36 +819,40 @@ def index():
     hourly_summary = None
     headline = None
     error = None
-    city = None
     display_city = None
+    unit = temperature_unit_from_request()
 
-    if request.method == 'POST':
-        city = (request.form.get('city') or '').strip()
-        if not city:
-            error = "Please enter a city name."
-        else:
-            try:
-                latitude, longitude, display_city = get_coordinates(city)
-                locale_name = requested_locale()
-                weather_data, hourly_data = fetch_weather(
-                    latitude, longitude, locale_name)
-                hourly_summary = summarise_hours(hourly_data or [])
-                # The umbrella advice is about the hours ahead, so the
-                # headline is told which of today's hours are still to come.
-                remaining_hours = [hour for hour in (hourly_data or [])
-                                   if not hour.get("past")]
-                headline = forecast_headline(
-                    weather_data or [], locale_name, remaining_hours)
-            except CityNotFound:
-                error = "City not found. Please try a different name (e.g., 'Paris')."
-            except GeocodingUnavailable:
-                app.logger.warning("Geocoding service unavailable for %r", city)
-                error = ("The geocoding service is unavailable right now. "
-                         "Please try again in a moment.")
-            except WeatherUnavailable:
-                app.logger.warning("Forecast service unavailable for %r", city)
-                error = ("The weather service is unavailable right now. "
-                         "Please try again in a moment.")
+    # A POST carries the city in the form; a GET carries it in the query
+    # string, which is how the temperature switch asks for the same city
+    # in the other scale.
+    source = request.form if request.method == 'POST' else request.args
+    city = (source.get('city') or '').strip()
+
+    if request.method == 'POST' and not city:
+        error = "Please enter a city name."
+    elif city:
+        try:
+            latitude, longitude, display_city = get_coordinates(city)
+            locale_name = requested_locale()
+            weather_data, hourly_data = fetch_weather(
+                latitude, longitude, locale_name, unit)
+            hourly_summary = summarise_hours(hourly_data or [])
+            # The umbrella advice is about the hours ahead, so the
+            # headline is told which of today's hours are still to come.
+            remaining_hours = [hour for hour in (hourly_data or [])
+                               if not hour.get("past")]
+            headline = forecast_headline(
+                weather_data or [], locale_name, remaining_hours)
+        except CityNotFound:
+            error = "City not found. Please try a different name (e.g., 'Paris')."
+        except GeocodingUnavailable:
+            app.logger.warning("Geocoding service unavailable for %r", city)
+            error = ("The geocoding service is unavailable right now. "
+                     "Please try again in a moment.")
+        except WeatherUnavailable:
+            app.logger.warning("Forecast service unavailable for %r", city)
+            error = ("The weather service is unavailable right now. "
+                     "Please try again in a moment.")
 
     return render_template(
         'index.html',
@@ -828,6 +863,8 @@ def index():
         error=error,
         city=city,
         display_city=display_city or city,
+        unit=unit,
+        temperature_units=TEMPERATURE_UNITS,
     )
 
 

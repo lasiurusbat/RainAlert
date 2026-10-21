@@ -30,7 +30,7 @@ file is itself untracked.
 - [x] Geocoding cache, explicit timeouts, configuration through environment variables
 - [x] City-local dates (`timezone=auto`) and localised weekday names with a safe English fallback
 - [x] Temperature rounding fix (round half up)
-- [x] Offline unit tests (133) and live API tests (6)
+- [x] Offline unit tests (146) and live API tests (6)
 - [x] Comprehensive `README.md` with screenshot, `CLAUDE.md` project notes
 
 ### Alert ideas, Tier 1 (partly done)

@@ -33,6 +33,10 @@ user accounts, and nothing to configure before running it.
   grey for *rain unlikely*, blue for *rain possible*, amber for *rain likely* —
   with a matching dot, tinted row, and left border. A ☔ icon marks the days
   worth carrying an umbrella.
+- **Celsius or Fahrenheit.** A small switch at the right end of the colour key
+  switches the temperatures. The forecast service does the conversion, so the
+  numbers are the service's own and the choice sticks when you search for
+  another city.
 - **Localised weekday names.** Dates render as `Wednesday 21.10.2026`, with the
   weekday in the visitor's language. 44 languages and 23 regional variants are
   supported, and the day names come from the C library's locale data rather
@@ -74,7 +78,7 @@ Python 3.14.5.
 ## Running the tests
 
 ```bash
-python -m unittest test_app    # 133 offline tests, no network required
+python -m unittest test_app    # 146 offline tests, no network required
 python -m unittest test_api     # 6 live integration tests, hits both APIs
 ```
 
@@ -185,6 +189,7 @@ in a `.env` file (the app loads one via `python-dotenv`).
 | `SEVERITY_LOW_MAX` | `30` | Rain chance below which a day is banded *low* |
 | `SEVERITY_MODERATE_MAX` | `60` | Rain chance below which a day is banded *moderate* |
 | `UMBRELLA_THRESHOLD` | `50` | Rain chance at or above which the ☔ icon appears |
+| `TEMPERATURE_UNIT` | `celsius` | The scale the temperatures are shown in: `celsius` or `fahrenheit`. The reader can switch on the page, and their choice wins over this default |
 | `DONATION_URL` | empty | An `https://` link to a donation page. When set, a short "Buy me a coffee" line appears under the search button and in the footer. When empty, nothing renders. Anything that is not an absolute `https://` URL is ignored. See [Donations and data credits](#donations-and-data-credits) |
 
 Example `.env`:

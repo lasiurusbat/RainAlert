@@ -893,6 +893,86 @@ class TestForecastParsing(unittest.TestCase):
         self.assertEqual(rainalert.round_half_up(-0.5), -1)
 
 
+class TestTemperatureUnit(AppTestCase):
+    """The Celsius/Fahrenheit switch beside the legend."""
+
+    def setUp(self):
+        super().setUp()
+        locale_patcher = mock.patch.object(rainalert, "DATE_LOCALE", "en_US")
+        locale_patcher.start()
+        self.addCleanup(locale_patcher.stop)
+
+    def test_celsius_is_the_default(self):
+        body = self.client.post("/", data={"city": "London"}).get_data(as_text=True)
+        _, kwargs = self.mock_get.call_args
+        self.assertEqual(kwargs["params"]["temperature_unit"], "celsius")
+        self.assertIn("is-active", body)
+
+    def test_the_unit_is_asked_for_by_name(self):
+        """The service converts the values, so the app never does the maths."""
+        self.client.post("/", data={"city": "London", "unit": "fahrenheit"})
+        _, kwargs = self.mock_get.call_args
+        self.assertEqual(kwargs["params"]["temperature_unit"], "fahrenheit")
+
+    def test_the_unit_can_be_switched_with_a_link(self):
+        """The switch is a link, so it works without JavaScript."""
+        body = self.client.post("/", data={"city": "London"}).get_data(as_text=True)
+        self.assertIn("unit=fahrenheit", body)
+        self.assertIn("unit=celsius", body)
+
+    def test_the_link_keeps_the_city(self):
+        body = self.client.post("/", data={"city": "London"}).get_data(as_text=True)
+        self.assertIn("city=London", body)
+
+    def test_a_get_with_a_city_and_a_unit_returns_that_forecast(self):
+        body = self.client.get("/?city=London&unit=fahrenheit").get_data(as_text=True)
+        _, kwargs = self.mock_get.call_args
+        self.assertEqual(kwargs["params"]["temperature_unit"], "fahrenheit")
+        self.assertIn("Forecast for London", body)
+
+    def test_the_active_unit_is_marked(self):
+        body = self.client.get("/?city=London&unit=fahrenheit").get_data(as_text=True)
+        # The Fahrenheit link is the active one, and the Celsius one is not.
+        switch = body[body.index("unit-switch"):body.index("weather-list")]
+        anchors = [part.split(">", 1)[0] for part in switch.split("<a ")[1:]]
+        self.assertEqual(len(anchors), 2)
+        by_unit = {anchor.split("unit=")[1].split('"')[0]: anchor
+                   for anchor in anchors}
+        self.assertIn("is-active", by_unit["fahrenheit"])
+        self.assertNotIn("is-active", by_unit["celsius"])
+
+    def test_the_active_unit_is_marked_for_screen_readers(self):
+        body = self.client.get("/?city=London&unit=fahrenheit").get_data(as_text=True)
+        self.assertIn('aria-current="true"', body)
+
+    def test_an_unknown_unit_falls_back_to_the_default(self):
+        """A stray query parameter must not break the page."""
+        self.client.get("/?city=London&unit=kelvin")
+        _, kwargs = self.mock_get.call_args
+        self.assertEqual(kwargs["params"]["temperature_unit"], "celsius")
+
+    def test_the_switch_is_not_on_the_start_page(self):
+        """There is nothing to switch until a forecast is on the page."""
+        body = self.client.get("/").get_data(as_text=True)
+        self.assertNotIn("unit-switch", body)
+
+    def test_the_switch_is_in_the_legend_row(self):
+        body = self.client.post("/", data={"city": "London"}).get_data(as_text=True)
+        legend = body[body.index("severity-legend"):body.index("weather-list")]
+        self.assertIn("unit-switch", legend)
+        self.assertIn("Rain likely", legend)
+
+    def test_the_switch_does_not_add_a_request(self):
+        """Switching the unit re-uses the same single forecast request."""
+        self.client.post("/", data={"city": "London"})
+        self.assertEqual(self.mock_get.call_count, 1)
+
+    def test_the_unit_survives_a_new_search(self):
+        """Searching another city keeps the scale the reader chose."""
+        body = self.client.get("/?city=London&unit=fahrenheit").get_data(as_text=True)
+        self.assertIn('name="unit" value="fahrenheit"', body)
+
+
 class TestLocalisation(unittest.TestCase):
     def test_weekday_names_are_localised(self):
         self.assertEqual(
