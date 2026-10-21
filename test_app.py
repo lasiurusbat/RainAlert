@@ -835,6 +835,152 @@ class TestForecastHeadline(AppTestCase):
         self.assertIn("Rain likely", banner)
 
 
+class TestTabAlert(AppTestCase):
+    """The tab title and the favicon, which are the alert itself."""
+
+    def _forecast(self, chances, days=None):
+        """A forecast list in the shape app.py builds it."""
+        dates = days or [f"2026-10-{21 + offset:02d}" for offset in range(len(chances))]
+        forecast = []
+        for day, chance in zip(dates, chances):
+            forecast.append({
+                "date": rainalert.format_date(day),
+                "iso_date": day,
+                "chance": chance,
+            })
+        return forecast
+
+    def _alert(self, chances, days=None, hours=None):
+        return rainalert.tab_alert(self._forecast(chances, days), hours)
+
+    def _body_with(self, payload):
+        self.mock_get.return_value = FakeResponse(payload)
+        return self.client.post("/", data={"city": "London"}).get_data(as_text=True)
+
+    # -- the day label --------------------------------------------------------
+
+    def test_the_first_day_is_today(self):
+        self.assertEqual(rainalert.tab_day_label("2026-10-21", 0), "today")
+
+    def test_the_second_day_is_tomorrow(self):
+        self.assertEqual(rainalert.tab_day_label("2026-10-22", 1), "tomorrow")
+
+    def test_a_later_day_is_named_by_its_weekday(self):
+        # 2026-10-24 is a Saturday.
+        self.assertEqual(rainalert.tab_day_label("2026-10-24", 3), "Saturday")
+
+    def test_an_unreadable_date_still_names_the_day(self):
+        self.assertEqual(rainalert.tab_day_label("not a date", 3), "in 3 days")
+
+    # -- when the alert fires -------------------------------------------------
+
+    def test_a_wet_day_alerts(self):
+        alert = self._alert([0, 80, 0, 0, 0, 0, 0])
+        self.assertIsNotNone(alert)
+        self.assertEqual(alert["when"], "tomorrow")
+        self.assertEqual(alert["chance"], 80)
+
+    def test_the_title_names_the_day(self):
+        alert = self._alert([0, 80, 0, 0, 0, 0, 0])
+        self.assertEqual(alert["title"], "Rain tomorrow - Rain Alert")
+
+    def test_a_dry_week_does_not_alert(self):
+        self.assertIsNone(self._alert([0, 5, 10, 0, 0, 0, 0]))
+
+    def test_a_day_below_the_umbrella_threshold_does_not_alert(self):
+        """The same threshold that puts the umbrella on the row."""
+        self.assertIsNone(self._alert([0, 49, 0, 0, 0, 0, 0]))
+
+    def test_a_day_at_the_umbrella_threshold_alerts(self):
+        self.assertIsNotNone(self._alert([0, 50, 0, 0, 0, 0, 0]))
+
+    def test_the_first_wet_day_wins(self):
+        alert = self._alert([0, 60, 90, 0, 0, 0, 0])
+        self.assertEqual(alert["when"], "tomorrow")
+        self.assertEqual(alert["chance"], 60)
+
+    def test_an_unreported_day_does_not_alert(self):
+        """A missing value is not a 0% chance, so it is not a dry day."""
+        self.assertIsNone(self._alert([None, None, None]))
+
+    def test_an_unreported_day_does_not_hide_a_wet_one(self):
+        alert = self._alert([None, 80, None])
+        self.assertEqual(alert["when"], "tomorrow")
+
+    def test_an_empty_forecast_does_not_alert(self):
+        self.assertIsNone(rainalert.tab_alert([]))
+
+    # -- today is judged on the hours that are left ----------------------------
+
+    def test_today_is_judged_on_the_hours_that_are_left(self):
+        """The daily maximum covers the whole day, but the reader has today."""
+        hours = [{"chance": 5, "past": False}]
+        alert = self._alert([100, 0, 0, 0, 0, 0, 0], hours=hours)
+        self.assertIsNone(alert)
+
+    def test_the_hours_that_are_left_can_still_make_today_wet(self):
+        hours = [{"chance": 80, "past": False}]
+        alert = self._alert([100, 0, 0, 0, 0, 0, 0], hours=hours)
+        self.assertEqual(alert["when"], "today")
+        self.assertEqual(alert["chance"], 80)
+
+    def test_a_day_that_is_over_is_left_out(self):
+        """A day that has been and gone is not worth the title."""
+        alert = self._alert([80, 60, 0, 0, 0, 0, 0], hours=[])
+        self.assertEqual(alert["when"], "tomorrow")
+
+    def test_a_day_that_is_over_does_not_alert_on_its_own(self):
+        """Today's downpour is behind us, so it buys no alert."""
+        self.assertIsNone(self._alert([80, 5, 0, 0, 0, 0, 0], hours=[]))
+
+    # -- the page -------------------------------------------------------------
+
+    def test_the_title_carries_the_alert(self):
+        body = self._body_with(FORECAST_PAYLOAD)
+        self.assertIn("<title>Rain tomorrow - Rain Alert</title>", body)
+
+    def test_the_favicon_carries_the_alert(self):
+        body = self._body_with(FORECAST_PAYLOAD)
+        self.assertIn("favicon-rain.svg", body)
+
+    def test_a_dry_forecast_keeps_the_plain_title(self):
+        payload = {
+            "daily": {
+                "time": ["2026-10-21", "2026-10-22", "2026-10-23"],
+                "precipitation_probability_max": [5, 10, 0],
+                "temperature_2m_max": [11.1, 14.0, 16.7],
+                "temperature_2m_min": [8.5, 8.6, 10.3],
+            },
+            "hourly": {
+                "time": [f"2026-10-21T{hour:02d}:00" for hour in range(24)],
+                "precipitation_probability": [0] * 24,
+            },
+            "current": {"time": "2026-10-21T09:00"},
+            "utc_offset_seconds": 3600,
+        }
+        body = self._body_with(payload)
+        self.assertIn("<title>Rain Alert</title>", body)
+        self.assertIn("favicon.svg", body)
+        self.assertNotIn("favicon-rain.svg", body)
+
+    def test_an_empty_page_keeps_the_plain_title(self):
+        body = self.client.get("/").get_data(as_text=True)
+        self.assertIn("<title>Rain Alert</title>", body)
+
+    def test_an_error_page_keeps_the_plain_title(self):
+        self.mock_geocode.return_value = None
+        body = self.client.post("/", data={"city": "Nowhereville"}).get_data(as_text=True)
+        self.assertIn('class="error"', body)
+        self.assertIn("<title>Rain Alert</title>", body)
+        self.assertNotIn("favicon-rain.svg", body)
+
+    def test_the_title_agrees_with_the_banner(self):
+        """The tab and the banner are the same alert, so they cannot disagree."""
+        body = self._body_with(FORECAST_PAYLOAD)
+        self.assertIn("<title>Rain tomorrow - Rain Alert</title>", body)
+        self.assertIn("Rain likely tomorrow (86%)", body)
+
+
 class TestHourlyParsing(unittest.TestCase):
     """The hourly parsing itself, without the HTTP layer."""
 

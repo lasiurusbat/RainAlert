@@ -19,7 +19,7 @@ Serves on <http://127.0.0.1:5000>. `FLASK_DEBUG=1` enables the reloader and
 debugger.
 
 ```bash
-python -m unittest test_app    # offline suite, 146 tests, no network
+python -m unittest test_app    # offline suite, 169 tests, no network
 python -m unittest test_api     # live integration tests, hits both APIs
 ```
 
@@ -49,6 +49,7 @@ the built image before any release is pushed.
 | `static/style.css` | All styling |
 | `static/image/` | Background photo |
 | `static/favicon.svg` | Tab icon |
+| `static/favicon-rain.svg` | Tab icon when rain is coming |
 | `test_app.py` | Offline unit tests, HTTP fully mocked |
 | `test_api.py` | Live integration tests |
 | `Dockerfile` | Two-stage container image |
@@ -144,6 +145,28 @@ while the row in the list keeps the daily maximum. The two are different
 quantities and each is labelled with which one it is. When the day is over
 it drops out of the banner entirely. A missing chance is never counted as
 dry: a quiet week with one unreported day is "most of", not "all of".
+
+**The tab title and the favicon are the alert.** `tab_alert()` decides whether
+the browser tab should say anything, and the route passes `page_title` and
+`favicon` to the template. It fires at the **same `UMBRELLA_THRESHOLD`** as
+the ☔ icon and the banner's "Bring an umbrella", so the tab, the banner and
+the row can never disagree about whether rain is worth noticing. The title
+names the day — "Rain tomorrow - Rain Alert" — rather than the date, because
+a tab title is read at a glance and "tomorrow" is the thing a reader is
+asking about.
+
+Today is judged on the hours that are left here too, exactly as the banner
+judges it, so the title does not still say "Rain today" at 18:00 when the
+morning's downpour has been and gone. A day that is over drops out and the
+next wet day is named instead. A missing chance is never counted as dry: an
+unreported week simply has no alert, and neither does a dry week.
+
+The two favicons are **separate files** (`favicon.svg` and `favicon-rain.svg`),
+not one file that is recoloured, because browsers cache a favicon by its URL
+and a single file would keep showing the old icon until the cache was
+cleared. The rain icon changes **shape** as well as colour — an amber square
+with white streaks against a blue cloud — so the two are told apart at 16
+pixels by the shape and not by the hue alone.
 
 **The daily row says "chance of rain" once, in the column heading.** The
 phrase used to be on all seven rows, where it carried nothing after the first

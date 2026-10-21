@@ -24,6 +24,11 @@ user accounts, and nothing to configure before running it.
   7 days." It names the first day worth mentioning, and today's figure comes
   from the hours that are left rather than from a day maximum that includes
   the morning.
+- **The tab itself is the alert.** When rain is coming, the browser tab
+  renames itself to "Rain tomorrow - Rain Alert" and swaps to a rain
+  favicon. A tab left open in the background tells you at a glance that the
+  weather changed while you were away — you do not have to switch to the tab
+  and read it.
 - **Hour-by-hour strip for today.** One bar per hour of the city's local day,
   coloured on the same scale as the daily list, with a pulsing dot on the
   current hour. A one-line summary says when the rain is expected — "Rain
@@ -76,7 +81,7 @@ Python 3.14.5.
 ## Running the tests
 
 ```bash
-python -m unittest test_app    # 146 offline tests, no network required
+python -m unittest test_app    # 169 offline tests, no network required
 python -m unittest test_api     # 6 live integration tests, hits both APIs
 ```
 
@@ -228,6 +233,41 @@ Three details are deliberate:
 
 ---
 
+## The tab alert
+
+The tab title and the favicon are the alert a visitor gets without looking at
+the page.
+
+| Situation | The tab says | The favicon |
+|---|---|---|
+| A day at or above the umbrella threshold | "Rain tomorrow - Rain Alert" | the amber rain icon |
+| A quiet week | "Rain Alert" | the blue cloud |
+| An error page or an empty search | "Rain Alert" | the blue cloud |
+
+Three details are deliberate:
+
+- **It is the same alert as the banner.** The tab fires at the same
+  `UMBRELLA_THRESHOLD` that puts the ☔ on a row and makes the banner say
+  "Bring an umbrella." One threshold for all three means the tab, the banner
+  and the row can never disagree about whether rain is worth noticing.
+- **Today is judged on the hours that are left**, exactly as the banner
+  judges it. At 18:00 the title does not still say "Rain today" because the
+  morning's downpour has already been and gone. A day that is over drops out
+  and the title names the next wet day instead.
+- **The favicon changes shape, not just colour.** The rain icon is an amber
+  square with white streaks, where the default one is a blue cloud, so the
+  two are told apart at 16 pixels in a crowded tab bar by the shape as well
+  as the hue.
+
+The two icons are separate files rather than one file that is recoloured,
+because browsers cache a favicon by its URL — a single file would keep
+showing the old icon until the cache was cleared.
+
+A missing chance is never counted as dry, so a week the service did not
+report simply has no alert.
+
+---
+
 ## The severity scale
 
 The bands are computed from the daily maximum precipitation probability.
@@ -353,6 +393,7 @@ RainAlert/
 ├── static/
 │   ├── style.css                # all styling
 │   ├── favicon.svg              # tab icon
+│   ├── favicon-rain.svg         # the tab icon when rain is coming
 │   └── image/
 │       └── rain-alert-bg.jpg    # background photo (privately owned, see License)
 ├── docs/

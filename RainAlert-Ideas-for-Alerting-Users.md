@@ -10,7 +10,7 @@ RainAlert is pull-only: users must open it, type a city and read a seven-day lis
 
 The ideas below are grouped by cost: in-page changes first, then browser-side features, then server-pushed notifications.
 
-**Where it stands now:** three of the four Tier 1 ideas are built — the page colour-codes rain risk, shows an hour-by-hour strip for today with a "bring an umbrella" summary, and leads with a one-line headline about the week. The app is still pull-only in the sense that matters here: nothing reaches a user who is not already looking at the page, and there is still no database, account or background job.
+**Where it stands now:** all four Tier 1 ideas are built — the page colour-codes rain risk, shows an hour-by-hour strip for today with a "bring an umbrella" summary, leads with a one-line headline about the week, and renames the browser tab and swaps the favicon when rain is coming. The app is still pull-only in the sense that matters here: nothing reaches a user who is not already looking at the page, and there is still no database, account or background job.
 
 ## Tier 1: In-page alerts (no new infrastructure)
 
@@ -29,7 +29,11 @@ Four changes make the page itself feel like an alert, and all of them stay insid
     - Bar heights are bucketed into 5% steps so they can live in the stylesheet as classes. The exact percentage is in the tooltip and in a table view below the strip, so the rounding never hides a value and nothing is reachable only by hovering.
     - The hours are the **city's** local hours, never the viewer's — the same rule the daily dates follow.
 - **Tab title and favicon as the alert.** Set the `<title>` to "Rain tomorrow - Rain Alert" and swap the favicon when rain is coming. Anyone who leaves the tab open sees it for free.
-  - ⬜ **Not built yet.** The `<title>` is still the static "Rain Alert" and the favicon does not change.
+  - ✅ **Built.** The title becomes "Rain tomorrow - Rain Alert" and the favicon swaps to an amber rain icon, decided by `tab_alert()` in `app.py`.
+    - It fires at the **same `UMBRELLA_THRESHOLD`** as the ☔ icon and the banner's "Bring an umbrella", so the tab, the banner and the row can never disagree about whether rain is worth noticing.
+    - The title names the day — "today", "tomorrow", or the weekday beyond that — rather than the date, because a tab title is read at a glance.
+    - Today is judged on the **hours that are left**, exactly as the banner judges it, so the title does not still say "Rain today" at 18:00 when the morning's downpour has been and gone. A day that is over drops out and the next wet day is named instead. A missing chance is never counted as dry, so an unreported week simply has no alert.
+    - The two icons are **separate files** (`favicon.svg` and `favicon-rain.svg`), because browsers cache a favicon by its URL and one recoloured file would keep showing the old icon until the cache was cleared. The rain icon changes **shape** as well as colour — an amber square with white streaks against a blue cloud — so the two are told apart at 16 pixels by the shape and not the hue alone.
 
 ## Tier 2: Browser-side alerts (still no backend)
 
@@ -67,10 +71,12 @@ Start with the cheap in-page wins, and add real push last, because that step is 
 
 1. Headline banner and colour-coding (Tier 1). — ✅ **Done.**
 2. Hour-by-hour "today's rain" strip (Tier 1). — ✅ **Done.**
-3. Saved city and threshold in `localStorage` (Tier 2). — ⬜ **Not started.**
-4. ntfy.sh or Telegram push (Tier 3), which needs only a SQLite table and one scheduled script. — ⬜ **Not started.**
+3. Tab title and favicon as the alert (Tier 1). — ✅ **Done.**
+4. Saved city and threshold in `localStorage` (Tier 2). — ⬜ **Not started.**
+5. ntfy.sh or Telegram push (Tier 3), which needs only a SQLite table and one scheduled script. — ⬜ **Not started.**
 
-Steps 1 and 2 give an immediate "alert" feel in an afternoon.
+Steps 1 to 3 give an immediate "alert" feel in an afternoon, and together they
+finish Tier 1.
 
 ## Codebase notes to keep in mind
 

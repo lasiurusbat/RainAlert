@@ -146,6 +146,8 @@ setup is `v0.8`, to match `render.yaml`, which pins `0.8`.
   answers, not that the new version is the one answering, because the app
   does not expose its version. If that matters, add a `/healthz` route that
   returns the version.
-- **The test counts in `CLAUDE.md`, `README.md` and this file drift.** The suite
-  has 146 offline tests and 6 live integration tests; the three documents
-  should be updated together when tests are added.
+- **The test counts drift.** The count appears in **four** documents —
+  `CLAUDE.md`, `README.md`, `DEPLOY.md` and `implementation-plan.md` — and
+  they are updated together, but a test added without updating all four
+  leaves them disagreeing. The suite has 169 offline tests and 6 live
+  integration tests.

@@ -586,6 +586,93 @@ def _headline_sentence(band, when, chance):
     return f"{sentence[0].upper()}{sentence[1:]}"
 
 
+# --- The tab title and the favicon --------------------------------------------
+# The title and the favicon are the alert a visitor sees without looking at
+# the page: a tab left open in the background tells them at a glance whether
+# the weather changed while they were away.
+#
+# Both are driven by the same forecast the headline uses and by the same
+# threshold, so the tab and the banner can never disagree.
+
+# The title says "Rain tomorrow" and not the day's date: a tab title is
+# read at a glance, and "tomorrow" is the thing a reader is asking about.
+TAB_TITLE_PREFIX = "Rain"
+TAB_TITLE_SUFFIX = "Rain Alert"
+DEFAULT_TAB_TITLE = "Rain Alert"
+
+# The favicon that says "rain is coming", and the one that says nothing.
+FAVICON_DEFAULT = "favicon.svg"
+FAVICON_RAIN = "favicon-rain.svg"
+
+
+def tab_day_label(iso_date, index):
+    """How the tab title names a day: "today", "tomorrow" or "Thursday".
+
+    The same days the banner names, but without the banner's "on", because
+    a title reads "Rain Thursday", not "Rain on Thursday".
+    """
+    if index == 0:
+        return "today"
+    if index == 1:
+        return "tomorrow"
+    try:
+        parsed = date.fromisoformat(str(iso_date))
+    except (TypeError, ValueError):
+        return f"in {index} days"
+    return WEEKDAY_NAMES[parsed.weekday()]
+
+
+def tab_alert(forecast, remaining_hours=None):
+    """What the tab title and the favicon should say about a forecast.
+
+    Returns ``None`` when there is nothing worth alerting about, which is
+    the case for a dry week, for an unreported week and for an error page.
+    Otherwise it returns a dict with:
+
+    ``when``
+        how the day is named - "today", "tomorrow" or "Thursday";
+    ``chance``
+        the rain chance the alert is about;
+    ``title``
+        the tab title, e.g. "Rain tomorrow - Rain Alert".
+
+    The alert fires at ``UMBRELLA_THRESHOLD`` - the same threshold that
+    puts the ☔ on a row and makes the banner say "Bring an umbrella." One
+    threshold for all three means the tab, the banner and the row can never
+    disagree about whether rain is worth noticing.
+
+    Today is judged on the hours that are left, exactly as the banner
+    judges it, so the title does not say "Rain today" at 18:00 when the
+    morning's downpour has already been and gone. A day whose chance the
+    service did not report is never counted as dry, so a quiet week with an
+    unreported day is not "no rain" either - it simply has no alert.
+    """
+    if not forecast:
+        return None
+
+    for index, day in enumerate(forecast):
+        chance = rain_chance(day.get("chance"))
+        when = tab_day_label(day.get("iso_date"), index)
+        if index == 0 and remaining_hours is not None:
+            if not remaining_hours:
+                # Today is over. The reader wants to know about the days
+                # ahead, not about a day that has been and gone.
+                continue
+            remaining = remaining_hour_chance(remaining_hours)
+            if remaining is not None:
+                chance = remaining
+        if chance is None:
+            # An unreported day is not a dry day, so it is not an alert.
+            continue
+        if chance >= UMBRELLA_THRESHOLD:
+            return {
+                "when": when,
+                "chance": chance,
+                "title": f"{TAB_TITLE_PREFIX} {when} - {TAB_TITLE_SUFFIX}",
+            }
+    return None
+
+
 # --- Data sources ------------------------------------------------------------
 @lru_cache(maxsize=256)
 def get_coordinates(city_name):
@@ -741,6 +828,7 @@ def index():
     error = None
     display_city = None
     unit = temperature_unit_from_request()
+    alert = None
 
     # A POST carries the city in the form; a GET carries it in the query
     # string, which is how the temperature switch asks for the same city
@@ -762,6 +850,10 @@ def index():
                                if not hour.get("past")]
             headline = forecast_headline(
                 weather_data or [], remaining_hours)
+            # The tab title and the favicon are the same alert as the
+            # banner, decided by the same threshold, so they can never
+            # disagree with it.
+            alert = tab_alert(weather_data or [], remaining_hours)
         except CityNotFound:
             error = "City not found. Please try a different name (e.g., 'Paris')."
         except GeocodingUnavailable:
@@ -784,6 +876,8 @@ def index():
         display_city=display_city or city,
         unit=unit,
         temperature_units=TEMPERATURE_UNITS,
+        page_title=(alert["title"] if alert else DEFAULT_TAB_TITLE),
+        favicon=(FAVICON_RAIN if alert else FAVICON_DEFAULT),
     )
 
 

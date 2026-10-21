@@ -12,10 +12,12 @@ Repository: <https://github.com/lasiurusbat/RainAlert>.
 
 The app works locally, is containerised, has a CI/CD pipeline and Dependabot
 committed and pushed to GitHub, and has a deployment runbook. No release tag
-exists yet, so nothing is confirmed live. The alert features are only partly
-built: the page colour-codes rain risk and shows an hour-by-hour strip for
-today with a "bring an umbrella" summary, but nothing yet notifies a user who
-is not already looking at the page.
+exists yet, so nothing is confirmed live. Tier 1 of the alert ideas is now
+complete: the page colour-codes rain risk, shows an hour-by-hour strip for
+today with a "bring an umbrella" summary, leads with a one-line headline, and
+renames the browser tab and swaps the favicon when rain is coming. The app is
+still pull-only in the sense that matters: nothing yet reaches a user who is
+not already looking at the page.
 
 The hourly-strip work and the donation/attribution work are both in the
 working tree and not in a commit yet. `app.py`, the template, the stylesheet,
@@ -30,10 +32,10 @@ file is itself untracked.
 - [x] Geocoding cache, explicit timeouts, configuration through environment variables
 - [x] City-local dates (`timezone=auto`) and English weekday names
 - [x] Temperature rounding fix (round half up)
-- [x] Offline unit tests (146) and live API tests (6)
+- [x] Offline unit tests (169) and live API tests (6)
 - [x] Comprehensive `README.md` with screenshot, `CLAUDE.md` project notes
 
-### Alert ideas, Tier 1 (partly done)
+### Alert ideas, Tier 1 (done)
 - [x] Visual rain severity: three colour bands, legend, tinted rows, dots
 - [x] Umbrella icon on days at or above the umbrella threshold
 - [x] Screen-reader labels for each severity band
@@ -103,15 +105,15 @@ those would make the site commercial.
 - [ ] Commit these changes (together with the other uncommitted work in the folder) before tagging `v0.8`
 - [ ] Confirm the link and the credits on the live site after the `v0.8` release (this replaces the separate `v0.9` release)
 
-## 5. Alert features not yet built
+## 5. Alert features
 
 Order follows the ideas document. Tier 1 and 2 need no database and no new
 costs. Tier 3 is the step that makes the app a real alert service.
 
-### Tier 1: in-page
+### Tier 1: in-page (all done)
 - [x] Headline banner above the list ("Rain likely tomorrow (80%). Bring an umbrella." / "No rain likely for the next 7 days."). Built in `forecast_headline()`. The band name in the sentence is the day's own band, the same one its row in the list carries, so the banner and the list never disagree. Today is judged on the hours that are left, not on the daily maximum, and the sentence says which figure it is using ("Rain likely for the rest of today (80%)"); a day that is over drops out, and a missing chance is never counted as dry.
 - [x] Hour-by-hour strip for today using Open-Meteo hourly precipitation: 24 bars for the city's local day, colour-coded on the same severity bands as the daily list, with a one-line summary ("Rain likely from about 15:00 to 18:00, up to 83%. Bring an umbrella.")
-- [ ] Tab title and favicon change when rain is coming
+- [x] Tab title and favicon change when rain is coming. Built in `tab_alert()`, which fires at the same `UMBRELLA_THRESHOLD` as the ☔ icon and the banner, so the tab, the banner and the row can never disagree. The title names the day ("Rain tomorrow - Rain Alert") rather than the date, today is judged on the hours that are left exactly as the banner judges it, and the two favicons are separate files because browsers cache a favicon by its URL.
 
 ### Tier 2: browser-side
 - [ ] Remember city and threshold in `localStorage`, check on page load
