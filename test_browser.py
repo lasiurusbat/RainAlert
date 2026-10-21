@@ -10,8 +10,15 @@ They need Chrome and the selenium package. Neither is in the container
 image, so the whole suite skips when either is missing:
 
     python -m unittest test_browser
+
+A skipped suite is a suite that tested nothing, and it still reports
+success. That is fine on a developer machine, where a missing Chrome is
+normal, but it would be a hollow gate in CI, where the suite is the only
+coverage of the browser half. So CI sets RAINALERT_REQUIRE_BROWSER=1,
+which turns a missing browser into a failure instead of a skip.
 """
 
+import os
 import threading
 import unittest
 from unittest import mock
@@ -24,6 +31,12 @@ try:
     HAS_SELENIUM = True
 except ImportError:  # pragma: no cover - the suite skips without selenium
     HAS_SELENIUM = False
+
+# When the browser is required, a missing one is an error rather than a
+# skip. See the module docstring.
+REQUIRE_BROWSER = os.environ.get("RAINALERT_REQUIRE_BROWSER", "").lower() in {
+    "1", "true", "yes",
+}
 
 from werkzeug.serving import make_server
 
@@ -71,18 +84,32 @@ class FakeResponse:
         return self._payload
 
 
-@unittest.skipUnless(HAS_SELENIUM, "selenium is not installed")
+@unittest.skipUnless(
+    HAS_SELENIUM or REQUIRE_BROWSER,
+    "selenium is not installed")
 class BrowserTestCase(unittest.TestCase):
     """The app on a local port, driven by a real browser."""
 
     @classmethod
     def setUpClass(cls):
+        if not HAS_SELENIUM:
+            # The decorator above lets this class through when the browser
+            # is required, so the missing driver has to fail loudly here.
+            if REQUIRE_BROWSER:
+                raise RuntimeError(
+                    "selenium is not installed, and the browser tests are "
+                    "required")
+            raise unittest.SkipTest("selenium is not installed")
         options = Options()
         options.add_argument("--headless=new")
         options.add_argument("--disable-gpu")
         try:
             cls.driver = webdriver.Chrome(options=options)
         except Exception as exc:  # noqa: BLE001 - no browser, no test
+            if REQUIRE_BROWSER:
+                raise RuntimeError(
+                    f"Chrome is not available and the browser tests are "
+                    f"required: {exc}") from exc
             raise unittest.SkipTest(f"Chrome is not available: {exc}")
 
         # set_window_size sets the window, and Chrome's own chrome eats most
