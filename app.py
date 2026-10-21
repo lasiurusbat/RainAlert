@@ -5,7 +5,6 @@ Two free, keyless APIs are used:
   * Open-Meteo returns the daily forecast for those coordinates.
 """
 
-import locale
 import os
 from datetime import date, datetime, timedelta, timezone
 from decimal import ROUND_HALF_UP, Decimal
@@ -30,11 +29,6 @@ app = Flask(__name__)
 NOMINATIM_USER_AGENT = os.getenv("NOMINATIM_USER_AGENT", "RainAlert_App_v1_2026")
 GEOCODER_TIMEOUT = int(os.getenv("GEOCODER_TIMEOUT", "10"))
 WEATHER_TIMEOUT = int(os.getenv("WEATHER_TIMEOUT", "10"))
-
-# Weekday names are localised. A fixed locale is simplest; set it to "auto" to
-# follow the browser's Accept-Language header instead, or leave it unset for
-# English. Examples: de_DE, fr_FR, es_ES, nl_NL, pt_BR.
-DATE_LOCALE = os.getenv("DATE_LOCALE", "de_DE")
 
 FORECAST_URL = "https://api.open-meteo.com/v1/forecast"
 DAILY_FIELDS = "precipitation_probability_max,temperature_2m_max,temperature_2m_min"
@@ -98,71 +92,16 @@ DONATION_URL = clean_donation_url(os.getenv("DONATION_URL"))
 geolocator = Nominatim(user_agent=NOMINATIM_USER_AGENT, timeout=GEOCODER_TIMEOUT)
 
 
-# --- Localisation ------------------------------------------------------------
-# Language tags as sent in an Accept-Language header, mapped to the locale
-# names the C library understands.
-_LANGUAGE_TO_LOCALE = {
-    "de": "de_DE", "fr": "fr_FR", "es": "es_ES", "it": "it_IT",
-    "nl": "nl_NL", "pt": "pt_PT", "pl": "pl_PL", "cs": "cs_CZ",
-    "sk": "sk_SK", "sl": "sl_SI", "hr": "hr_HR", "hu": "hu_HU",
-    "ro": "ro_RO", "bg": "bg_BG", "sv": "sv_SE", "da": "da_DK",
-    "nb": "nb_NO", "no": "nb_NO", "fi": "fi_FI", "is": "is_IS",
-    "et": "et_EE", "lv": "lv_LV", "lt": "lt_LT", "tr": "tr_TR",
-    "ru": "ru_RU", "uk": "uk_UA", "el": "el_GR", "ja": "ja_JP",
-    "ko": "ko_KR", "zh": "zh_CN", "th": "th_TH", "vi": "vi_VN",
-    "id": "id_ID", "ms": "ms_MY", "he": "he_IL", "ar": "ar_EG",
-    "hi": "hi_IN", "fa": "fa_IR", "ca": "ca_ES", "gl": "gl_ES",
-    "eu": "eu_ES", "sw": "sw_KE", "af": "af_ZA", "en": "en_US",
-}
-
-# Regional variants, used when the request names a specific region.
-_LOCALE_ALIASES = {
-    "pt_BR": "pt_BR", "pt_PT": "pt_PT",
-    "en_GB": "en_GB", "en_AU": "en_AU", "en_CA": "en_CA", "en_IE": "en_IE",
-    "en_NZ": "en_NZ", "en_US": "en_US",
-    "fr_CA": "fr_CA", "fr_CH": "fr_CH", "fr_BE": "fr_BE", "fr_LU": "fr_LU",
-    "de_AT": "de_AT", "de_CH": "de_CH",
-    "es_MX": "es_MX", "es_AR": "es_AR", "es_CO": "es_CO", "es_US": "es_US",
-    "it_CH": "it_CH", "nl_BE": "nl_BE",
-    "zh_TW": "zh_TW", "zh_CN": "zh_CN", "zh_HK": "zh_CN",
-}
-
-
-def locale_from_accept_language(header):
-    """Pick a locale from an Accept-Language header.
-
-    The header is a comma-separated list of language tags with optional
-    quality values, e.g. ``de-DE,de;q=0.9,en;q=0.8``. The first tag the
-    system supports wins; ``None`` is returned when nothing matches.
-
-    A region is honoured when the language has a regional variant, so
-    ``pt-BR`` gives Brazilian Portuguese and ``pt-PT`` European Portuguese.
-    """
-    if not header:
-        return None
-    for part in header.split(","):
-        tag = part.split(";")[0].strip()
-        if not tag:
-            continue
-        parts = tag.replace("-", "_").split("_")
-        language = parts[0].lower()
-        region = parts[1].upper() if len(parts) > 1 else ""
-        if region:
-            regional = f"{language}_{region}"
-            if regional in _LOCALE_ALIASES:
-                return _LOCALE_ALIASES[regional]
-        candidate = _LANGUAGE_TO_LOCALE.get(language)
-        if candidate:
-            return candidate
-    return None
-
-
-def requested_locale():
-    """The locale to render weekday names in, for this request."""
-    if DATE_LOCALE and DATE_LOCALE.lower() != "auto":
-        return DATE_LOCALE
-    detected = locale_from_accept_language(request.headers.get("Accept-Language"))
-    return detected or "en_US"
+# --- Weekday names -----------------------------------------------------------
+# The seven weekday names, Monday first, matching date.weekday().
+#
+# They are hard-coded rather than taken from strftime("%A"), because
+# strftime reads the process-wide LC_TIME locale: on a German Windows
+# machine, or in a container with LANG set, it would render the weekday in
+# that language. The rest of the page is English, so a half-translated date
+# would be worse than a consistently English one.
+WEEKDAY_NAMES = ("Monday", "Tuesday", "Wednesday", "Thursday",
+                 "Friday", "Saturday", "Sunday")
 
 
 # --- Errors ------------------------------------------------------------------
@@ -189,73 +128,47 @@ def round_half_up(value):
     return int(Decimal(str(value)).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
 
 
-def format_date(value, locale_name=None):
+def format_date(value):
     """Format an ISO date as ``Wednesday 21.10.2026``.
 
     The forecast API returns plain ``YYYY-MM-DD`` dates already expressed in
     the queried location's local time, so there is no timezone to convert.
 
-    The weekday name is localised using the C library's locale data.
+    The weekday name comes from :data:`WEEKDAY_NAMES`, so it is always
+    English.
     """
     try:
         parsed = date.fromisoformat(str(value))
     except (TypeError, ValueError):
         return str(value)
-    weekday = weekday_names(locale_name)[parsed.weekday()]
+    weekday = WEEKDAY_NAMES[parsed.weekday()]
     return f"{weekday} {parsed.strftime('%d.%m.%Y')}"
 
 
-def _locale_candidates(locale_name):
-    """The names to try when switching to a locale, in order.
-
-    The C library does not agree on how a locale is spelled. Windows accepts
-    the bare name (``de_DE``), while glibc usually wants a codeset suffix
-    (``de_DE.UTF-8`` or ``de_DE.utf8``) and rejects the bare form even when
-    that locale is installed. Rather than pick one platform's convention, try
-    the bare name first and then the two common codeset spellings.
-    """
-    yield locale_name
-    if "." not in locale_name:
-        yield f"{locale_name}.UTF-8"
-        yield f"{locale_name}.utf8"
-
-
-@lru_cache(maxsize=32)
-def weekday_names(locale_name=None):
-    """Return the seven weekday names, Monday first, for a locale.
-
-    ``datetime.strftime`` reads the process-wide ``LC_TIME`` locale, so the
-    locale is switched only while the names are read and the previous value
-    is always restored. The result is cached, so the switch happens once per
-    locale rather than once per row. An unavailable locale falls back to
-    English rather than raising.
-    """
-    if not locale_name:
-        return tuple(date(2026, 1, 5 + offset).strftime("%A") for offset in range(7))
-
-    previous = locale.setlocale(locale.LC_TIME, None)
-    for candidate in _locale_candidates(locale_name):
-        try:
-            locale.setlocale(locale.LC_TIME, candidate)
-            break
-        except locale.Error:
-            continue
-    else:
-        locale.setlocale(locale.LC_TIME, previous)
-        app.logger.warning(
-            "Locale %r is not available on this system; using English weekday names",
-            locale_name,
-        )
-        return tuple(date(2026, 1, 5 + offset).strftime("%A") for offset in range(7))
-    try:
-        # 2026-01-05 is a Monday, so the first seven days cover every weekday.
-        return tuple(date(2026, 1, 5 + offset).strftime("%A") for offset in range(7))
-    finally:
-        locale.setlocale(locale.LC_TIME, previous)
-
-
 def format_rain_chance(value):
-    """Human-readable rain probability, with a fallback for missing values."""
+    """The rain chance as a short label for a row or a table cell.
+
+    The rows say "chance of rain" once, in the column header, so this is
+    just the number. The full phrase is what a screen reader needs, and
+    that is :func:`describe_rain_chance`.
+
+    A value the service did not report is "unknown" rather than "0%", so
+    it can never be mistaken for a dry day.
+    """
+    if value is None:
+        return "unknown"
+    try:
+        return f"{round_half_up(float(value))}%"
+    except (TypeError, ValueError):
+        return "unknown"
+
+
+def describe_rain_chance(value):
+    """The rain chance as a full phrase, for screen readers and tooltips.
+
+    The visible rows carry only the number, so this is the wording that
+    stands on its own.
+    """
     if value is None:
         return "chance of rain unknown"
     try:
@@ -433,7 +346,11 @@ def _build_hours(entries, now):
             "hour_label": f"{moment.hour:02d}",
             "time_label": f"{moment.hour:02d}:00",
             "chance": chance,
-            "chance_label": format_rain_chance(chance),
+            # The tooltip and the screen-reader text stand on their own, so
+            # they carry the full phrase. The table cell sits under a real
+            # "Rain chance" column heading, so it can be the bare number.
+            "chance_label": describe_rain_chance(chance),
+            "chance_cell": format_rain_chance(chance),
             "severity": band,
             "severity_label": severity_label(band),
             "height": hour_height_step(chance),
@@ -523,13 +440,13 @@ def severity_label(band):
 # so the banner and the list never disagree about how wet a day is.
 
 
-def forecast_day_label(iso_date, index, locale_name=None):
+def forecast_day_label(iso_date, index):
     """How the headline names a day of the forecast.
 
     The first two days are "today" and "tomorrow", in the city's local time -
     the same local time the daily list is dated in, so the banner and the
     list never call different days "today". Later days are named by their
-    weekday, localised like the dates in the list.
+    weekday, the same English name the date in the list carries.
     """
     if index == 0:
         return "today"
@@ -539,7 +456,7 @@ def forecast_day_label(iso_date, index, locale_name=None):
         parsed = date.fromisoformat(str(iso_date))
     except (TypeError, ValueError):
         return f"in {index} days"
-    return f"on {weekday_names(locale_name)[parsed.weekday()]}"
+    return f"on {WEEKDAY_NAMES[parsed.weekday()]}"
 
 
 def remaining_hour_chance(hours):
@@ -554,7 +471,7 @@ def remaining_hour_chance(hours):
     return max(known)
 
 
-def forecast_headline(forecast, locale_name=None, remaining_hours=None):
+def forecast_headline(forecast, remaining_hours=None):
     """The one-line summary of the forecast, or ``None`` if there is none.
 
     The sentence names the first day worth mentioning:
@@ -593,7 +510,7 @@ def forecast_headline(forecast, locale_name=None, remaining_hours=None):
     days = []
     for index, day in enumerate(forecast):
         chance = rain_chance(day.get("chance"))
-        when = forecast_day_label(day.get("iso_date"), index, locale_name)
+        when = forecast_day_label(day.get("iso_date"), index)
         if index == 0 and remaining_hours is not None:
             # Judge today on the hours that are left, not on the whole day.
             if not remaining_hours:
@@ -702,17 +619,17 @@ def get_coordinates(city_name):
     return location.latitude, location.longitude, label
 
 
-def fetch_forecast(latitude, longitude, locale_name=None, unit=None):
+def fetch_forecast(latitude, longitude, unit=None):
     """Return the daily forecast as a list of dicts.
 
     An empty list means the service responded but had no forecast for the
     location; transport and payload problems raise :class:`WeatherUnavailable`.
     """
-    forecast, _ = fetch_weather(latitude, longitude, locale_name, unit)
+    forecast, _ = fetch_weather(latitude, longitude, unit)
     return forecast
 
 
-def fetch_weather(latitude, longitude, locale_name=None, unit=None):
+def fetch_weather(latitude, longitude, unit=None):
     """Return the daily forecast and today's hourly rain chances.
 
     Both come from a single request: Open-Meteo serves the daily and the
@@ -762,11 +679,14 @@ def fetch_weather(latitude, longitude, locale_name=None, unit=None):
     for index, (day, chance) in enumerate(zip(dates, chances)):
         band = severity_band(chance)
         forecast.append({
-            "date": format_date(day, locale_name),
+            "date": format_date(day),
             # The raw date, kept so the headline can name the weekday without
             # having to take the formatted date apart again.
             "iso_date": day,
+            # The visible number, and the full phrase for the screen reader.
+            # The column heading above the list says "chance of rain" once.
             "rain_label": format_rain_chance(chance),
+            "rain_sr_label": describe_rain_chance(chance),
             "temp_label": format_temperature(
                 highs[index] if index < len(highs) else None,
                 lows[index] if index < len(lows) else None,
@@ -833,16 +753,15 @@ def index():
     elif city:
         try:
             latitude, longitude, display_city = get_coordinates(city)
-            locale_name = requested_locale()
             weather_data, hourly_data = fetch_weather(
-                latitude, longitude, locale_name, unit)
+                latitude, longitude, unit)
             hourly_summary = summarise_hours(hourly_data or [])
             # The umbrella advice is about the hours ahead, so the
             # headline is told which of today's hours are still to come.
             remaining_hours = [hour for hour in (hourly_data or [])
                                if not hour.get("past")]
             headline = forecast_headline(
-                weather_data or [], locale_name, remaining_hours)
+                weather_data or [], remaining_hours)
         except CityNotFound:
             error = "City not found. Please try a different name (e.g., 'Paris')."
         except GeocodingUnavailable:

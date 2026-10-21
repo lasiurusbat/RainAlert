@@ -73,7 +73,7 @@
                                     {% for hour in hourly_data %}
                                     <tr{% if hour.now %} class="is-now"{% endif %}>
                                         <th scope="row">{{ hour.time_label }}{% if hour.now %} (now){% endif %}</th>
-                                        <td>{{ hour.chance_label }}</td>
+                                        <td>{{ hour.chance_cell }}</td>
                                     </tr>
                                     {% endfor %}
                                 </tbody>
@@ -82,9 +82,12 @@
                     </div>
                     {% endif %}
                     <div class="severity-legend">
-                        <span class="legend-item severity-low"><span class="severity-dot" aria-hidden="true"></span>Rain unlikely</span>
-                        <span class="legend-item severity-moderate"><span class="severity-dot" aria-hidden="true"></span>Rain possible</span>
-                        <span class="legend-item severity-high"><span class="severity-dot" aria-hidden="true"></span>Rain likely</span>
+                        <span class="legend-bands">
+                            <span class="legend-item severity-low"><span class="severity-dot" aria-hidden="true"></span>Rain unlikely</span>
+                            <span class="legend-item severity-moderate"><span class="severity-dot" aria-hidden="true"></span>Rain possible</span>
+                            <span class="legend-item severity-high"><span class="severity-dot" aria-hidden="true"></span>Rain likely</span>
+                        </span>
+                        <span class="column-head">Rain chance</span>
                         <span class="unit-switch" role="group" aria-label="Temperature unit">
                             {% for option in temperature_units %}
                             <a class="unit-option{% if unit == option %} is-active{% endif %}"
@@ -105,8 +108,10 @@
                             </span>
                             <span class="rain-chance">
                                 {% if day.umbrella %}<span class="umbrella" title="Take an umbrella">☔</span>{% endif %}
-                                {{ day.rain_label }}{% if day.temp_label %} <span class="temp">({{ day.temp_label }})</span>{% endif %}
+                                <span aria-hidden="true">{{ day.rain_label }}</span>
+                                <span class="sr-only">{{ day.rain_sr_label }}{% if day.umbrella %} Take an umbrella.{% endif %}</span>
                             </span>
+                            <span class="temp">{{ day.temp_label }}</span>
                         </div>
                         {% endfor %}
                     </div>

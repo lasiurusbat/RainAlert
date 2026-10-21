@@ -33,30 +33,12 @@ ENV PYTHONUNBUFFERED=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
     PORT=8000
 
-# The slim image ships with no locales beyond C and POSIX, so weekday names
-# would always fall back to English. locales-all pulls in the locale data for
-# every language the app supports, and localedef then compiles the ones that
-# are actually needed into the image.
-#
-# The list is generated from the app's own tables rather than hardcoded, so
-# the image can never drift from what the code claims to support.
+# The image installs no system packages. The weekday names are hard-coded in
+# the app, so there is no locale data to compile and nothing to install.
 COPY --from=builder /wheels /wheels
 COPY requirements.txt ./
 RUN pip install --no-index --find-links=/wheels -r requirements.txt \
     && rm -rf /wheels
-
-COPY app.py ./
-# The locales package is kept, not purged: the compiled locale data lives in
-# /usr/lib/locale, which belongs to that package, so purging it would delete
-# the data that was just generated. Only the apt lists and the alias file are
-# removed, since the latter is no longer needed once the locales exist.
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends locales \
-    && for loc in $(python -c "import app; print(' '.join(sorted(set(app._LANGUAGE_TO_LOCALE.values()) | set(app._LOCALE_ALIASES.values()))))"); do \
-         localedef -i "$loc" -c -f UTF-8 -A /usr/share/locale/locale.alias "$loc.UTF-8" \
-         || echo "skipping $loc"; \
-       done \
-    && rm -rf /var/lib/apt/lists/* /usr/share/locale/locale.alias
 
 # Run as a non-root user. The application needs no write access anywhere: it
 # has no database, no uploads and no instance folder.

@@ -35,10 +35,10 @@ docker compose run --rm tests   # both suites in the same image
 
 `Dockerfile` is a two-stage build; the runtime image has no compiler, runs as
 the non-root user `rainalert` (uid 1001), and serves with gunicorn on port
-8000. The locales are compiled in from the app's own language tables, so the
-image cannot drift from the supported set. `DEPLOY.md` is the deployment
-runbook, and `.github/workflows/ci-cd.yml` runs the tests inside the built
-image before any release is pushed.
+8000. The image installs no system packages: the weekday names are hard-coded
+in the app, so there is no locale data to compile. `DEPLOY.md` is the
+deployment runbook, and `.github/workflows/ci-cd.yml` runs the tests inside
+the built image before any release is pushed.
 
 ## Layout
 
@@ -88,12 +88,15 @@ pass one.
 queried city's local time. A forecast for Tokyo is dated in Tokyo's days.
 Do not convert these dates to the viewer's timezone — that would be a bug.
 
-**Weekday names are localised** via the C library's locale data, not
-`babel`. `weekday_names(locale)` returns all seven names Monday-first and is
-cached, so the process-wide `LC_TIME` locale is switched once per locale
-rather than once per row, and the previous value is always restored.
-`DATE_LOCALE` selects the locale: a fixed code (`de_DE`), or `auto` to follow
-the browser's `Accept-Language` header.
+**Weekday names are always English.** They are hard-coded in `WEEKDAY_NAMES`
+(Monday first) and picked by `date.weekday()`, not taken from
+`strftime("%A")` and not read from the C library's locale data. `strftime`
+follows the process-wide `LC_TIME` locale, so on a German Windows machine, or
+in a container with `LANG` set, it would render the weekday in that
+language. The rest of the page is English, so a half-translated date inside
+it would be worse than a consistently English one. The app therefore does
+not read the browser's `Accept-Language` header at all, and the image needs
+no locale data.
 
 **Rain severity is a three-band scale** computed in `app.py` from
 `precipitation_probability_max`: under `SEVERITY_LOW_MAX` (30) is *low*,
@@ -142,6 +145,42 @@ quantities and each is labelled with which one it is. When the day is over
 it drops out of the banner entirely. A missing chance is never counted as
 dry: a quiet week with one unreported day is "most of", not "all of".
 
+**The daily row says "chance of rain" once, in the column heading.** The
+phrase used to be on all seven rows, where it carried nothing after the first
+one. Now `format_rain_chance()` returns the bare number for the visible row
+and `describe_rain_chance()` returns the full phrase for screen readers and
+tooltips, and the wording itself lives in the `.severity-legend` row above
+the list. That row already sat directly above the list and had free space on
+it, so the heading costs **zero** vertical height — which matters, because
+the card is at its vertical limit.
+
+The two right-hand cells are **fixed-width columns** and the date takes the
+slack (`flex: 1 1 auto`), with `justify-content: space-between` removed from
+`.weather-item`. Without that, `space-between` distributed the free space
+between the date and the number instead of pinning the number to a column,
+and the percentages floated: their right edge came out at 358, 351, 342,
+350, 345, 348 on six consecutive rows.
+
+The legend row has to be **one flex row with the same two fixed-width
+columns**, not a row of five loose items, or the headings drift away from
+the columns they head. The three band names are wrapped in a
+`.legend-bands` group so that the group takes the slack, exactly as the date
+takes the slack in a data row.
+
+The visible number is wrapped in `aria-hidden="true"` and a `.sr-only` span
+carries "100% chance of rain. Take an umbrella." The heading is a `<span>`,
+not a real table header, so the row itself has to say what the number means.
+The hourly table below *does* have a real `<th scope="col">Rain chance</th>`,
+so its cells can be bare numbers.
+
+**The narrow layout is decided, not left to flexbox.** Below 560px the date,
+the chance and the temperature do not fit on one line, and letting them
+wrap where they liked gave a different layout on every row — a longer
+weekday name pushed its own row over the line, and the columns drifted out
+of alignment with the headings above them. The media query gives the date a
+line of its own and puts both columns on the line below it, right-aligned,
+and the legend row does the same, so the headings still line up.
+
 **The donation link sits under the button, not under the forecast.** It is
 on every page, including error pages, because it is a site-wide link rather
 than part of the result. The band name in the headline is a sentence, not a
@@ -168,10 +207,11 @@ where Render ran `pip install` and gunicorn itself, is gone.
 
 **CI runs the tests inside the built image.** `.github/workflows/ci-cd.yml`
 builds for `linux/amd64` and runs `python -m unittest test_app` in the
-container. That is deliberate: the suite asserts German weekday names, which
-need the `de_DE` locale that the image installs and a stock GitHub runner
-does not have. The image that passes the tests is the image that is pushed —
-it is not rebuilt for the push.
+container, so that what is tested is exactly what will be shipped. The image
+that passes the tests is the image that is pushed — it is not rebuilt for the
+push. The suite needs no locale data any more, so it would also pass on a
+stock runner; the reason for running it in the image is that it tests the
+shipped artefact, not the developer's machine.
 
 **Releases are git tags.** A tag matching `v0.9` or `v1.2.3`, pointing at a
 commit already on `main`, builds and tests the image, pushes it to Docker
@@ -198,8 +238,9 @@ tests; do not remove them.
 ## Gotchas
 
 - **`strftime('%A')` follows the process locale**, which is why the weekday
-  lookup goes through `weekday_names()` rather than calling `strftime`
-  directly.
+  names are hard-coded in `WEEKDAY_NAMES` rather than read from
+  `strftime`. On a German Windows machine, or in a container with `LANG`
+  set, `strftime` would render the weekday in that language.
 - **Banker's rounding.** Python's `round(8.5)` is `8`, not `9`. Use the
   `round_half_up()` helper for temperatures, where halves are common.
 - **Do not use `.title()` on user input.** It turns `"st john's"` into
@@ -221,7 +262,13 @@ tests; do not remove them.
   ~525px in English, so a per-row badge forces a wrap and doubles the list
   height. The band name therefore lives in a **legend** above the list, and
   each row carries the same word in a `.sr-only` span for screen readers.
-  Severity must never be conveyed by colour alone.
+  Severity must never be conveyed by colour alone. The same rule is why the
+  "chance of rain" wording is a column heading rather than a per-row
+  label, and why the two right-hand cells are fixed-width columns: the
+  numbers have to line up, or the list reads as noise. Below 560px the rows
+  wrap on purpose, and the wrap is the same on every row — a row that
+  wrapped because its own weekday name was one letter longer would look
+  broken.
 - **The card has to stay inside a 748px-tall window.** The hourly strip
   added ~150px above the list, which pushed the document 25px past the
   viewport. The strip is 38px tall, the `.weather-item` padding was cut
@@ -254,24 +301,6 @@ tests; do not remove them.
 - **`.container` is `box-sizing: border-box`.** With the default
   content-box, `width: 90%` plus the padding pushed the card past the
   viewport edge on narrow screens.
-- **`locale.with_locale` is unavailable** in this Python build, and
-  `locale.format_string` raises on a `date` argument. Use
-  `locale.setlocale` with a save/restore, as `weekday_names()` does.
-- **The C library spells locales differently per platform.** Windows accepts
-  the bare name `de_DE`; glibc wants a codeset suffix and rejects the bare
-  form even when the locale is installed, so the container rendered English
-  weekday names until this was fixed. `_locale_candidates()` yields the bare
-  name, then `.UTF-8`, then `.utf8` — use it rather than calling
-  `setlocale` with a hardcoded name, in the app and in the tests alike.
-- **The offline suite needs the `de_DE` locale.** It asserts German weekday
-  names. The Docker image installs it; a bare Linux box does not have it.
-- **Do not `apt-get purge locales` in the Dockerfile.** The compiled locale
-  data lives in `/usr/lib/locale`, which the `locales` package owns, so
-  purging it deletes the data that was just generated. Only the apt lists and
-  `/usr/share/locale/locale.alias` are safe to remove.
-- **`localedef -i` needs the full locale name.** `-i de` fails with "cannot
-  open locale definition file 'de'"; the definitions in
-  `/usr/share/i18n/locales` are named with the whole code, so use `-i de_DE`.
 - **gunicorn 26 needs a writable home.** It opens a control socket at
   `$HOME/.gunicorn/gunicorn.ctl` (or `$XDG_RUNTIME_DIR/gunicorn.ctl`) and
   fails with "Permission denied" on a user created without `--create-home`.
@@ -292,7 +321,7 @@ tests; do not remove them.
 - User-facing error messages are plain English sentences ending in a period.
 - Log with `app.logger`, never `print()`.
 - New user-visible strings belong in the template or in `app.py`, and the
-  UI text is English even when weekday names are localised.
+  UI text is English, and so are the weekday names.
 - **Do not bump the image tag in `render.yaml` by hand as part of a normal
   change.** Releases are cut by pushing a `v*` tag; the workflow derives the
   image tag from it. The tag in `render.yaml` is only the fallback for a

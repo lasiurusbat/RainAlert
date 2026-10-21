@@ -1,7 +1,7 @@
 # Deploying RainAlert to Render (free) at rainalert.live
 
 The Docker half of this has been exercised locally: the image builds, both
-test suites pass inside it, and a forecast renders with localised weekday
+test suites pass inside it, and a forecast renders with English weekday
 names. The Render and GitHub Actions half has **not** been run — the service,
 the domain and the first tag push are still ahead. `render.yaml` points at
 the Docker Hub image `lasiurusbat/rainalert:0.8`, which does not exist yet.
@@ -79,12 +79,10 @@ pull request / push to main          push of a tag such as v0.9
 
 ### Design decisions
 
-- **Tests run inside the image.** `test_app.py` expects German weekday names
-  (`de_DE`). The Dockerfile installs that locale, but a stock GitHub runner
-  and most dev machines do not have it, and several tests fail there for
-  that reason alone (seen when running the suite on a plain Linux box).
-  Running the tests in the built image avoids installing locales on the
-  runner, and what is tested is exactly what is shipped.
+- **Tests run inside the image.** The suite needs nothing from the host now
+  that the weekday names are hard-coded, so it would pass on a stock GitHub
+  runner too. It still runs in the built image, because that is what makes
+  the tested artefact and the shipped artefact the same one.
 - **One build, tested then pushed.** The image that passed the tests is the
   one that is pushed. It is not rebuilt for the push.
 - **Releases are git tags.** Push `v0.9` and the image is tagged `0.9`.

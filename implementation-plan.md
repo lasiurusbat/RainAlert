@@ -28,7 +28,7 @@ file is itself untracked.
 - [x] Flask app: city name -> coordinates (Nominatim) -> 7-day forecast (Open-Meteo)
 - [x] Separate error handling for "city not found", geocoder down and weather service down
 - [x] Geocoding cache, explicit timeouts, configuration through environment variables
-- [x] City-local dates (`timezone=auto`) and localised weekday names with a safe English fallback
+- [x] City-local dates (`timezone=auto`) and English weekday names
 - [x] Temperature rounding fix (round half up)
 - [x] Offline unit tests (146) and live API tests (6)
 - [x] Comprehensive `README.md` with screenshot, `CLAUDE.md` project notes
@@ -41,9 +41,9 @@ file is itself untracked.
 - [x] Hour-by-hour strip for today: 24 bars for the city's local day, a one-line summary ("Rain likely from about 15:00 to 16:00, up to 83%. Bring an umbrella."), a pulsing dot on the current hour, and a table view so no value is hover-only
 
 ### Packaging and delivery
-- [x] Multi-stage `Dockerfile`: non-root user, locale data installed, tests included in the image
+- [x] Multi-stage `Dockerfile`: non-root user, no system packages, tests included in the image
 - [x] `.dockerignore`, `.gitignore`, `docker-compose.yml` (app plus a `tests` profile)
-- [x] `render.yaml`: free web service running `docker.io/lasiurusbat/rainalert:0.8`, English weekday names (`DATE_LOCALE=C`), user agent naming rainalert.live
+- [x] `render.yaml`: free web service running `docker.io/lasiurusbat/rainalert:0.8`, user agent naming rainalert.live
 - [x] `.github/workflows/ci-cd.yml`: build, test in the image, push on release tag, Render deploy hook, smoke test
 - [x] `.github/dependabot.yml`: weekly updates for Actions, pip and the Docker base image
 - [x] `DEPLOY.md` runbook (image push, Render setup, domain, pipeline, known limits)

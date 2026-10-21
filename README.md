@@ -37,12 +37,10 @@ user accounts, and nothing to configure before running it.
   switches the temperatures. The forecast service does the conversion, so the
   numbers are the service's own and the choice sticks when you search for
   another city.
-- **Localised weekday names.** Dates render as `Wednesday 21.10.2026`, with the
-  weekday in the visitor's language. 44 languages and 23 regional variants are
-  supported, and the day names come from the C library's locale data rather
-  than a heavyweight dependency. Which languages are actually available
-  depends on the locales installed on the host — an unavailable one falls
-  back to English.
+- **English weekday names.** Dates render as `Wednesday 21.10.2026`. The page
+  is English throughout, so a German date inside it would be a half-translated
+  page; the seven names are hard-coded rather than taken from the C library's
+  locale data, so they never depend on the host.
 - **Honest error handling.** A city that does not exist and a geocoder that is
   temporarily down produce different messages — a network blip never tells a
   user their valid city is missing.
@@ -89,19 +87,16 @@ because an upstream is down.
 `test_api.py` checks the real response shapes against the live services and
 needs them to be reachable.
 
-The offline suite expects German weekday names, so it needs the `de_DE`
-locale to be installed. On Windows and macOS that is the default; on a bare
-Linux box it is not, and the localisation tests fail until you install it
-(`apt-get install locales && localedef -i de_DE -f UTF-8 de_DE.UTF-8`).
-The Docker image installs it for you.
+The offline suite needs nothing from the host beyond Python itself: the
+weekday names are hard-coded, so there is no locale to install.
 
 ---
 
 ## Running with Docker
 
 If you would rather not manage a Python environment, the repository ships a
-`Dockerfile` and a `docker-compose.yml`. The image contains the app, its
-dependencies, and the locale data the weekday names need.
+`Dockerfile` and a `docker-compose.yml`. The image contains the app and its
+dependencies.
 
 ### With Compose (recommended)
 
@@ -127,7 +122,7 @@ The Compose file builds the image once and shares it between two services:
 
 ```bash
 docker build -t rainalert .
-docker run --rm -p 8000:8000 -e DATE_LOCALE=auto rainalert
+docker run --rm -p 8000:8000 rainalert
 ```
 
 ### Configuration
@@ -138,7 +133,6 @@ picks that file up automatically.
 
 ```bash
 docker run --rm -p 8000:8000 \
-  -e DATE_LOCALE=auto \
   -e NOMINATIM_USER_AGENT="RainAlert/1.0 (https://rainalert.live)" \
   -e DONATION_URL=https://buymeacoffee.com/rainalert \
   rainalert
@@ -161,9 +155,9 @@ the host side if `8000` is already taken.
   stage installs from those wheels and carries no compiler.
 - **A non-root user.** The app runs as `rainalert` (uid 1001) and needs no
   write access anywhere.
-- **The locales.** The locale data is compiled in from the app's own
-  language tables, so the image can never drift from what the code claims to
-  support.
+- **No system packages.** The image installs nothing beyond the Python
+  dependencies: the weekday names are hard-coded, so there is no locale data
+  to compile.
 - **gunicorn**, bound to `0.0.0.0:8000` with one worker and four threads.
   One worker keeps the geocoding cache warm and avoids duplicate Nominatim
   lookups, since the app is I/O-bound on two keyless APIs.
@@ -182,7 +176,6 @@ in a `.env` file (the app loads one via `python-dotenv`).
 | Variable | Default | What it does |
 |---|---|---|
 | `FLASK_DEBUG` | unset | `1`, `true` or `yes` enables the reloader and debugger |
-| `DATE_LOCALE` | `de_DE` | Locale for weekday names. A fixed code (`de_DE`, `fr_FR`, `pt_BR`) or `auto` to follow the browser's `Accept-Language` header |
 | `NOMINATIM_USER_AGENT` | `RainAlert_App_v1_2026` | Identifies the app to Nominatim, whose usage policy asks callers to do so |
 | `GEOCODER_TIMEOUT` | `10` | Seconds to wait for a geocoding response |
 | `WEATHER_TIMEOUT` | `10` | Seconds to wait for a forecast response |
@@ -195,7 +188,6 @@ in a `.env` file (the app loads one via `python-dotenv`).
 Example `.env`:
 
 ```dotenv
-DATE_LOCALE=auto
 SEVERITY_LOW_MAX=25
 UMBRELLA_THRESHOLD=40
 ```
@@ -258,6 +250,44 @@ Two details are deliberate:
 The colour key is rendered once above the list, and every row also carries its
 band name in a screen-reader-only span, so severity is never communicated by
 colour alone.
+
+---
+
+## The daily list
+
+```
+● Rain unlikely  ● Rain possible  ● Rain likely    Rain chance    [°C][°F]
+
+● Wednesday 21.10.2026                       ☔ 100%    12° / 9°
+● Thursday 22.10.2026                            86%    14° / 8°
+● Friday 23.10.2026                             37%    11° / 7°
+```
+
+The row says each thing once:
+
+- **"Chance of rain" appears once, in the column heading.** Repeating the
+  phrase on all seven rows said nothing after the first one and made the
+  list hard to scan, so the rows carry the number alone. The heading sits in
+  the colour-key row above the list, which costs no extra height — the card
+  is already at its vertical limit.
+- **The temperature is its own column**, without the parentheses it used to
+  wear, and the °C/°F switch doubles as that column's heading.
+- **The ☔ icon sits inside the chance column**, so the digits' right edge is
+  the same on every row and the column reads as a column.
+
+The two columns are fixed-width and the date takes the slack, so the numbers
+line up down the list. Screen readers still get the full wording — the
+visible number is hidden from them, and a screen-reader-only span beside it
+says "100% chance of rain. Take an umbrella."
+
+Below 560px the three of them no longer fit on one line, so the date takes
+a line of its own and the two columns share the line below it, both
+right-aligned. The headings do the same, so they still sit over their
+columns.
+
+The hourly table underneath has a real column heading, so its cells are bare
+numbers too. Its tooltips keep the full phrase, because a tooltip stands on
+its own.
 
 ---
 
@@ -342,10 +372,9 @@ RainAlert/
 └── RainAlert-Ideas-for-Alerting-Users.md
 ```
 
-`app.py` holds the entire application — routes, geocoding, forecast fetching,
-formatting and localisation — in about 670 lines. There is no package
-structure to navigate; a single module is the right size for an app this
-small.
+`app.py` holds the entire application — routes, geocoding, forecast fetching
+and formatting — in about 670 lines. There is no package structure to
+navigate; a single module is the right size for an app this small.
 
 ---
 
@@ -371,22 +400,21 @@ already expressed in the queried city's local time — a forecast for Tokyo is
 dated in Tokyo's days. Those dates are never converted to the viewer's
 timezone, because that would be a bug, not a feature.
 
-### Localisation
+### Weekday names
 
-`weekday_names(locale)` returns all seven weekday names, Monday first, using
-the C library's locale data. `strftime('%A')` reads the process-wide `LC_TIME`
-locale, so the locale is switched only while the names are read and the
-previous value is always restored in a `finally` block. The result is cached,
-so the switch happens once per locale rather than once per rendered row.
+The seven weekday names are hard-coded in `app.py`, Monday first, and
+`format_date()` picks one by `date.weekday()`.
 
-The C library does not agree on how a locale is spelled. Windows accepts the
-bare name `de_DE`, while glibc usually wants a codeset suffix and rejects the
-bare form even when that locale is installed. The app tries the bare name
-first and then the `.UTF-8` and `.utf8` spellings, so the same code produces
-localised weekday names on a developer machine and in the container.
+They are not taken from `strftime('%A')`, because that reads the process-wide
+`LC_TIME` locale: on a German Windows machine, or in a container with `LANG`
+set, it would render the weekday in that language. The rest of the page is
+English — the interface text, the headline banner, the hourly summary and
+every error message — so a half-translated date inside an English page would
+be worse than a consistently English one.
 
-An unavailable locale falls back to English with a logged warning rather than
-raising.
+The consequence is that the app no longer reads the browser's
+`Accept-Language` header at all, and the image no longer needs any locale
+data.
 
 ### Error handling
 
@@ -434,15 +462,10 @@ same command.
 
 ### Before deploying anywhere
 
-- **Set `DATE_LOCALE=auto`** so each visitor gets weekday names in their own
-  language.
 - **Set a real `NOMINATIM_USER_AGENT`** identifying your deployment. The
   default identifies the development copy.
 - The built-in Flask server is for development only. Use gunicorn or
   equivalent in production.
-- **Make sure the locales are present.** The Docker image compiles them in.
-  A hand-rolled Linux deployment needs the locale data installed, or weekday
-  names silently fall back to English.
 
 ---
 
@@ -451,7 +474,7 @@ same command.
 - **Styling lives in `static/style.css` as classes.** No inline `style`
   attributes in the template.
 - **User-facing error messages are plain English sentences ending in a
-  period.** The UI text is English even when weekday names are localised.
+  period.** The UI text is English, and so are the weekday names.
 - **Log with `app.logger`, never `print()`.**
 - **Restart the server after editing `index.html`.** Jinja caches templates
   when debug mode is off.

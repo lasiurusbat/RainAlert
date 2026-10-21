@@ -4,6 +4,7 @@ Everything is mocked at the HTTP boundary, so the suite runs offline and
 never touches Nominatim or Open-Meteo.
 """
 
+import re
 import unittest
 from unittest import mock
 
@@ -103,24 +104,29 @@ class TestHappyPath(AppTestCase):
         response = self.client.post("/", data={"city": "London"})
         self.assertEqual(response.status_code, 200)
         body = response.get_data(as_text=True)
-        self.assertIn("Mittwoch 21.10.2026", body)
-        self.assertIn("100% chance of rain", body)
-        self.assertIn("86% chance of rain", body)
+        self.assertIn("Wednesday 21.10.2026", body)
+        self.assertIn("100%", body)
+        self.assertIn("86%", body)
         self.assertNotIn('class="error"', body)
 
     def test_dates_use_weekday_and_dotted_format(self):
         """Dates render as 'Wednesday 21.10.2026'."""
         response = self.client.post("/", data={"city": "London"})
         body = response.get_data(as_text=True)
-        self.assertIn("Donnerstag 22.10.2026", body)
-        self.assertIn("Freitag 23.10.2026", body)
+        self.assertIn("Thursday 22.10.2026", body)
+        self.assertIn("Friday 23.10.2026", body)
         # The raw ISO form should no longer leak into the page.
         self.assertNotIn("2026-10-21", body)
 
-    def test_dates_follow_the_requested_locale(self):
-        """With the locale set to English the weekday name is English."""
-        with mock.patch.object(rainalert, "DATE_LOCALE", "en_US"):
-            response = self.client.post("/", data={"city": "London"})
+    def test_weekdays_are_english_whatever_the_browser_asks_for(self):
+        """The page is English, so the weekday names are English too.
+
+        A half-translated date inside an English page is worse than a
+        consistently English one, so the browser's language is ignored.
+        """
+        for header in ("de-DE,de;q=0.9,en;q=0.8", "nl-NL,nl;q=0.9", "fr-FR"):
+            response = self.client.get(
+                "/?city=London", headers={"Accept-Language": header})
             body = response.get_data(as_text=True)
             self.assertIn("Wednesday 21.10.2026", body)
             self.assertNotIn("Mittwoch", body)
@@ -265,7 +271,7 @@ class TestEmptyForecast(AppTestCase):
         response = self.client.post("/", data={"city": "London"})
         body = response.get_data(as_text=True)
         self.assertIn("unknown", body)
-        self.assertIn("80% chance of rain", body)
+        self.assertIn("80%", body)
 
     def test_mismatched_array_lengths_do_not_crash(self):
         payload = {
@@ -280,8 +286,8 @@ class TestEmptyForecast(AppTestCase):
         response = self.client.post("/", data={"city": "London"})
         self.assertEqual(response.status_code, 200)
         body = response.get_data(as_text=True)
-        self.assertIn("Mittwoch 21.10.2026", body)
-        self.assertIn("Donnerstag 22.10.2026", body)
+        self.assertIn("Wednesday 21.10.2026", body)
+        self.assertIn("Thursday 22.10.2026", body)
         self.assertNotIn("23.10.2026", body)
 
 
@@ -363,6 +369,92 @@ class TestRainSeverity(AppTestCase):
         self.assertIn("Unknown.", body)
 
 
+class TestRainChanceLabel(AppTestCase):
+    """'Chance of rain' is said once, in the column heading.
+
+    The rows carry the number alone. Repeating the phrase on every row
+    said nothing after the first one and made the list hard to scan.
+    """
+
+    def _body_for(self, chances):
+        payload = {
+            "daily": {
+                "time": [f"2026-10-{21 + i:02d}" for i in range(len(chances))],
+                "precipitation_probability_max": chances,
+                "temperature_2m_max": [14.0] * len(chances),
+                "temperature_2m_min": [8.0] * len(chances),
+            }
+        }
+        self.mock_get.return_value = FakeResponse(payload=payload)
+        return self.client.post("/", data={"city": "London"}).get_data(as_text=True)
+
+    def _rows(self, body):
+        """The visible chance of each row, in order."""
+        return re.findall(
+            r'<span aria-hidden="true">([^<]*)</span>', body)
+
+    def test_the_phrase_is_said_once(self):
+        """The column heading carries the wording, not the rows."""
+        body = self._body_for([10, 45, 80])
+        self.assertEqual(body.count(">Rain chance<"), 1)
+
+    def test_the_heading_is_its_own_element(self):
+        """The heading is a class of its own, so CSS can line it up."""
+        body = self._body_for([10])
+        self.assertIn('<span class="column-head">Rain chance</span>', body)
+
+    def test_the_heading_is_above_the_list(self):
+        """The heading belongs to the list, so it sits directly above it."""
+        body = self._body_for([10, 45, 80])
+        self.assertLess(body.index("Rain chance"), body.index("weather-list"))
+
+    def test_the_rows_carry_the_number_alone(self):
+        body = self._body_for([10, 45, 80])
+        self.assertEqual(self._rows(body), ["10%", "45%", "80%"])
+
+    def test_a_row_does_not_repeat_the_phrase(self):
+        """The whole point: the phrase is not in the visible list.
+
+        It stays in the hidden span, because that is the text a screen
+        reader gets instead of the bare number.
+        """
+        body = self._body_for([10, 45, 80])
+        listing = body[body.index('class="weather-list"'):]
+        visible = re.sub(r'<span class="sr-only">.*?</span>', "", listing,
+                         flags=re.DOTALL)
+        self.assertNotIn("chance of rain", visible)
+
+    def test_the_screen_reader_still_gets_the_phrase(self):
+        """The visible number is hidden from readers, so the phrase stands in."""
+        body = self._body_for([10])
+        self.assertIn('<span class="sr-only">10% chance of rain</span>', body)
+
+    def test_the_umbrella_is_announced_too(self):
+        body = self._body_for([80])
+        self.assertIn("Take an umbrella.", body)
+
+    def test_an_unknown_chance_is_not_shown_as_zero(self):
+        """A missing value must never read as a dry day."""
+        body = self._body_for([None])
+        self.assertIn('<span aria-hidden="true">unknown</span>', body)
+        self.assertNotIn('<span aria-hidden="true">0%</span>', body)
+
+    def test_the_hourly_table_cell_is_the_number_alone(self):
+        """The table has a real column heading, so the cell can be short."""
+        payload = hourly_payload([63] * 24)
+        self.mock_get.return_value = FakeResponse(payload=payload)
+        body = self.client.post("/", data={"city": "London"}).get_data(as_text=True)
+        self.assertIn("<th scope=\"col\">Rain chance</th>", body)
+        self.assertIn("<td>63%</td>", body)
+
+    def test_the_hourly_tooltip_keeps_the_phrase(self):
+        """A tooltip stands on its own, so it carries the whole wording."""
+        payload = hourly_payload([63] * 24)
+        self.mock_get.return_value = FakeResponse(payload=payload)
+        body = self.client.post("/", data={"city": "London"}).get_data(as_text=True)
+        self.assertIn("63% chance of rain", body)
+
+
 class TestHourlyStrip(AppTestCase):
     """Tier 1: an hour-by-hour strip for today."""
 
@@ -383,13 +475,13 @@ class TestHourlyStrip(AppTestCase):
     def test_the_daily_list_still_renders(self):
         """The strip is added to the page, not swapped for the forecast."""
         body = self._body_for([0] * 24)
-        self.assertIn("Mittwoch 21.10.2026", body)
+        self.assertIn("Wednesday 21.10.2026", body)
         self.assertIn("weather-list", body)
 
     def test_the_strip_does_not_break_the_daily_values(self):
         body = self._body_for([0] * 24)
-        self.assertIn("100% chance of rain", body)
-        self.assertIn("86% chance of rain", body)
+        self.assertIn('<span aria-hidden="true">100%</span>', body)
+        self.assertIn('<span aria-hidden="true">86%</span>', body)
 
     def test_the_current_hour_is_marked(self):
         body = self._body_for([0] * 24, now="2026-10-21T09:00")
@@ -456,8 +548,8 @@ class TestHourlyStrip(AppTestCase):
         self.mock_get.return_value = FakeResponse(payload=payload)
         body = self.client.post("/", data={"city": "London"}).get_data(as_text=True)
         self.assertNotIn("hourly-strip", body)
-        self.assertIn("Mittwoch 21.10.2026", body)
-        self.assertIn("100% chance of rain", body)
+        self.assertIn("Wednesday 21.10.2026", body)
+        self.assertIn('<span aria-hidden="true">100%</span>', body)
 
     def test_a_null_hour_is_not_treated_as_zero(self):
         """A missing value gets its own marker, not an empty bar."""
@@ -572,12 +664,6 @@ class TestHourlySummary(AppTestCase):
 class TestForecastHeadline(AppTestCase):
     """The one-line headline above the daily list."""
 
-    def setUp(self):
-        super().setUp()
-        locale_patcher = mock.patch.object(rainalert, "DATE_LOCALE", "en_US")
-        locale_patcher.start()
-        self.addCleanup(locale_patcher.stop)
-
     def _forecast(self, chances, days=None):
         """A forecast list in the shape app.py builds it."""
         dates = days or [f"2026-10-{21 + offset:02d}" for offset in range(len(chances))]
@@ -585,7 +671,7 @@ class TestForecastHeadline(AppTestCase):
         for day, chance in zip(dates, chances):
             band = rainalert.severity_band(chance)
             forecast.append({
-                "date": rainalert.format_date(day, "en_US"),
+                "date": rainalert.format_date(day),
                 "iso_date": day,
                 "rain_label": rainalert.format_rain_chance(chance),
                 "chance": chance,
@@ -597,7 +683,7 @@ class TestForecastHeadline(AppTestCase):
 
     def _headline(self, chances, days=None, hours=None):
         return rainalert.forecast_headline(
-            self._forecast(chances, days), "en_US", hours)
+            self._forecast(chances, days), hours)
 
     def test_a_wet_day_names_the_day_and_the_chance(self):
         headline = self._headline([0, 80, 0, 0, 0, 0, 0])
@@ -704,7 +790,7 @@ class TestForecastHeadline(AppTestCase):
         self.assertIn("Bring an umbrella", headline["text"])
 
     def test_an_empty_forecast_has_no_headline(self):
-        self.assertIsNone(rainalert.forecast_headline([], "en_US"))
+        self.assertIsNone(rainalert.forecast_headline([]))
 
     def test_the_sentence_ends_in_a_period(self):
         for chances in ([0, 80, 0], [0, 45, 0], [0, 5, 0], [None, None]):
@@ -739,7 +825,7 @@ class TestForecastHeadline(AppTestCase):
         # current time is 09:00 with a dry day ahead, so the banner names
         # tomorrow - the same 86% the row for tomorrow carries.
         self.assertIn("Rain likely tomorrow (86%)", body)
-        self.assertIn("86% chance of rain", body)
+        self.assertIn('<span aria-hidden="true">86%</span>', body)
 
     def test_the_band_is_in_the_sentence_not_only_in_the_colour(self):
         """Severity never rests on the colour alone."""
@@ -872,11 +958,22 @@ class TestForecastParsing(unittest.TestCase):
         self.assertEqual(rainalert.format_date(None), "None")
 
     def test_format_rain_chance(self):
-        self.assertEqual(rainalert.format_rain_chance(100), "100% chance of rain")
-        self.assertEqual(rainalert.format_rain_chance(86.4), "86% chance of rain")
-        self.assertEqual(rainalert.format_rain_chance(0), "0% chance of rain")
+        """The row shows the number alone; the wording is in the header."""
+        self.assertEqual(rainalert.format_rain_chance(100), "100%")
+        self.assertEqual(rainalert.format_rain_chance(86.4), "86%")
+        self.assertEqual(rainalert.format_rain_chance(0), "0%")
+        self.assertEqual(rainalert.format_rain_chance(None), "unknown")
+
+    def test_describe_rain_chance(self):
+        """The full phrase is what a screen reader and a tooltip need."""
         self.assertEqual(
-            rainalert.format_rain_chance(None), "chance of rain unknown"
+            rainalert.describe_rain_chance(100), "100% chance of rain")
+        self.assertEqual(
+            rainalert.describe_rain_chance(86.4), "86% chance of rain")
+        self.assertEqual(
+            rainalert.describe_rain_chance(0), "0% chance of rain")
+        self.assertEqual(
+            rainalert.describe_rain_chance(None), "chance of rain unknown"
         )
 
     def test_format_temperature(self):
@@ -895,12 +992,6 @@ class TestForecastParsing(unittest.TestCase):
 
 class TestTemperatureUnit(AppTestCase):
     """The Celsius/Fahrenheit switch beside the legend."""
-
-    def setUp(self):
-        super().setUp()
-        locale_patcher = mock.patch.object(rainalert, "DATE_LOCALE", "en_US")
-        locale_patcher.start()
-        self.addCleanup(locale_patcher.stop)
 
     def test_celsius_is_the_default(self):
         body = self.client.post("/", data={"city": "London"}).get_data(as_text=True)
@@ -973,118 +1064,6 @@ class TestTemperatureUnit(AppTestCase):
         self.assertIn('name="unit" value="fahrenheit"', body)
 
 
-class TestLocalisation(unittest.TestCase):
-    def test_weekday_names_are_localised(self):
-        self.assertEqual(
-            rainalert.weekday_names("de_DE")[2], "Mittwoch")
-        self.assertEqual(
-            rainalert.weekday_names("fr_FR")[2], "mercredi")
-        self.assertEqual(
-            rainalert.weekday_names("nl_NL")[2], "woensdag")
-        self.assertEqual(
-            rainalert.weekday_names("es_ES")[2], "miércoles")
-
-    def test_weekday_names_cover_all_seven_days(self):
-        names = rainalert.weekday_names("de_DE")
-        self.assertEqual(len(names), 7)
-        self.assertEqual(len(set(names)), 7)
-        self.assertEqual(names[0], "Montag")
-        self.assertEqual(names[6], "Sonntag")
-
-    def test_format_date_uses_the_locale(self):
-        self.assertEqual(
-            rainalert.format_date("2026-10-21", "de_DE"), "Mittwoch 21.10.2026")
-        self.assertEqual(
-            rainalert.format_date("2026-10-21", "fr_FR"), "mercredi 21.10.2026")
-        self.assertEqual(
-            rainalert.format_date("2026-10-21", "nl_NL"), "woensdag 21.10.2026")
-
-    def test_unknown_locale_falls_back_to_english(self):
-        self.assertEqual(
-            rainalert.format_date("2026-10-21", "xx_XX"), "Wednesday 21.10.2026")
-
-    def test_locale_name_variants_are_tried(self):
-        """A locale must be found however the platform spells it.
-
-        Windows accepts the bare name ``de_DE``; glibc usually wants a
-        codeset suffix and rejects the bare form even when the locale is
-        installed. The bare name has to work on both, and an explicit
-        codeset must not be mangled.
-        """
-        candidates = list(rainalert._locale_candidates("de_DE"))
-        self.assertEqual(candidates[0], "de_DE")
-        self.assertIn("de_DE.UTF-8", candidates)
-        self.assertIn("de_DE.utf8", candidates)
-
-        # A name that already carries a codeset is left alone.
-        self.assertEqual(
-            list(rainalert._locale_candidates("de_DE.UTF-8")), ["de_DE.UTF-8"])
-
-    def test_locale_with_codeset_still_localises(self):
-        self.assertEqual(
-            rainalert.weekday_names("de_DE.UTF-8")[2], "Mittwoch")
-
-    def test_ambient_locale_is_restored(self):
-        """Formatting must not leave the process locale switched."""
-        import locale as locale_module
-
-        previous = locale_module.setlocale(locale_module.LC_TIME, None)
-        # The accepted spelling differs per platform, so use one this system
-        # actually takes. The bare name works on Windows; glibc wants a
-        # codeset suffix.
-        ambient = None
-        for candidate in rainalert._locale_candidates("fr_FR"):
-            try:
-                locale_module.setlocale(locale_module.LC_TIME, candidate)
-                ambient = candidate
-                break
-            except locale_module.Error:
-                continue
-        self.assertIsNotNone(ambient, "fr_FR should be available on this system")
-
-        try:
-            # Clear the cache, or the cached names are returned without the
-            # locale ever being switched and the test proves nothing.
-            rainalert.weekday_names.cache_clear()
-            rainalert.format_date("2026-10-21", "de_DE")
-            self.assertEqual(
-                locale_module.setlocale(locale_module.LC_TIME, None), ambient)
-        finally:
-            locale_module.setlocale(locale_module.LC_TIME, previous)
-
-    def test_accept_language_parsing(self):
-        self.assertEqual(
-            rainalert.locale_from_accept_language("de-DE,de;q=0.9,en;q=0.8"),
-            "de_DE")
-        self.assertEqual(
-            rainalert.locale_from_accept_language("fr-FR,fr;q=0.9"), "fr_FR")
-        self.assertEqual(
-            rainalert.locale_from_accept_language("nl-NL,nl;q=0.9"), "nl_NL")
-        self.assertEqual(
-            rainalert.locale_from_accept_language("pt-BR,pt;q=0.9"), "pt_BR")
-        self.assertEqual(
-            rainalert.locale_from_accept_language("en-GB,en;q=0.9"), "en_GB")
-        self.assertIsNone(rainalert.locale_from_accept_language("zz-ZZ"))
-        self.assertIsNone(rainalert.locale_from_accept_language(""))
-        self.assertIsNone(rainalert.locale_from_accept_language(None))
-
-    def test_request_uses_the_configured_locale(self):
-        with mock.patch.object(rainalert, "DATE_LOCALE", "de_DE"):
-            with rainalert.app.test_request_context("/"):
-                self.assertEqual(rainalert.requested_locale(), "de_DE")
-
-    def test_request_falls_back_to_accept_language(self):
-        with mock.patch.object(rainalert, "DATE_LOCALE", "auto"):
-            headers = {"Accept-Language": "nl-NL,nl;q=0.9"}
-            with rainalert.app.test_request_context("/", headers=headers):
-                self.assertEqual(rainalert.requested_locale(), "nl_NL")
-
-    def test_request_falls_back_to_english(self):
-        with mock.patch.object(rainalert, "DATE_LOCALE", "auto"):
-            with rainalert.app.test_request_context("/"):
-                self.assertEqual(rainalert.requested_locale(), "en_US")
-
-
 DONATION_URL = "https://buymeacoffee.com/rainalert"
 DONATION_HREF = f'href="{DONATION_URL}"'
 
@@ -1123,14 +1102,6 @@ class TestCleanDonationUrl(unittest.TestCase):
 
 class TestDonationLink(AppTestCase):
     """The optional Buy Me a Coffee link."""
-
-    def setUp(self):
-        super().setUp()
-        # A fixed locale keeps these tests independent of the locales that
-        # happen to be installed on the machine running them.
-        locale_patcher = mock.patch.object(rainalert, "DATE_LOCALE", "C")
-        locale_patcher.start()
-        self.addCleanup(locale_patcher.stop)
 
     def post(self, city="London"):
         return self.client.post("/", data={"city": city}).get_data(as_text=True)
@@ -1201,12 +1172,6 @@ class TestDonationLink(AppTestCase):
 
 class TestAttribution(AppTestCase):
     """Open-Meteo's licence (CC BY 4.0) requires a credit; OSM data needs one too."""
-
-    def setUp(self):
-        super().setUp()
-        locale_patcher = mock.patch.object(rainalert, "DATE_LOCALE", "C")
-        locale_patcher.start()
-        self.addCleanup(locale_patcher.stop)
 
     def assert_credits(self, body):
         self.assertIn('href="https://open-meteo.com/"', body)

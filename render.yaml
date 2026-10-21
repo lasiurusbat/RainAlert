@@ -23,11 +23,6 @@ services:
         value: "10"
       - key: WEATHER_TIMEOUT
         value: "10"
-      # Follow the visitor's Accept-Language header for weekday names. The
-      # image compiles in every locale the app supports, so this cannot fall
-      # back to English for a supported language.
-      - key: DATE_LOCALE
-        value: auto
       # Optional donation link. Voluntary one-off donations only: Open-Meteo's
       # free terms are non-commercial, so the page behind this link must not
       # sell memberships, extras or subscriptions. Remove the line to hide it.

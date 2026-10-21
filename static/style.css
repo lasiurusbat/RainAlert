@@ -159,7 +159,6 @@ button:hover {
     --severity-accent: #6c7a89;
     --severity-tint: #f7f9fa;
     display: flex;
-    justify-content: space-between;
     align-items: center;
     gap: 0.5rem 1rem;
     /* Wrap rather than squeeze the two columns on narrow screens. */
@@ -212,6 +211,9 @@ button:hover {
     align-items: center;
     gap: 0.45rem;
     min-width: 0;
+    /* The date takes the slack. The two right-hand cells are fixed-width
+       columns, so the numbers line up down the list instead of floating. */
+    flex: 1 1 auto;
 }
 
 /* The dot carries the band colour; the legend below the form explains what
@@ -226,14 +228,33 @@ button:hover {
 
 /* The legend maps each band colour to a word, once, instead of repeating
    the word on every row - seven repeated labels do not fit on one line
-   beside the date and would double the height of the list. */
+   beside the date and would double the height of the list.
+
+   The same row doubles as the header row for the list below it: the two
+   column headings sit on the right, above the two columns they head. That
+   costs no extra height, and the card is already at its vertical limit. */
 .severity-legend {
     display: flex;
     flex-wrap: wrap;
-    gap: 0.2rem 0.9rem;
+    /* The column gap matches the one on .weather-item, so the two column
+       headings sit exactly above the columns they head. */
+    gap: 0.2rem 1rem;
     margin: 0.15rem 0 0.35rem;
     font-size: 0.72rem;
     color: #5d6d7e;
+}
+
+/* The three band names are one group. The group is what takes the slack
+   between the band key and the column headings, exactly as the date takes
+   the slack in a data row - so the two headings line up with their columns
+   at every width, and not only on a wide desktop. */
+.legend-bands {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.2rem 0.9rem;
+    flex: 1 1 auto;
+    min-width: 0;
 }
 
 .legend-item {
@@ -247,15 +268,27 @@ button:hover {
     height: 0.5rem;
 }
 
-/* The temperature switch sits at the right end of the same row as the
-   legend. It is pushed there with margin-left:auto, so it lines up with
-   the right edge of the card however wide the legend text is. */
+/* The heading for the chance column. It is as wide as that column, and
+   pushed to the right of the band legend, so it sits exactly above the
+   numbers it heads. */
+.column-head {
+    color: #5d6d7e;
+    font-weight: 600;
+    white-space: nowrap;
+    text-align: right;
+    margin-left: auto;
+    flex: 0 0 4.75rem;
+}
+
+/* The temperature switch is the heading for the temperature column, so it
+   gets that column's width and its contents are pushed to the right. That
+   puts the switch directly above the temperatures. */
 .unit-switch {
     display: flex;
     align-items: center;
     gap: 0.15rem;
-    margin-left: auto;
-    padding-left: 0.6rem;
+    flex: 0 0 5.25rem;
+    justify-content: flex-end;
 }
 
 .unit-option {
@@ -289,10 +322,19 @@ button:hover {
     color: #ffffff;
 }
 
+/* The chance column. The width is the widest value it has to hold: the
+   umbrella icon plus "100%" is 68px and "unknown" is 70px, so 76px. The
+   icon sits inside the column, so the digits' right edge is the same on
+   every row and the column reads as a column. */
 .rain-chance {
     color: var(--severity-text);
     font-weight: bold;
     white-space: nowrap;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 0.2rem;
+    flex: 0 0 4.75rem;
 }
 
 /* --- Hour-by-hour strip ----------------------------------------------------
@@ -567,14 +609,44 @@ button:hover {
     font-weight: 600;
 }
 
+/* The umbrella icon. The gap to the number is the flex gap on the chance
+   column, so the icon sits the same distance from the number on every
+   row. */
 .umbrella {
-    margin-right: 0.2rem;
     font-size: 1.05em;
 }
 
+/* The temperature column. The width is the widest value it has to hold:
+   "-12° / -18°" is 78px and "100° / -40°" is 81px, so 84px. */
 .temp {
     color: #5d6d7e;
     font-weight: normal;
+    white-space: nowrap;
+    text-align: right;
+    flex: 0 0 5.25rem;
+}
+
+/* --- Narrow screens --------------------------------------------------------
+   Below this width the date, the chance and the temperature no longer fit on
+   one line, and letting flexbox wrap them where it liked gave a different
+   layout on every row - a longer weekday name pushed its own row over the
+   line, and the columns drifted out of alignment with the headings above
+   them. So the narrow layout is decided here instead: the date takes a line
+   of its own, and the two columns share the line below it, right-aligned.
+
+   The legend row does the same thing, so the headings still sit exactly
+   above the columns they head. */
+@media (max-width: 559px) {
+    .date,
+    .legend-bands {
+        flex: 1 0 100%;
+    }
+
+    /* The chance column takes the slack on the second line, which puts both
+       columns at the right edge, as they are on a wide screen. */
+    .rain-chance {
+        margin-left: auto;
+    }
 }
 
 /* Visually hidden, but still read by screen readers. */

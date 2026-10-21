@@ -60,9 +60,9 @@ jobs:
 
       - uses: docker/setup-buildx-action@v3
 
-      # The tests run inside the image because the suite expects German
-      # weekday names (de_DE), which the image installs and a stock runner
-      # does not. It also tests exactly what will be shipped.
+      # The tests run inside the image, so that what is tested is exactly
+      # what will be shipped. The suite needs no locale any more: the
+      # weekday names are hard-coded, so it passes on a stock runner too.
       - name: Build image (linux/amd64, loaded locally)
         uses: docker/build-push-action@v6
         with:
