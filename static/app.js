@@ -297,10 +297,254 @@
         }
     }
 
+    /* --- Notifications ------------------------------------------------------
+     * Tier 2: a notification while the tab is open. The page polls the
+     * server for something worth saying and shows it as a browser
+     * notification.
+     *
+     * What is worth saying is decided on the server, in app.py, so it is
+     * one rule with tests behind it rather than a string in this script.
+     * The browser's part is narrow: ask for permission, poll, and show
+     * what comes back.
+     */
+    var NOTIFY_ON_KEY = "rainalert.notify.on";
+    var NOTIFY_SEEN_KEY = "rainalert.notify.seen";
+
+    /* The keys of the events already shown are kept, so the same news is
+     * not announced twice. There is at most one event per check, and the
+     * oldest keys are dropped once the list grows. */
+    var MAX_SEEN_KEYS = 40;
+
+    /* How often to poll, in minutes. The server says how often it wants
+     * to be asked; this is the value used until the first answer. */
+    var DEFAULT_POLL_MINUTES = 30;
+    var pollMinutes = DEFAULT_POLL_MINUTES;
+    var notifyTimer = null;
+
+    var notifyButton = document.getElementById("notify-toggle");
+    var notifyIcon = notifyButton
+        ? notifyButton.querySelector(".notify-icon") : null;
+    var notifyText = notifyButton
+        ? notifyButton.querySelector(".notify-text") : null;
+
+    function notificationsSupported() {
+        /* The Notification API only exists in a secure context, which
+         * means HTTPS or localhost. On plain HTTP there is nothing to
+         * offer the reader, so the button stays away. */
+        if (window.isSecureContext === false) { return false; }
+        return typeof window.Notification === "function";
+    }
+
+    function notifyEnabled() {
+        return read(localStore(), NOTIFY_ON_KEY) === "1";
+    }
+
+    function setNotifyEnabled(enabled) {
+        if (enabled) {
+            write(localStore(), NOTIFY_ON_KEY, "1");
+        } else {
+            remove(localStore(), NOTIFY_ON_KEY);
+        }
+    }
+
+    function seenKeys() {
+        var raw = read(localStore(), NOTIFY_SEEN_KEY);
+        if (!raw) { return []; }
+        try {
+            var parsed = JSON.parse(raw);
+            return Array.isArray(parsed) ? parsed : [];
+        } catch (error) {
+            return [];
+        }
+    }
+
+    function rememberKey(key) {
+        var keys = seenKeys();
+        if (keys.indexOf(key) !== -1) { return; }
+        keys.push(key);
+        while (keys.length > MAX_SEEN_KEYS) { keys.shift(); }
+        write(localStore(), NOTIFY_SEEN_KEY, JSON.stringify(keys));
+    }
+
+    function currentCity() {
+        var searched = (body.getAttribute("data-city") || "").trim();
+        if (searched) { return searched; }
+        return savedCity();
+    }
+
+    function setNotifyLabel(icon, text) {
+        if (notifyIcon) { notifyIcon.textContent = icon; }
+        if (notifyText) { notifyText.textContent = text; }
+    }
+
+    function updateNotifyButton() {
+        if (!notifyButton) { return; }
+        if (!notificationsSupported()) {
+            /* The browser cannot show notifications, so there is no
+             * button to offer. */
+            notifyButton.hidden = true;
+            return;
+        }
+        notifyButton.hidden = false;
+
+        var permission = window.Notification.permission;
+        if (permission === "denied") {
+            /* The browser will not ask again, and the reader cannot undo
+             * it from here. Say so instead of offering a button that
+             * cannot work. */
+            notifyButton.disabled = true;
+            setNotifyLabel("🔕", "Notifications blocked");
+            return;
+        }
+        notifyButton.disabled = false;
+        if (permission === "granted" && notifyEnabled()) {
+            setNotifyLabel("🔔", "Notifications on");
+        } else {
+            setNotifyLabel("🔔", "Notify me");
+        }
+    }
+
+    function showEvent(event) {
+        if (!event || !event.key) { return; }
+        if (seenKeys().indexOf(event.key) !== -1) {
+            /* Already shown. The same rain is not news twice. */
+            return;
+        }
+        rememberKey(event.key);
+        try {
+            var notification = new window.Notification(event.title, {
+                body: event.body,
+                tag: event.key
+            });
+            notification.onclick = function () {
+                window.focus();
+                notification.close();
+            };
+        } catch (error) {
+            /* The browser refused to show it. Nothing to do about it. */
+        }
+    }
+
+    function checkForecast() {
+        if (typeof window.fetch !== "function") { return; }
+        var city = currentCity();
+        if (!city) { return; }
+
+        var url = "/api/alert?city=" + encodeURIComponent(city);
+        var threshold = savedThreshold();
+        if (threshold !== null) {
+            url += "&threshold=" + encodeURIComponent(threshold);
+        }
+
+        window.fetch(url, {headers: {"Accept": "application/json"}})
+            .then(function (response) {
+                return response.ok ? response.json() : null;
+            })
+            .then(function (data) {
+                if (!data) { return; }
+                if (data.poll_minutes && data.poll_minutes !== pollMinutes) {
+                    pollMinutes = data.poll_minutes;
+                    startNotifyTimer();
+                }
+                showEvent(data.event);
+            })
+            .catch(function () {
+                /* The network or the service is down. There is nothing to
+                 * say, and nothing to break the page over. */
+            });
+    }
+
+    function startNotifyTimer() {
+        stopNotifyTimer();
+        notifyTimer = window.setInterval(
+            checkForecast, Math.max(1, pollMinutes) * 60000);
+    }
+
+    function stopNotifyTimer() {
+        if (notifyTimer !== null) {
+            window.clearInterval(notifyTimer);
+            notifyTimer = null;
+        }
+    }
+
+    function onPermissionResult(result) {
+        if (result === "granted") {
+            setNotifyEnabled(true);
+            startNotifyTimer();
+            checkForecast();
+        }
+        updateNotifyButton();
+    }
+
+    function onNotifyClick() {
+        if (!notificationsSupported()) { return; }
+        var permission = window.Notification.permission;
+        if (permission === "denied") { return; }
+
+        if (permission === "granted" && notifyEnabled()) {
+            /* Switched off again. The browser keeps the permission; the
+             * reader only stops being told. */
+            setNotifyEnabled(false);
+            stopNotifyTimer();
+            updateNotifyButton();
+            return;
+        }
+
+        if (permission === "granted") {
+            /* The browser already said yes, and the reader is turning
+             * them on now. */
+            onPermissionResult("granted");
+            return;
+        }
+
+        /* The browser only asks for permission from a click, and this is
+         * a click. */
+        var asked = null;
+        try {
+            asked = window.Notification.requestPermission();
+        } catch (error) {
+            asked = null;
+        }
+        if (asked && typeof asked.then === "function") {
+            asked.then(onPermissionResult).catch(function () {
+                updateNotifyButton();
+            });
+        } else {
+            try {
+                window.Notification.requestPermission(onPermissionResult);
+            } catch (error) {
+                updateNotifyButton();
+            }
+        }
+    }
+
+    /* --- The service worker --------------------------------------------------
+     * The app can be installed on a phone, and it opens without a network.
+     * Registering the worker is best-effort: a browser that refuses it, or
+     * a page opened over plain HTTP, simply goes on without it. Nothing
+     * else in the app depends on it.
+     */
+    function registerServiceWorker() {
+        if (!("serviceWorker" in navigator)) { return; }
+        /* A worker only runs in a secure context, which means HTTPS or
+         * localhost. */
+        if (window.isSecureContext === false) { return; }
+
+        window.addEventListener("load", function () {
+            navigator.serviceWorker.register("/service-worker.js")
+                .catch(function () {
+                    /* The app works without it. Only the offline shell and
+                     * the install prompt are lost. */
+                });
+        });
+    }
+
     /* --- Starting up --------------------------------------------------------- */
     function start() {
         document.documentElement.classList.remove("no-js");
         document.documentElement.classList.add("js");
+
+        registerServiceWorker();
 
         promotePendingCity();
 
@@ -319,6 +563,18 @@
         }
         if (form) {
             form.addEventListener("submit", onSubmit);
+        }
+        if (notifyButton) {
+            notifyButton.addEventListener("click", onNotifyClick);
+            updateNotifyButton();
+            if (notifyEnabled()
+                    && notificationsSupported()
+                    && window.Notification.permission === "granted") {
+                /* The reader asked for these before and the browser still
+                 * says yes. The forecast on the page is fresh, so the
+                 * first check waits for the timer. */
+                startNotifyTimer();
+            }
         }
 
         refresh();

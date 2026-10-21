@@ -36,6 +36,10 @@ CLAUDE.md
 RainAlert-Ideas-for-Alerting-Users.md
 render.yaml
 
+# Development tools. The icon generator needs a browser, and the icons it
+# writes are committed, so nothing in the image needs it.
+tools
+
 # Editor and OS noise
 .idea
 .vscode

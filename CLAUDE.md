@@ -25,8 +25,8 @@ Serves on <http://127.0.0.1:5000>. `FLASK_DEBUG=1` enables the reloader and
 debugger.
 
 ```bash
-python -m unittest test_app    # offline suite, 183 tests, no network
-python -m unittest test_browser  # browser suite, 17 tests, needs Chrome
+python -m unittest test_app    # offline suite, 233 tests, no network
+python -m unittest test_browser  # browser suite, 37 tests, needs Chrome
 python -m unittest test_api     # live integration tests, hits both APIs
 ```
 
@@ -100,10 +100,15 @@ nothing else.
 | `app.py` | The whole app: routes, geocoding, forecast fetching, formatting |
 | `templates/index.html` | Single page; inline styles are out, classes live in `style.css` |
 | `static/style.css` | All styling |
-| `static/app.js` | The browser half: saved city and personal alert threshold |
-| `static/image/` | Background photo |
+| `static/app.js` | The browser half: saved city, personal alert threshold, notifications |
+| `static/manifest.json` | The web app manifest: the app's name, icons and install metadata |
+| `static/service-worker.js` | The service worker: caches the shell, never the forecast |
+| `static/offline.html` | The page shown when the server cannot be reached |
+| `static/icon-*.png` | The install icons: 180, 192, 512 and a maskable 512 |
 | `static/favicon.svg` | Tab icon |
 | `static/favicon-rain.svg` | Tab icon when rain is coming |
+| `static/image/` | Background photo |
+| `tools/make_icons.py` | Regenerates the install icons from the brand mark (not run by CI) |
 | `test_app.py` | Offline unit tests, HTTP fully mocked |
 | `test_browser.py` | Browser tests, real headless Chrome, no network |
 | `test_api.py` | Live integration tests |
@@ -369,6 +374,71 @@ private mode, or one where the reader has blocked site data, throws on the
 first access. The helpers swallow that, so a browser that refuses to store
 anything loses the feature instead of breaking the page.
 
+**The notification is the same rule, delivered in the background.** Tier 2's
+second half: the page polls `/api/alert` every `NOTIFICATION_POLL_MINUTES`
+while it is open, and the server answers with at most one event — rain in the
+current hour, or rain starting within `NOTIFICATION_LEAD_HOURS`.
+
+- **The decision is on the server, not in the script.** `notification_event()`
+  in `app.py` decides what is worth interrupting a reader for and writes the
+  wording; the browser only asks, shows and remembers. That keeps the rule
+  behind the offline test suite instead of inside a string in `app.js`.
+- **The event's key is what stops a repeat.** The key is the day for the
+  "right now" event and the hour for the one that is coming, and the browser
+  keeps the keys it has already shown. A poll that lands twice in the same wet
+  hour, or two open tabs, do not say it twice.
+- **The notification uses the reader's own threshold when there is one**, and
+  says so in the body ("Above your 40% threshold."). Without a threshold it
+  uses `UMBRELLA_THRESHOLD` and it is the app's advice, umbrella and all —
+  the same split as the ▲ marker, for the same reason.
+- **The button lives in the hourly title row**, because the card has no
+  vertical room for another line: the card is 702px and the page fits a
+  768px window with no scrollbar. The `.hourly-head` row takes the button on
+  the right of the title, so it costs the 2px the button is taller than the
+  title, not a whole line.
+- **The button is `hidden` in the markup** and only revealed by the script,
+  and only when `Notification` exists and the context is secure. A browser
+  that cannot show notifications never gets a dead button; one that has
+  blocked them gets a disabled "Notifications blocked".
+- **This is the browser's edge, and the page does not pretend otherwise.** It
+  only works while the tab is open. Real push is Tier 3 and needs a server, a
+  database and a scheduler.
+
+**The app is installable, and the two caching rules are the whole design.**
+`static/manifest.json` and `static/service-worker.js` are served from the
+**root** — `/manifest.json` and `/service-worker.js` — by two thin routes in
+`app.py`, so the manifest's scope and the worker's scope are the whole site
+rather than `/static/`. The worker is also sent with `Service-Worker-Allowed: /`
+so the header cannot contradict the path. The manifest carries the three icons
+a browser needs to offer the install (192, 512 and a maskable 512, whose
+safe zone the generator keeps clear), and `templates/index.html` links it with
+`{{ url_for('manifest') }}` next to a `theme-color` meta and an
+`apple-touch-icon`.
+
+- **The forecast is never cached.** A navigation is network-first and
+  bypasses the browser's own cache as well (`fetch(request, {cache:
+  'no-store'})`), `/api/` is never intercepted at all, and `/` is deliberately
+  absent from the shell list — there is a test that asserts it. A rain chance
+  from yesterday is wrong, so it is never replayed.
+- **The shell is cached**, so an installed app opens without a network and
+  shows `static/offline.html` instead of the browser's error screen. The
+  shell is the stylesheet, the script, the icons and the background photo:
+  the files that make the page *look* like Rain Alert, and nothing that
+  carries data. The offline page says plainly that the forecast cannot be
+  fetched, and shows no forecast.
+
+**Bump `CACHE_VERSION` in `static/service-worker.js` when the shell
+changes.** The old caches are dropped when the new worker takes over, and
+the shell is refreshed in the background, so a reader gets the new files on
+the load after the one that fetched them. Without the bump, a changed
+`style.css` or `app.js` keeps being served from the cache.
+
+**The worker registers itself only when it can work.** `static/app.js` checks
+for `serviceWorker` in `navigator` and for `window.isSecureContext`, and
+registers on `load`. `http://127.0.0.1` and `http://localhost` are secure
+contexts, so it works in local development, and a failure is swallowed
+because the app works without it.
+
 ## Gotchas
 
 - **`strftime('%A')` follows the process locale**, which is why the weekday
@@ -382,6 +452,12 @@ anything loses the feature instead of breaking the page.
 - **The CSS file once contained a literal `\n`** (backslash-n, not a
   newline) that silently swallowed the next declaration. If `background-size`
   ever stops applying, check for stray escape sequences in the raw bytes.
+- **The `hidden` attribute loses to a class that sets `display`.** The UA
+  stylesheet's `[hidden] { display: none }` is weaker than
+  `.notify-toggle { display: inline-flex }`, so a button that is hidden in the
+  markup would still show up. The rule `.notify-toggle[hidden] { display:
+  none; }` is there for exactly that, and it is what keeps the notification
+  button from being a dead button before the script has run.
 - **The browser suite needs Chrome and selenium, and skips without them.**
   `test_browser.py` is not in the image: the image installs no system
   packages, so there is no Chrome in it. It runs on the CI runner instead,
@@ -400,10 +476,11 @@ anything loses the feature instead of breaking the page.
 - **The `<title>` and the icon are template variables, not static markup.**
   `index()` passes `page_title` and `favicon` to the template, so any route
   that renders `index.html` has to pass them too — otherwise the title
-  renders empty and the icon URL breaks. There is one route today, and it
-  keeps the plain "Rain Alert" title and the default icon whenever there is
-  no forecast, which is the case for the empty page and for every error
-  page.
+  renders empty and the icon URL breaks. There is one route that renders the
+  template today — the other three (`/api/alert`, `/manifest.json` and
+  `/service-worker.js`) do not — and it keeps the plain "Rain Alert" title
+  and the default icon whenever there is no forecast, which is the case for
+  the empty page and for every error page.
 - **The page is a `.page` flex wrapper around `.container` plus the
   copyright footer.** `margin: auto` lives on `.page`, not on `.container`.
   The footer sits over the background photo, so it is white text with a
@@ -475,6 +552,23 @@ anything loses the feature instead of breaking the page.
   resolved). When the forecast endpoint fails, the app correctly shows "The
   weather service is unavailable right now" — that is the app behaving
   properly, not a regression.
+- **A service worker's scope is the path it is served from.** Served from
+  `/static/service-worker.js` it would control `/static/` and nothing else,
+  and the page at `/` would never be under its control. The
+  `Service-Worker-Allowed: /` header widens the scope, but serving the
+  worker from the root is simpler and needs no header to be right.
+- **`unittest` builds a new test instance per test method.** Anything that
+  has to survive from one test to the next — a server that was restarted, a
+  shared browser, a list of recorded connections — has to live on the class,
+  not on `self`, or the next test never sees it.
+- **Closing a Werkzeug server can block for minutes.** `server_close()` joins
+  the keep-alive handler threads, so the open connections have to be shut
+  down first. The offline browser tests record every connection the server
+  accepts and close them all before the server goes away.
+- **CDP's `Network.emulateNetworkConditions` does not reach a service
+  worker's own `fetch()`.** Emulating an offline network in the page does
+  not make the worker's navigation fail, so the offline test takes the
+  server away for real instead of pretending.
 
 ## Conventions
 

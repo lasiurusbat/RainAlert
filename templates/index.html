@@ -4,7 +4,12 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{ page_title }}</title>
+    <meta name="theme-color" content="#3498db">
     <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename=favicon) }}">
+    <!-- The installable app: the manifest names the icons and the colours,
+         and the service worker makes the app open without a network. -->
+    <link rel="manifest" href="{{ url_for('manifest') }}">
+    <link rel="apple-touch-icon" href="{{ url_for('static', filename='icon-180.png') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
     <script src="{{ url_for('static', filename='app.js') }}" defer></script>
 </head>
@@ -60,7 +65,19 @@
                     {% endif %}
                     {% if hourly_data %}
                     <div class="hourly">
-                        <h4 class="hourly-title">Today, hour by hour</h4>
+                        <div class="hourly-head">
+                            <h4 class="hourly-title">Today, hour by hour</h4>
+                            <!-- The notification control. It asks the browser
+                                 for permission and then polls the forecast
+                                 while the tab is open. It stays hidden until
+                                 the script has run and the browser can show a
+                                 notification, so it is never a dead button. -->
+                            <button type="button" id="notify-toggle" class="notify-toggle" hidden
+                                    title="Get a browser notification when rain is about to start. This tab has to stay open.">
+                                <span class="notify-icon" aria-hidden="true">🔔</span>
+                                <span class="notify-text">Notify me</span>
+                            </button>
+                        </div>
                         {% if hourly_summary %}
                         <p class="hourly-summary">{{ hourly_summary }}</p>
                         {% endif %}

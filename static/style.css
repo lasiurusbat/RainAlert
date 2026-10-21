@@ -365,6 +365,58 @@ button:hover {
     line-height: 1.2;
 }
 
+/* The title row of the hourly block. The notification control sits on the
+   right of it, on the line the title already takes, so the card does not
+   grow by a line for it. */
+.hourly-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+}
+
+/* The notification control: a small, quiet button. It belongs next to the
+   hourly title because the notification says the same thing the strip
+   says, only in the background. */
+.notify-toggle {
+    width: auto;
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.2rem;
+    padding: 0.05rem 0.4rem;
+    font-size: 0.65rem;
+    font-weight: 600;
+    line-height: 1.2;
+    color: #1a5e96;
+    background: #ffffff;
+    border: 1px solid #cfe0ec;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+/* The hidden attribute has to win against the display above, or the button
+   shows up before the script has decided it can do anything. */
+.notify-toggle[hidden] {
+    display: none;
+}
+
+.notify-toggle:hover,
+.notify-toggle:focus-visible {
+    border-color: #2e86c1;
+}
+
+.notify-toggle:focus-visible {
+    outline: none;
+}
+
+/* A browser that will not show notifications has no button to offer. */
+.notify-toggle[disabled] {
+    color: #7f8c8d;
+    border-color: #dde3e6;
+    cursor: default;
+}
+
 /* The strip is a flex row of equal columns and the axis below it is the
    same row of cells, so every label sits under its own bar. The 2px gap is
    the surface gap that separates one bar from the next - no borders. */
@@ -697,6 +749,44 @@ button:hover {
     color: #c0392b;
     font-size: 0.7em;
     line-height: 1;
+}
+
+/* --- The offline page ------------------------------------------------------
+   The page the service worker shows when there is no network. It says what
+   is wrong, and it shows no forecast at all: a stale rain chance is worse
+   than none. */
+.offline-lead {
+    color: #2c3e50;
+    font-size: 0.9rem;
+    line-height: 1.4;
+    text-align: center;
+    margin: 0.6rem 0 0.4rem;
+}
+
+.offline-note {
+    color: #5d6d7e;
+    font-size: 0.78rem;
+    line-height: 1.4;
+    text-align: center;
+    margin: 0 0 0.8rem;
+}
+
+/* The retry is a link, not a button, so it works without JavaScript. It
+   is styled like the search button because it is the same action. */
+.offline-retry {
+    display: block;
+    padding: 0.75rem;
+    background-color: #3498db;
+    color: #ffffff;
+    border-radius: 5px;
+    text-align: center;
+    text-decoration: none;
+    font-size: 1rem;
+}
+
+.offline-retry:hover,
+.offline-retry:focus-visible {
+    background-color: #2980b9;
 }
 
 /* --- Narrow screens --------------------------------------------------------

@@ -13,7 +13,7 @@ from urllib.parse import urlsplit
 
 import requests
 from dotenv import load_dotenv
-from flask import Flask, render_template, request
+from flask import Flask, jsonify, render_template, request, send_from_directory
 from geopy.exc import GeocoderQueryError, GeocoderServiceError, GeocoderTimedOut
 from geopy.geocoders import Nominatim
 
@@ -55,6 +55,23 @@ TEMPERATURE_UNITS = ("celsius", "fahrenheit")
 DEFAULT_TEMPERATURE_UNIT = os.getenv("TEMPERATURE_UNIT", "celsius")
 if DEFAULT_TEMPERATURE_UNIT not in TEMPERATURE_UNITS:
     DEFAULT_TEMPERATURE_UNIT = "celsius"
+
+# --- Notifications -----------------------------------------------------------
+# Tier 2 on the browser side: a notification while the tab is open. The page
+# polls the /api/alert endpoint every NOTIFICATION_POLL_MINUTES and shows a
+# notification when the forecast says rain is about to start.
+#
+# The rule that decides what is worth interrupting the reader for lives here,
+# not in the browser, so it is one piece of code with offline tests behind it
+# rather than a string in a script.
+
+# How often the browser checks the forecast, in minutes.
+NOTIFICATION_POLL_MINUTES = int(os.getenv("NOTIFICATION_POLL_MINUTES", "30"))
+
+# How far ahead a rain warning is worth sending. The poll is every half
+# hour, so a two-hour lead means the reader hears about the rain between
+# half an hour and two hours before it starts.
+NOTIFICATION_LEAD_HOURS = int(os.getenv("NOTIFICATION_LEAD_HOURS", "2"))
 
 
 def clean_donation_url(value):
@@ -687,6 +704,114 @@ def tab_alert(forecast, remaining_hours=None):
     return None
 
 
+# --- Notifications -----------------------------------------------------------
+# Two things are worth interrupting a reader for: rain in the hour they are
+# in right now, and rain about to start. Everything else is either already on
+# the page or too far away to be worth a notification.
+#
+# Each event carries a key. The browser keeps the keys of the events it has
+# already shown, so the same rain is never announced twice, and a poll that
+# lands in the same wet hour has nothing new to say.
+
+
+def notification_threshold(personal):
+    """The rain chance at which a notification is worth sending.
+
+    The reader's own threshold is used when they have set one - it answers
+    their question, not the app's. Without one, the app's umbrella threshold
+    is used, which is the advice the rest of the page gives.
+
+    The second value says which of the two it is, so the notification can
+    say so: the reader's own limit and the app's advice never stand in for
+    each other.
+    """
+    if personal is None or str(personal).strip() == "":
+        return UMBRELLA_THRESHOLD, False
+    try:
+        value = int(str(personal).strip())
+    except (TypeError, ValueError):
+        return UMBRELLA_THRESHOLD, False
+    return max(0, min(100, value)), True
+
+
+def hour_moment(hour):
+    """The local time of an hourly entry, as a datetime."""
+    try:
+        return datetime.fromisoformat(
+            f"{hour.get('day')}T{int(hour.get('hour', 0)):02d}:00")
+    except (TypeError, ValueError):
+        return None
+
+
+def notification_body(chance, city, when, threshold, personal):
+    """The sentence under a notification's title."""
+    percent = round_half_up(chance)
+    sentence = f"{percent}% chance of rain in {city} {when}."
+    if personal:
+        # The reader's own limit, in their own words. The umbrella is the
+        # app's advice and belongs to the page, not to this notification.
+        sentence += f" Above your {threshold}% threshold."
+    elif percent >= UMBRELLA_THRESHOLD:
+        sentence += " Bring an umbrella."
+    return sentence
+
+
+def notification_event(hours, threshold, city, personal=False):
+    """The one notification worth showing right now, or ``None``.
+
+    Rain in the current hour is worth interrupting the reader for: it is
+    happening now, and the umbrella is the answer to it. The key is the day,
+    so a wet afternoon is announced once and not once an hour.
+
+    Rain further ahead is only worth a notification once it is close enough
+    to act on. The first wet hour within ``NOTIFICATION_LEAD_HOURS`` is the
+    one, and its key is the hour, so the same rain is not announced twice
+    when the forecast shifts a little.
+
+    A day the service did not report is never a wet hour: an unknown chance
+    is not a chance of anything.
+    """
+    entries = [hour for hour in (hours or []) if hour.get("day")]
+    remaining = [hour for hour in entries if not hour.get("past")]
+    if not remaining:
+        return None
+
+    current = remaining[0]
+    current_moment = hour_moment(current)
+    if current_moment is None:
+        return None
+
+    current_chance = rain_chance(current.get("chance"))
+    if current_chance is not None and current_chance >= threshold:
+        return {
+            "key": f"now:{current.get('day')}",
+            "title": f"{severity_label(severity_band(current_chance))} right now",
+            "body": notification_body(
+                current_chance, city, "right now", threshold, personal),
+        }
+
+    for hour in remaining[1:]:
+        chance = rain_chance(hour.get("chance"))
+        if chance is None or chance < threshold:
+            continue
+        moment = hour_moment(hour)
+        if moment is None:
+            continue
+        lead = (moment - current_moment).total_seconds() / 3600
+        if lead > NOTIFICATION_LEAD_HOURS:
+            # Too far off to be worth saying now. A later poll catches it
+            # as it comes closer, because the hours are in order.
+            break
+        label = hour.get("time_label") or f"{moment.hour:02d}:00"
+        return {
+            "key": f"hour:{hour.get('day')}T{int(hour.get('hour', 0)):02d}:00",
+            "title": f"{severity_label(severity_band(chance))} from {label}",
+            "body": notification_body(
+                chance, city, f"at {label}", threshold, personal),
+        }
+    return None
+
+
 # --- Data sources ------------------------------------------------------------
 @lru_cache(maxsize=256)
 def get_coordinates(city_name):
@@ -917,6 +1042,87 @@ def index():
         autoload=autoload,
         search_status=search_status,
     )
+
+
+@app.route('/api/alert')
+def api_alert():
+    """What the browser should tell the reader, if anything.
+
+    The page polls this every ``NOTIFICATION_POLL_MINUTES`` while it is
+    open. The answer is one event at most - the one thing worth interrupting
+    the reader for - and the browser keeps the keys of the events it has
+    already shown, so the same news is never announced twice.
+
+    The city comes from the page, so the reader never has to type it again.
+    The threshold is the reader's own, and is optional: without one the
+    app's umbrella threshold is used, which is the advice the page gives.
+    """
+    city = (request.args.get('city') or '').strip()
+    if not city:
+        return jsonify({"error": "Please enter a city name."}), 400
+
+    threshold, personal = notification_threshold(request.args.get('threshold'))
+    try:
+        latitude, longitude, display_city = get_coordinates(city)
+        _, hours = fetch_weather(latitude, longitude)
+    except CityNotFound:
+        return jsonify({
+            "error": "City not found. Please try a different name "
+                     "(e.g., 'Paris')."}), 404
+    except GeocodingUnavailable:
+        app.logger.warning("Geocoding service unavailable for %r", city)
+        return jsonify({
+            "error": "The geocoding service is unavailable right now."}), 503
+    except WeatherUnavailable:
+        app.logger.warning("Forecast service unavailable for %r", city)
+        return jsonify({
+            "error": "The weather service is unavailable right now."}), 503
+
+    remaining = [hour for hour in (hours or []) if not hour.get("past")]
+    now = remaining[0].get("time_label") if remaining else None
+    return jsonify({
+        "city": display_city,
+        "now": now,
+        "threshold": threshold,
+        "personal_threshold": personal,
+        "lead_hours": NOTIFICATION_LEAD_HOURS,
+        "poll_minutes": NOTIFICATION_POLL_MINUTES,
+        "event": notification_event(hours, threshold, display_city, personal),
+    })
+
+
+@app.route('/manifest.json')
+def manifest():
+    """The web app manifest, so the site can be installed on a phone.
+
+    It is served from the root so that its scope can be the whole site:
+    the page is at "/", the alert poll is at "/api/alert" and the worker is
+    at "/service-worker.js", and a manifest served from a subdirectory
+    would default to a scope of that subdirectory.
+    """
+    response = send_from_directory(app.static_folder, 'manifest.json')
+    response.headers['Content-Type'] = 'application/manifest+json'
+    # The manifest names the icons and the colours of the installed app, so
+    # a changed one has to reach the phone straight away.
+    response.headers['Cache-Control'] = 'no-cache'
+    return response
+
+
+@app.route('/service-worker.js')
+def service_worker():
+    """The service worker, served from the root so that it covers the app.
+
+    A worker served from "/static/" would only control "/static/", so it
+    is served from the root instead. The Service-Worker-Allowed header is
+    belt and braces: the scope of a worker is its own path unless the
+    server widens it.
+    """
+    response = send_from_directory(app.static_folder, 'service-worker.js')
+    response.headers['Content-Type'] = 'application/javascript'
+    response.headers['Service-Worker-Allowed'] = '/'
+    # A worker that is cached is a worker that never updates.
+    response.headers['Cache-Control'] = 'no-cache'
+    return response
 
 
 if __name__ == '__main__':

@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#3498db">
+    <title>Offline - Rain Alert</title>
+    <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <!-- The page the service worker shows when there is no network. It is a
+         static file, so it is cached with the rest of the shell and it works
+         with no server at all. -->
+    <div class="page">
+        <div class="container offline">
+            <h1>Rain Alert 🌧️</h1>
+            <p class="offline-lead">You are offline, so the forecast cannot be fetched right now.</p>
+            <p class="offline-note">The last forecast is not shown either. A stale rain chance is worse than none.</p>
+            <a class="offline-retry" href="/">Try again</a>
+        </div>
+
+        <footer class="copyright">
+            Rain Alert © 2026. Vedad Dizdarevic. All rights reserved.
+            <span class="credits">
+                Weather data by <a href="https://open-meteo.com/" target="_blank" rel="noopener noreferrer">Open-Meteo.com</a>
+                (<a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener noreferrer">CC BY 4.0</a>)
+                · Place names © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a> contributors
+            </span>
+        </footer>
+    </div>
+</body>
+</html>

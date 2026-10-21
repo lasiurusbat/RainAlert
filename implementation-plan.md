@@ -1,6 +1,6 @@
 # RainAlert implementation plan
 
-Status as of 2026-10-21. Checked items (`[x]`) are finished and can be seen in
+Status as of 2026-10-22. Checked items (`[x]`) are finished and can be seen in
 the repository. Unchecked items (`[ ]`) are open. Items marked **(verify)** may
 already be done, but nothing in the repository proves it, so they stay open
 until confirmed.
@@ -19,8 +19,11 @@ the page. Tier 1 of the alert ideas is complete: the page colour-codes rain
 risk, shows an hour-by-hour strip for today with a "bring an umbrella"
 summary, leads with a one-line headline, and renames the browser tab and
 swaps the favicon when rain is coming. Tier 2 is also built: the reader's
-city and their own rain threshold live in the browser's `localStorage`, and
-the site stays stateless.
+city and their own rain threshold live in the browser's `localStorage`, the
+site stays stateless, a browser notification says so when rain is about to
+start while the tab is open, and the app is installable: it ships a web
+manifest and a service worker, so it can be added to a home screen and opens
+without a network.
 
 ## 2. Finished
 
@@ -30,7 +33,7 @@ the site stays stateless.
 - [x] Geocoding cache, explicit timeouts, configuration through environment variables
 - [x] City-local dates (`timezone=auto`) and English weekday names
 - [x] Temperature rounding fix (round half up)
-- [x] Offline unit tests (183), browser tests (17) and live API tests (6)
+- [x] Offline unit tests (233), browser tests (37) and live API tests (6)
 - [x] Comprehensive `README.md` with screenshot, `CLAUDE.md` project notes
 
 ### Alert ideas, Tier 1 (done)
@@ -115,8 +118,8 @@ costs. Tier 3 is the step that makes the app a real alert service.
 
 ### Tier 2: browser-side
 - [x] Remember city and threshold in `localStorage`, check on page load. Built in `static/app.js`. Both preferences live in the browser and the server stays stateless; the server only tells the page what kind of page it is through `data-autoload`, `data-search` and `data-city` on `<body>`. A city is only remembered once a search for it has actually worked (the submitted city waits in `sessionStorage` until the result page confirms it), so a typo is never remembered and a failed search does not destroy the saved city. The threshold is marked with its own symbol and its own words, because it answers a different question from the umbrella, and it is compared against the number the page shows so the two can never disagree. Without JavaScript the preferences row is hidden.
-- [ ] Web Notifications while the tab is open
-- [ ] Installable PWA: manifest, service worker, icons
+- [x] Web Notifications while the tab is open. Built as a 🔔 button next to the hourly strip's title, plus a poll of `/api/alert` every 30 minutes. The decision and the wording live on the server, in `notification_event()` in `app.py`, so they are covered by the offline test suite; the browser only asks and shows. Each event carries a key and the browser remembers the keys it has shown, so the same news is never said twice. The reader's own threshold is used when they have set one, and the notification says so; without one it is the app's own umbrella threshold, so the notification is the same alert as the ☔ icon, not a second one. It only works while the tab is open, and the Notification API needs a secure context, so the button says "Notifications blocked" rather than offering something that cannot work.
+- [x] Installable PWA: manifest, service worker, icons. Built as `static/manifest.json` and `static/service-worker.js`, served from the **root** (`/manifest.json`, `/service-worker.js`) so the scope covers the whole site, with four generated PNG icons (180, 192, 512 and a maskable 512) and an `apple-touch-icon`. The worker follows two rules: the forecast is never cached (navigations are network-first with the browser's own cache bypassed, `/api/` is never intercepted, and `/` is absent from the shell list), and the shell is cached so an installed app opens without a network and shows an honest offline page instead of a stale forecast. Bumping `CACHE_VERSION` in the worker is how a changed shell reaches readers. It still cannot push to a closed app — that is Tier 3.
 - [ ] Calendar export (`.ics`) for rainy days
 
 ### Tier 3: server-pushed alerts

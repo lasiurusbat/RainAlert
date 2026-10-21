@@ -58,6 +58,16 @@ user accounts, and nothing to configure before running it.
   an "Alert me above" percentage and the days that reach it are marked with a
   ▲ and a count of how many qualify. Both live in your browser's
   `localStorage`; the server never sees them and the site stays stateless.
+- **A browser notification while the tab is open.** Turn on "Notify me" and the
+  page checks the forecast every half hour and says so when rain is about to
+  start — "Rain likely from 15:00" — even when you are looking at something
+  else. It is the same rule the page uses, and it stops at the edge of your
+  browser: the tab has to be open for it to work.
+- **Installable on a phone.** The app ships a web manifest and a service
+  worker, so it can be added to a home screen and opens like a native app —
+  its own icon, no browser chrome, and an offline page that says plainly that
+  the forecast cannot be fetched. The forecast itself is never cached: a stale
+  rain chance is worse than none.
 - **Honest error handling.** A city that does not exist and a geocoder that is
   temporarily down produce different messages — a network blip never tells a
   user their valid city is missing.
@@ -93,8 +103,8 @@ Python 3.14.5.
 ## Running the tests
 
 ```bash
-python -m unittest test_app    # 183 offline tests, no network required
-python -m unittest test_browser  # 17 browser tests, needs Chrome
+python -m unittest test_app    # 233 offline tests, no network required
+python -m unittest test_browser  # 37 browser tests, needs Chrome
 python -m unittest test_api     # 6 live integration tests, hits both APIs
 ```
 
@@ -210,6 +220,8 @@ in a `.env` file (the app loads one via `python-dotenv`).
 | `UMBRELLA_THRESHOLD` | `50` | Rain chance at or above which the ☔ icon appears |
 | `TEMPERATURE_UNIT` | `celsius` | The scale the temperatures are shown in: `celsius` or `fahrenheit`. The reader can switch on the page, and their choice wins over this default |
 | `DONATION_URL` | empty | An `https://` link to a donation page. When set, a short "Buy me a coffee" line appears under the search button and in the footer. When empty, nothing renders. Anything that is not an absolute `https://` URL is ignored. See [Donations and data credits](#donations-and-data-credits) |
+| `NOTIFICATION_POLL_MINUTES` | `30` | How often the open tab re-checks the forecast for a browser notification |
+| `NOTIFICATION_LEAD_HOURS` | `2` | How far ahead a notification may announce rain that is starting |
 
 Example `.env`:
 
@@ -416,6 +428,72 @@ addition, not a requirement.
 
 ---
 
+## Notifications while the tab is open
+
+Next to the title of the hourly strip there is a small **🔔 Notify me**
+button. Turn it on and the page checks the forecast every half hour and
+raises a browser notification when there is something worth saying:
+
+- **Rain in the hour you are in.** "Rain likely right now — 80% chance of
+  rain in London right now. Bring an umbrella."
+- **Rain about to start**, within the next two hours. "Rain likely from 15:00
+  — 80% chance of rain in London at 15:00. Bring an umbrella."
+
+**The rule is on the server.** `notification_event()` in `app.py` decides what
+is worth interrupting a reader for, and the browser asks `/api/alert` for the
+answer. That keeps the wording and the decision in one place with tests
+behind it, instead of in a string inside `app.js`. The endpoint answers with
+at most one event, and the browser keeps the keys of the events it has already
+shown, so the same rain is never announced twice — not when the poll lands
+twice in the same wet hour, and not when two tabs are open at once.
+
+**Your threshold is used, if you have set one.** The notification fires at your
+own "Alert me above" percentage, and says so — "Above your 40% threshold." —
+because it answers your question, not the app's. Without a threshold it uses
+the app's umbrella threshold, and then it is the app's advice, umbrella and
+all. The two never stand in for each other, exactly as they do on the page.
+
+**This is the edge of what a browser can do, and it is honest about it.** The
+notification only works while the tab is open; close it and nothing is sent.
+That is a browser limit, not a choice, and it is why the next step — real
+push, with a server, a database and a scheduler — is a different piece of
+work. The Notification API also only exists in a secure context, so the button
+stays away on a plain-HTTP address, and a browser that has blocked
+notifications says "Notifications blocked" rather than offering a button that
+cannot work.
+
+---
+
+## Installing the app
+
+The app is a **Progressive Web App**: it can be installed on a phone's home
+screen, or on a desktop, and then opens in its own window with its own icon
+instead of in a browser tab.
+
+- **On Android (Chrome):** open the site, then the browser menu → *Install
+  app* / *Add to Home screen*.
+- **On iOS (Safari):** open the site, tap the share button, then *Add to
+  Home Screen*.
+- **On the desktop (Chrome or Edge):** the install icon appears in the address
+  bar, or it is under the browser menu → *Install*.
+
+Nothing has to be published to an app store, and the installed app is the
+same app: the same forecast, the same tab alert, the same notifications.
+
+**The offline page is honest.** The shell — the stylesheet, the script, the
+icons — is cached, so an installed app opens without a network. What it shows
+then is a short page saying that the forecast cannot be fetched, and *not* a
+stale forecast. A rain chance from yesterday is worse than no rain chance at
+all, so the forecast is never cached: the page always asks the server, and
+falls back to the offline page only when the server cannot be reached.
+
+**What the service worker does not do.** It cannot push a notification to an
+app that is closed. That needs a server, a database and a scheduler — Tier 3
+of the ideas document — and until then the notification reaches you only while
+a tab is open.
+
+---
+
 ## Donations and data credits
 
 **Donation link.** Set `DONATION_URL` to your donation page — for this site
@@ -448,9 +526,16 @@ RainAlert/
 │   └── index.html               # the single page
 ├── static/
 │   ├── style.css                # all styling
-│   ├── app.js                   # saved city and personal alert threshold
+│   ├── app.js                   # saved city, personal alert threshold, notifications
 │   ├── favicon.svg              # tab icon
 │   ├── favicon-rain.svg         # the tab icon when rain is coming
+│   ├── manifest.json            # the web app manifest (installability)
+│   ├── service-worker.js        # the service worker (offline shell)
+│   ├── offline.html             # the page shown when the server cannot be reached
+│   ├── icon-180.png             # iOS home screen icon
+│   ├── icon-192.png             # install icon
+│   ├── icon-512.png             # install icon
+│   ├── icon-maskable-512.png    # install icon, maskable (Android)
 │   └── image/
 │       └── rain-alert-bg.jpg    # background photo (privately owned, see License)
 ├── docs/
@@ -460,6 +545,8 @@ RainAlert/
 ├── test_api.py                  # live integration tests
 ├── requirements.txt             # pinned runtime dependencies
 ├── requirements-dev.txt         # development-only dependencies (selenium)
+├── tools/
+│   └── make_icons.py            # regenerates the install icons from the brand mark
 ├── Dockerfile                   # multi-stage container image
 ├── docker-compose.yml           # local container setup, app + test services
 ├── .dockerignore                # keeps the build context small
@@ -473,8 +560,12 @@ RainAlert/
 ```
 
 `app.py` holds the entire application — routes, geocoding, forecast fetching
-and formatting — in about 670 lines. There is no package structure to
+and formatting — in about 1,100 lines. There is no package structure to
 navigate; a single module is the right size for an app this small.
+
+The install icons are generated, not drawn by hand: `tools/make_icons.py`
+renders the brand mark in headless Chrome and writes the four PNGs. The PNGs
+are committed, so neither the build nor CI ever has to run it.
 
 ---
 
@@ -538,6 +629,66 @@ Every `localStorage` access goes through a try/except. A browser in private
 mode, or one where the reader has blocked site data, throws on the first
 access; the helpers swallow that, so such a browser loses the feature
 instead of breaking the page.
+
+### The notification endpoint
+
+`/api/alert` is the one JSON route. The page polls it while it is open, and
+it answers with at most one event — the one thing worth interrupting the
+reader for:
+
+```json
+{
+  "city": "London",
+  "now": "09:00",
+  "threshold": 50,
+  "personal_threshold": false,
+  "lead_hours": 2,
+  "poll_minutes": 30,
+  "event": {
+    "key": "hour:2026-10-21T10:00",
+    "title": "Rain likely from 10:00",
+    "body": "80% chance of rain in London at 10:00. Bring an umbrella."
+  }
+}
+```
+
+`event` is `null` when there is nothing to say. The `key` is what the
+browser remembers, so the same event is not shown twice. The endpoint takes
+the city as a query parameter, because the page already knows it, and the
+reader's threshold as an optional second one.
+
+### The manifest and the service worker
+
+Two thin routes serve the two files that make the app installable:
+`/manifest.json` and `/service-worker.js`. They are served from the **root**
+rather than from `/static/`, so the manifest's scope and the worker's scope
+are the whole site; the worker is also sent with `Service-Worker-Allowed: /`
+so the header cannot contradict the path.
+
+The manifest names the app, points `start_url` and `scope` at `/`, asks for
+`display: standalone` so the installed app opens without browser chrome, and
+carries the three icons a browser needs to offer the install: 192 and 512
+pixels, plus a maskable 512 for Android, which crops its own icon to a shape
+and needs the safe zone kept clear.
+
+`static/service-worker.js` follows two rules:
+
+- **The forecast is never cached.** A navigation goes to the network first,
+  with the browser's own cache bypassed as well, and the alert poll is never
+  intercepted at all. A rain chance from yesterday is wrong, so it is never
+  replayed.
+- **The shell is cached**, so the app opens without a network and shows the
+  offline page rather than the browser's error screen. The shell is the
+  stylesheet, the script, the icons and the background photo — the files that
+  make the page *look* like Rain Alert, and nothing that carries data.
+
+The shell list is versioned. Changing a cached file without bumping
+`CACHE_VERSION` in `static/service-worker.js` leaves readers on the old copy,
+because the browser only re-fetches a shell file in the background.
+
+The worker registers itself from `static/app.js`, and only when the browser
+supports service workers and the page is in a secure context — `http://127.0.0.1`
+and `http://localhost` count as secure, so it works in local development.
 
 ### Weekday names
 
@@ -650,6 +801,10 @@ same command.
   different icon, add a second file — do not rewrite the contents of
   `static/favicon.svg`, or the browser keeps showing the old one until the
   cache is cleared.
+- **The service worker caches the shell, never the forecast.** If you change
+  a file in the shell list, bump `CACHE_VERSION` in
+  `static/service-worker.js`, or readers stay on the old copy. Never add the
+  forecast page itself: a stale rain chance is worse than none.
 - **The background photograph is not yours to redistribute.** It is privately
   owned and covered by the restriction in the License section below. Replace
   it with an image you have the right to use, or get written approval
@@ -666,7 +821,8 @@ codebase before.
 Copyright © 2026 Vedad Dizdarevic. All rights reserved.
 
 The favicons (`static/favicon.svg` and `static/favicon-rain.svg`) are
-original to this project.
+original to this project, as are the install icons (`static/icon-*.png`),
+which are rendered from the same mark by `tools/make_icons.py`.
 
 **The background photograph is privately owned.** The image in
 `static/image/rain-alert-bg.jpg` is a privately held work, not a

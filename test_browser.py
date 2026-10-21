@@ -19,7 +19,9 @@ which turns a missing browser into a failure instead of a skip.
 """
 
 import os
+import socket
 import threading
+import time
 import unittest
 from unittest import mock
 
@@ -38,7 +40,7 @@ REQUIRE_BROWSER = os.environ.get("RAINALERT_REQUIRE_BROWSER", "").lower() in {
     "1", "true", "yes",
 }
 
-from werkzeug.serving import make_server
+from werkzeug.serving import WSGIRequestHandler, make_server
 
 import app as rainalert
 
@@ -69,6 +71,25 @@ class FakeLocation:
     raw = {"display_name": "London, England, UK"}
 
 
+# A forecast with rain in the next hour: the hour after the current one
+# (09:00) is at 80%, so there is something worth telling the reader about.
+WET_PAYLOAD = {
+    "daily": {
+        "time": ["2026-10-21", "2026-10-22", "2026-10-23", "2026-10-24",
+                 "2026-10-25", "2026-10-26", "2026-10-27"],
+        "precipitation_probability_max": [100, 86, 40, 15, 5, 60, None],
+        "temperature_2m_max": [11.1, 14.0, 16.7, 12.0, 10.0, 9.0, 8.0],
+        "temperature_2m_min": [8.5, 8.6, 10.3, 7.0, 6.0, 5.0, 4.0],
+    },
+    "hourly": {
+        "time": [f"2026-10-21T{hour:02d}:00" for hour in range(24)],
+        "precipitation_probability": [0] * 10 + [80] + [0] * 13,
+    },
+    "current": {"time": "2026-10-21T09:00"},
+    "utc_offset_seconds": 3600,
+}
+
+
 class FakeResponse:
     def __init__(self, payload=None, status_code=200):
         self._payload = payload if payload is not None else FORECAST_PAYLOAD
@@ -84,17 +105,44 @@ class FakeResponse:
         return self._payload
 
 
-@unittest.skipUnless(
-    HAS_SELENIUM or REQUIRE_BROWSER,
-    "selenium is not installed")
-class BrowserTestCase(unittest.TestCase):
-    """The app on a local port, driven by a real browser."""
+#: Every connection the recording handler has taken, whichever server
+#: object it belongs to.
+RECORDED_CONNECTIONS = []
+
+
+class RecordingHandler(WSGIRequestHandler):
+    """A handler that keeps hold of its connection.
+
+    The offline test has to make the browser's requests fail, and a
+    browser holds its connection open. Closing the listening socket is not
+    enough on its own: the thread serving that connection is still there,
+    and it would answer the next request as if nothing had happened.
+    """
+
+    def setup(self):
+        super().setup()
+        RECORDED_CONNECTIONS.append(self.connection)
+
+
+class BrowserServerMixin:
+    """The app on a local port, driven by a real browser.
+
+    Every test class gets a browser and a port of its own, and so an origin
+    of its own. That matters for the service worker: a worker belongs to
+    the origin it was registered for, so a test that takes the app offline
+    cannot disturb the tests that need it online.
+    """
+
+    #: The request handler the server uses. The offline test needs one that
+    #: keeps hold of its connections.
+    request_handler = None
 
     @classmethod
     def setUpClass(cls):
         if not HAS_SELENIUM:
-            # The decorator above lets this class through when the browser
-            # is required, so the missing driver has to fail loudly here.
+            # The decorator on the test classes lets them through when the
+            # browser is required, so the missing driver has to fail loudly
+            # here.
             if REQUIRE_BROWSER:
                 raise RuntimeError(
                     "selenium is not installed, and the browser tests are "
@@ -126,7 +174,8 @@ class BrowserTestCase(unittest.TestCase):
         cls.mock_geocode = cls.geocode_patcher.start()
         cls.mock_get = cls.get_patcher.start()
 
-        cls.server = make_server("127.0.0.1", 0, rainalert.app, threaded=True)
+        cls.server = make_server("127.0.0.1", 0, rainalert.app, threaded=True,
+                                 request_handler=cls.request_handler)
         cls.port = cls.server.server_port
         cls.base = f"http://127.0.0.1:{cls.port}"
         cls.thread = threading.Thread(target=cls.server.serve_forever, daemon=True)
@@ -155,6 +204,52 @@ class BrowserTestCase(unittest.TestCase):
         """Wait until a JavaScript expression is true."""
         WebDriverWait(self.driver, timeout).until(
             lambda driver: driver.execute_script(script))
+
+    def wait_for_async(self, script, timeout=15):
+        """Wait until a promise in the page reports something true.
+
+        The script has to call the callback it is given, with the value it
+        wants the wait to look at.
+        """
+        WebDriverWait(self.driver, timeout).until(
+            lambda driver: driver.execute_async_script(script))
+
+    def wait_for_the_worker(self):
+        """Wait until the service worker is registered and in charge."""
+        self.wait_for_async("""
+            var done = arguments[arguments.length - 1];
+            navigator.serviceWorker.getRegistration('/').then(function (reg) {
+                done(!!reg);
+            }, function () { done(false); });
+        """)
+        self.wait_for_async("""
+            var done = arguments[arguments.length - 1];
+            done(!!navigator.serviceWorker.controller);
+        """)
+
+    def cached_urls(self):
+        """The URLs the service worker has in its cache."""
+        return self.driver.execute_async_script("""
+            var done = arguments[arguments.length - 1];
+            caches.keys().then(function (names) {
+                return Promise.all(names.map(function (name) {
+                    return caches.open(name).then(function (cache) {
+                        return cache.keys().then(function (keys) {
+                            return keys.map(function (key) { return key.url; });
+                        });
+                    });
+                }));
+            }).then(function (groups) {
+                done([].concat.apply([], groups));
+            }, function () { done([]); });
+        """)
+
+
+@unittest.skipUnless(
+    HAS_SELENIUM or REQUIRE_BROWSER,
+    "selenium is not installed")
+class BrowserTestCase(BrowserServerMixin, unittest.TestCase):
+    """The browser half: the saved city, the threshold, the notifications."""
 
     def marked_chances(self):
         """The rain chance of every day that carries the threshold marker."""
@@ -328,6 +423,401 @@ class BrowserTestCase(unittest.TestCase):
             return row.querySelector('.alert-marker-text').textContent;
         """)
         self.assertEqual(spoken, "Above your 60% alert threshold.")
+
+    # -- notifications --------------------------------------------------------
+
+    def install_notification_stub(self, permission="default", supported=True):
+        """Replace the Notification API before the page's scripts run.
+
+        Chrome's own notifications cannot be seen from a test and the
+        permission prompt cannot be answered, so the API is stubbed: the
+        stub records what would have been shown, and the poll timer runs
+        fast enough for a test not to wait half an hour for it.
+        """
+        source = """
+            (function () {
+                window.__notifications = [];
+                if (!%s) {
+                    window.Notification = undefined;
+                    return;
+                }
+                var stub = function (title, options) {
+                    window.__notifications.push({
+                        title: title,
+                        body: options && options.body,
+                        tag: options && options.tag
+                    });
+                    return {close: function () {}};
+                };
+                stub.permission = '%s';
+                stub.requestPermission = function () {
+                    stub.permission = 'granted';
+                    return Promise.resolve('granted');
+                };
+                window.Notification = stub;
+                var realSetInterval = window.setInterval;
+                window.setInterval = function (fn, delay) {
+                    return realSetInterval(fn, Math.min(delay, 200));
+                };
+            })();
+        """ % ("true" if supported else "false", permission)
+        result = self.driver.execute_cdp_cmd(
+            "Page.addScriptToEvaluateOnNewDocument", {"source": source})
+        return result["identifier"]
+
+    def remove_stub(self, identifier):
+        self.driver.execute_cdp_cmd(
+            "Page.removeScriptToEvaluateOnNewDocument",
+            {"identifier": identifier})
+
+    def notifications_shown(self):
+        return self.driver.execute_script("return window.__notifications;")
+
+    def test_the_button_stays_away_when_the_browser_cannot_notify(self):
+        """A browser without notifications gets no dead button."""
+        identifier = self.install_notification_stub(supported=False)
+        try:
+            self.driver.get(self.base + "/?city=London")
+            self.wait_for("return document.querySelector('.weather-list') !== null;")
+            self.assertFalse(
+                self.driver.find_element(By.ID, "notify-toggle").is_displayed())
+        finally:
+            self.remove_stub(identifier)
+
+    def test_the_button_appears_when_the_browser_can_notify(self):
+        identifier = self.install_notification_stub()
+        try:
+            self.driver.get(self.base + "/?city=London")
+            self.wait_for("return document.querySelector('.weather-list') !== null;")
+            button = self.driver.find_element(By.ID, "notify-toggle")
+            self.assertTrue(button.is_displayed())
+            self.assertIn("Notify me", button.text)
+        finally:
+            self.remove_stub(identifier)
+
+    def test_a_blocked_browser_says_so(self):
+        """A browser that will not ask again cannot be asked from here."""
+        identifier = self.install_notification_stub(permission="denied")
+        try:
+            self.driver.get(self.base + "/?city=London")
+            self.wait_for("return document.querySelector('.weather-list') !== null;")
+            button = self.driver.find_element(By.ID, "notify-toggle")
+            self.assertIn("Notifications blocked", button.text)
+            self.assertFalse(button.is_enabled())
+        finally:
+            self.remove_stub(identifier)
+
+    def test_clicking_the_button_asks_the_browser_for_permission(self):
+        identifier = self.install_notification_stub()
+        try:
+            self.driver.get(self.base + "/?city=London")
+            self.wait_for("return document.querySelector('.weather-list') !== null;")
+            self.driver.find_element(By.ID, "notify-toggle").click()
+            self.wait_for(
+                "return document.getElementById('notify-toggle')"
+                ".textContent.indexOf('Notifications on') !== -1;")
+            self.assertEqual(self.stored("rainalert.notify.on"), "1")
+        finally:
+            self.remove_stub(identifier)
+
+    def test_a_notification_is_shown_when_the_forecast_says_something(self):
+        self.mock_get.return_value = FakeResponse(payload=WET_PAYLOAD)
+        identifier = self.install_notification_stub()
+        try:
+            self.driver.get(self.base + "/?city=London")
+            self.wait_for("return document.querySelector('.weather-list') !== null;")
+            self.driver.find_element(By.ID, "notify-toggle").click()
+            self.wait_for("return window.__notifications.length > 0;")
+            notification = self.notifications_shown()[0]
+            self.assertEqual(notification["title"], "Rain likely from 10:00")
+            self.assertIn("80% chance of rain in London at 10:00.",
+                          notification["body"])
+        finally:
+            self.remove_stub(identifier)
+
+    def test_the_same_news_is_not_shown_twice(self):
+        """The poll runs every 200ms here, so several checks have happened."""
+        self.mock_get.return_value = FakeResponse(payload=WET_PAYLOAD)
+        identifier = self.install_notification_stub()
+        try:
+            self.driver.get(self.base + "/?city=London")
+            self.wait_for("return document.querySelector('.weather-list') !== null;")
+            self.driver.find_element(By.ID, "notify-toggle").click()
+            self.wait_for("return window.__notifications.length > 0;")
+            time.sleep(1)
+            self.assertEqual(len(self.notifications_shown()), 1)
+        finally:
+            self.remove_stub(identifier)
+
+    def test_they_can_be_switched_off_again(self):
+        identifier = self.install_notification_stub()
+        try:
+            self.driver.get(self.base + "/?city=London")
+            self.wait_for("return document.querySelector('.weather-list') !== null;")
+            button = self.driver.find_element(By.ID, "notify-toggle")
+            button.click()
+            self.wait_for(
+                "return document.getElementById('notify-toggle')"
+                ".textContent.indexOf('Notifications on') !== -1;")
+            button.click()
+            self.wait_for(
+                "return document.getElementById('notify-toggle')"
+                ".textContent.indexOf('Notify me') !== -1;")
+            self.assertIsNone(self.stored("rainalert.notify.on"))
+        finally:
+            self.remove_stub(identifier)
+
+    def test_nothing_is_shown_without_a_forecast_to_look_at(self):
+        """A dry day has nothing to say, so nothing is shown."""
+        identifier = self.install_notification_stub()
+        try:
+            self.driver.get(self.base + "/?city=London")
+            self.wait_for("return document.querySelector('.weather-list') !== null;")
+            self.driver.find_element(By.ID, "notify-toggle").click()
+            time.sleep(1)
+            self.assertEqual(self.notifications_shown(), [])
+        finally:
+            self.remove_stub(identifier)
+
+
+@unittest.skipUnless(
+    HAS_SELENIUM or REQUIRE_BROWSER,
+    "selenium is not installed")
+class PwaBrowserTestCase(BrowserServerMixin, unittest.TestCase):
+    """The installable app: the manifest, the icons and the worker.
+
+    These tests have a browser and a port of their own, so the service
+    worker they register belongs to their own origin and cannot disturb
+    the other tests.
+    """
+
+    def manifest(self):
+        return self.driver.execute_async_script("""
+            var done = arguments[arguments.length - 1];
+            fetch('/manifest.json').then(function (response) {
+                return response.json().then(function (data) { done(data); });
+            }, function () { done(null); });
+        """)
+
+    def test_the_page_points_at_the_manifest(self):
+        href = self.driver.execute_script("""
+            var link = document.querySelector('link[rel="manifest"]');
+            return link ? link.getAttribute('href') : null;
+        """)
+        self.assertEqual(href, "/manifest.json")
+
+    def test_the_manifest_names_the_app(self):
+        data = self.manifest()
+        self.assertIsNotNone(data)
+        self.assertEqual(data["short_name"], "Rain Alert")
+        self.assertEqual(data["start_url"], "/")
+        self.assertEqual(data["scope"], "/")
+        self.assertEqual(data["display"], "standalone")
+
+    def test_every_icon_is_served(self):
+        """An icon that is not there is an install prompt that fails."""
+        results = self.driver.execute_async_script("""
+            var done = arguments[arguments.length - 1];
+            fetch('/manifest.json').then(function (response) {
+                return response.json();
+            }).then(function (data) {
+                return Promise.all(data.icons.map(function (icon) {
+                    return fetch(icon.src).then(function (response) {
+                        return {
+                            src: icon.src,
+                            status: response.status,
+                            type: response.headers.get('Content-Type')
+                        };
+                    });
+                }));
+            }).then(done, function () { done(null); });
+        """)
+        self.assertTrue(results)
+        for icon in results:
+            self.assertEqual(icon["status"], 200, icon["src"])
+            self.assertEqual(icon["type"], "image/png", icon["src"])
+
+    def test_the_worker_registers(self):
+        self.wait_for_the_worker()
+        scope = self.driver.execute_async_script("""
+            var done = arguments[arguments.length - 1];
+            navigator.serviceWorker.getRegistration('/').then(function (reg) {
+                done(reg ? reg.scope : null);
+            }, function () { done(null); });
+        """)
+        self.assertEqual(scope, self.base + "/")
+
+    def test_the_worker_takes_over_the_page(self):
+        """The worker has to control the page, or it does nothing."""
+        self.wait_for_the_worker()
+        self.assertTrue(self.driver.execute_script(
+            "return !!navigator.serviceWorker.controller;"))
+
+    def test_the_shell_is_cached(self):
+        """The shell is what makes the app open without a network."""
+        self.wait_for_the_worker()
+        self.wait_for_async("""
+            var done = arguments[arguments.length - 1];
+            caches.keys().then(function (names) {
+                return Promise.all(names.map(function (name) {
+                    return caches.open(name).then(function (cache) {
+                        return cache.keys();
+                    });
+                }));
+            }).then(function (groups) {
+                var urls = [];
+                groups.forEach(function (keys) {
+                    keys.forEach(function (key) { urls.push(key.url); });
+                });
+                done(urls.length > 0);
+            }, function () { done(false); });
+        """)
+        cached = self.cached_urls()
+        for path in ("/static/style.css", "/static/app.js",
+                     "/static/favicon.svg", "/static/offline.html",
+                     "/static/icon-192.png", "/static/icon-512.png"):
+            self.assertIn(self.base + path, cached)
+
+    def test_the_forecast_page_is_not_cached(self):
+        """The page holds the forecast, and a cached forecast is a lie."""
+        self.wait_for_the_worker()
+        self.wait_for_async("""
+            var done = arguments[arguments.length - 1];
+            caches.keys().then(function (names) {
+                return Promise.all(names.map(function (name) {
+                    return caches.open(name).then(function (cache) {
+                        return cache.keys();
+                    });
+                }));
+            }).then(function (groups) {
+                var urls = [];
+                groups.forEach(function (keys) {
+                    keys.forEach(function (key) { urls.push(key.url); });
+                });
+                done(urls.length > 0);
+            }, function () { done(false); });
+        """)
+        for url in self.cached_urls():
+            self.assertNotIn(url, self.base + "/?city=London")
+            self.assertFalse(url.endswith("/?city=London"))
+
+    def test_the_page_still_works_with_the_worker_in_charge(self):
+        """The worker must not get in the way of the app."""
+        self.wait_for_the_worker()
+        self.driver.get(self.base + "/?city=London")
+        self.wait_for("return document.querySelector('.weather-list') !== null;")
+        self.assertIn("Forecast for London", self.driver.page_source)
+
+
+@unittest.skipUnless(
+    HAS_SELENIUM or REQUIRE_BROWSER,
+    "selenium is not installed")
+class OfflineBrowserTestCase(BrowserServerMixin, unittest.TestCase):
+    """The app with the server taken away.
+
+    The service worker is the only thing that can answer a navigation when
+    there is no server, so this is where the offline page is proved. It has
+    a server of its own, because it takes that server away.
+    """
+
+    request_handler = RecordingHandler
+
+    @classmethod
+    def tearDownClass(cls):
+        super().tearDownClass()
+        RECORDED_CONNECTIONS.clear()
+
+    @classmethod
+    def take_the_server_away(cls):
+        """Stop the server, and drop the connections it is holding.
+
+        Three things have to go, in this order. The accept loop first, so
+        that no new connection is taken on. Then the listening socket, so
+        that a new connection is refused instead of being left hanging in
+        the backlog. Then the connections the browser is holding open, or
+        the thread serving one of them would answer the next request as if
+        nothing had happened.
+
+        It is a class method because the server is a class attribute:
+        unittest builds a fresh test instance for every test, so a server
+        kept on the instance would be forgotten by the next test.
+        """
+        cls.server.shutdown()
+        cls.server.socket.close()
+        for connection in list(RECORDED_CONNECTIONS):
+            try:
+                connection.shutdown(socket.SHUT_RDWR)
+            except OSError:
+                pass
+            connection.close()
+        RECORDED_CONNECTIONS.clear()
+        cls.server.server_close()
+
+    @classmethod
+    def bring_the_server_back(cls):
+        cls.server = make_server(
+            "127.0.0.1", cls.port, rainalert.app, threaded=True,
+            request_handler=cls.request_handler)
+        cls.thread = threading.Thread(
+            target=cls.server.serve_forever, daemon=True)
+        cls.thread.start()
+
+    def test_the_offline_page_is_shown_when_the_server_is_gone(self):
+        self.wait_for_the_worker()
+        self.take_the_server_away()
+        try:
+            self.driver.get(self.base + "/?city=London")
+            self.wait_for("return document.title === 'Offline - Rain Alert';")
+            body = self.driver.execute_script(
+                "return document.body.innerText;")
+            self.assertIn("You are offline", body)
+            # It is still Rain Alert, and not a browser error page.
+            self.assertIn("Rain Alert", body)
+            # The stylesheet came from the cache, so the page looks like
+            # the app rather than like a wall of unstyled text.
+            self.assertEqual(
+                self.driver.execute_script(
+                    "return getComputedStyle("
+                    "document.querySelector('.container')).backgroundColor;"),
+                "rgb(255, 255, 255)")
+        finally:
+            self.bring_the_server_back()
+
+    def test_the_offline_page_shows_no_forecast(self):
+        """There is nothing to show, and a stale chance is worse than none."""
+        self.wait_for_the_worker()
+        self.take_the_server_away()
+        try:
+            self.driver.get(self.base + "/?city=London")
+            self.wait_for("return document.title === 'Offline - Rain Alert';")
+            self.assertIsNone(self.driver.execute_script(
+                "return document.querySelector('.weather-list');"))
+        finally:
+            self.bring_the_server_back()
+
+    def test_the_alert_poll_is_not_answered_from_a_cache(self):
+        """A cached alert would be yesterday's rain."""
+        self.wait_for_the_worker()
+        self.take_the_server_away()
+        try:
+            result = self.driver.execute_async_script("""
+                var done = arguments[arguments.length - 1];
+                fetch('/api/alert?city=London').then(
+                    function (response) { done('answered ' + response.status); },
+                    function () { done('failed'); });
+            """)
+            self.assertEqual(result, "failed")
+        finally:
+            self.bring_the_server_back()
+
+    def test_the_app_works_again_when_the_server_comes_back(self):
+        """The offline page is a fallback, not a new home."""
+        self.wait_for_the_worker()
+        self.take_the_server_away()
+        self.bring_the_server_back()
+        self.driver.get(self.base + "/?city=London")
+        self.wait_for("return document.querySelector('.weather-list') !== null;")
+        self.assertIn("Forecast for London", self.driver.page_source)
 
 
 if __name__ == "__main__":

@@ -12,7 +12,7 @@ RainAlert is pull-only: users must open it, type a city and read a seven-day lis
 
 The ideas below are grouped by cost: in-page changes first, then browser-side features, then server-pushed notifications.
 
-**Where it stands now:** all four Tier 1 ideas are built — the page colour-codes rain risk, shows an hour-by-hour strip for today with a "bring an umbrella" summary, leads with a one-line headline about the week, and renames the browser tab and swaps the favicon when rain is coming. The first Tier 2 idea is built too: the reader's city and their own rain threshold live in the browser's `localStorage`, and the server stays stateless. The app is still pull-only in the sense that matters here: nothing reaches a user who is not already looking at the page — and nothing reaches anyone at all until it is deployed — and there is still no database, account or background job.
+**Where it stands now:** all four Tier 1 ideas are built — the page colour-codes rain risk, shows an hour-by-hour strip for today with a "bring an umbrella" summary, leads with a one-line headline about the week, and renames the browser tab and swaps the favicon when rain is coming. Three Tier 2 ideas are built too: the reader's city and their own rain threshold live in the browser's `localStorage`, and the server stays stateless; a browser notification says so when rain is about to start while the tab is open; and the app is installable, with a manifest, a service worker and its own icons, so it can live on a home screen and open without a network. The app is still pull-only in the sense that matters here: nothing reaches a user who is not already looking at the page — and nothing reaches anyone at all until it is deployed — and there is still no database, account or background job.
 
 ## Tier 1: In-page alerts (no new infrastructure)
 
@@ -50,10 +50,20 @@ These features keep state in the user's browser, so the server stays stateless.
     - Without JavaScript the preferences row is hidden and the page is exactly what it was before. The server tells the page what kind of page it is through three attributes on `<body>`: `data-autoload`, `data-search` and `data-city`.
     - One limitation to carry into Tier 3: `localStorage` follows the **browser**, not the person. A reader who switches device, or opens the site in a private window, gets a blank slate — the saved city does not follow them. That is the same gap Tier 3's server-side table would close, and it is the strongest argument for having one.
 - **Web Notifications while the tab is open.** A small JS timer re-fetches every 30 minutes and fires a notification such as "Rain starts in about 1 hour". It is simple, but only works while the tab is open.
+  - ✅ **Built.** A 🔔 button next to the hourly strip's title turns the notifications on, and the page polls the server every 30 minutes while it is open.
+    - The **rule is on the server**: `notification_event()` in `app.py` decides what is worth interrupting a reader for — rain in the current hour, or rain starting within the next two hours — and writes the wording. The browser asks `/api/alert` and shows what comes back, so the decision is behind the offline test suite rather than inside a string in `app.js`.
+    - **The same news is never said twice.** Each event carries a key, and the browser remembers the keys it has shown: a poll that lands twice in the same wet hour, or two tabs open at once, do not repeat it.
+    - The **reader's own threshold** is used when they have set one, and the notification says so ("Above your 40% threshold."). Without one it uses the app's umbrella threshold, and then it is the app's advice, umbrella and all — the same split as the ▲ marker, for the same reason.
+    - It says **when**, not how long: "Rain likely from 15:00", with the city's own local hour, exactly like the strip above it.
+    - The limit is the browser's, and the page does not pretend otherwise: it only works while the tab is open, the Notification API only exists in a secure context, and a browser that has blocked notifications says "Notifications blocked" instead of offering a button that cannot work.
 - **Installable PWA.** Add a `manifest.json` and a service worker so users can install the app on a phone home screen. True push when the app is closed needs the server-side component in Tier 3.
+  - ✅ **Built.** `static/manifest.json` and `static/service-worker.js`, served from the **root** (`/manifest.json` and `/service-worker.js`) so the scope covers the whole site, with four generated PNG icons (180, 192, 512 and a maskable 512 for Android) and an `apple-touch-icon` for iOS. The installed app opens in its own window with no browser chrome.
+    - **The forecast is never cached.** A navigation goes to the network first and bypasses the browser's own cache as well, the alert poll is never intercepted, and `/` is deliberately absent from the shell list — there is a test that asserts it. A rain chance from yesterday is wrong, so it is never replayed.
+    - **The shell is cached**, so the app opens without a network and shows a short offline page saying that the forecast cannot be fetched — not a stale forecast. The shell is the stylesheet, the script, the icons and the background photo: the files that make the page *look* like Rain Alert, and nothing that carries data.
+    - **It still cannot reach a closed app.** The service worker caches files; it cannot wake the app and deliver a notification. That is the same Tier 3 gap as the browser notification, and the offline page is the honest face of it.
 - **Calendar export (.ics).** An "Add rainy days to my calendar" button that generates an `.ics` file with an event on each day over the threshold. The user's own calendar app does the alerting, with no notification infrastructure on your side.
 
-Only the saved city and the threshold are built. The other three are not.
+The saved city, the threshold, the browser notification and the installable PWA are built. The calendar export is not.
 
 ## Tier 3: Server-pushed alerts (needs persistence and a scheduler)
 
@@ -83,13 +93,20 @@ Start with the cheap in-page wins, and add real push last, because that step is 
 2. Hour-by-hour "today's rain" strip (Tier 1). — ✅ **Done.**
 3. Tab title and favicon as the alert (Tier 1). — ✅ **Done.**
 4. Saved city and threshold in `localStorage` (Tier 2). — ✅ **Done.**
-5. ntfy.sh or Telegram push (Tier 3), which needs only a SQLite table and one scheduled script. — ⬜ **Not started.**
+5. Web notifications while the tab is open (Tier 2). — ✅ **Done.**
+6. Installable PWA (Tier 2). — ✅ **Done.**
+7. ntfy.sh or Telegram push (Tier 3), which needs only a SQLite table and one scheduled script. — ⬜ **Not started.**
 
 Steps 1 to 3 give an immediate "alert" feel in an afternoon, and together they
 finish Tier 1. Step 4 is the first Tier 2 feature: it is the one that makes
-the app remember you, and it needs no backend at all. Step 0 was not in the
+the app remember you, and it needs no backend at all. Step 5 is the second
+half of Tier 2: the tab now says something even when the reader is looking at
+something else, which is as far as a browser can go on its own. Step 6
+finishes Tier 2: the app lives on a home screen and opens without a network,
+which is the last thing a browser can do by itself. Step 0 was not in the
 original list, because the app was assumed to be up; it is now first, and
-step 5 is not worth building until there is a site to push to.
+step 7 is not worth building until there is a site to push to — a tab that
+is open can talk to the server, and a tab that is closed cannot.
 
 ## Codebase notes to keep in mind
 

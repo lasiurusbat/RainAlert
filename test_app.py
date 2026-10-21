@@ -4,6 +4,7 @@ Everything is mocked at the HTTP boundary, so the suite runs offline and
 never touches Nominatim or Open-Meteo.
 """
 
+import json
 import re
 import unittest
 from unittest import mock
@@ -1427,6 +1428,232 @@ class TestBrowserPreferences(AppTestCase):
         self.assertIn('data-unit="fahrenheit"', body)
 
 
+class TestNotificationThreshold(unittest.TestCase):
+    """Which rain chance is worth a notification."""
+
+    def test_without_one_the_apps_own_threshold_is_used(self):
+        threshold, personal = rainalert.notification_threshold(None)
+        self.assertEqual(threshold, rainalert.UMBRELLA_THRESHOLD)
+        self.assertFalse(personal)
+
+    def test_an_empty_threshold_is_the_apps_own(self):
+        threshold, personal = rainalert.notification_threshold("  ")
+        self.assertEqual(threshold, rainalert.UMBRELLA_THRESHOLD)
+        self.assertFalse(personal)
+
+    def test_the_readers_own_threshold_is_used_when_there_is_one(self):
+        threshold, personal = rainalert.notification_threshold(40)
+        self.assertEqual(threshold, 40)
+        self.assertTrue(personal)
+
+    def test_a_threshold_of_zero_is_not_taken_for_missing(self):
+        """Zero is a limit like any other, not an absent one."""
+        threshold, personal = rainalert.notification_threshold(0)
+        self.assertEqual(threshold, 0)
+        self.assertTrue(personal)
+
+    def test_a_nonsense_threshold_falls_back_to_the_apps_own(self):
+        threshold, personal = rainalert.notification_threshold("wet")
+        self.assertEqual(threshold, rainalert.UMBRELLA_THRESHOLD)
+        self.assertFalse(personal)
+
+    def test_a_threshold_is_capped_at_a_hundred(self):
+        threshold, _ = rainalert.notification_threshold(150)
+        self.assertEqual(threshold, 100)
+
+
+class TestNotificationEvent(unittest.TestCase):
+    """What is worth interrupting the reader for."""
+
+    def event(self, chances, threshold=None, now="2026-10-21T09:00",
+              personal=False, city="London"):
+        payload = hourly_payload(chances, now=now)
+        hours = rainalert.parse_today_hours(payload)
+        if threshold is None:
+            threshold = rainalert.UMBRELLA_THRESHOLD
+        return rainalert.notification_event(
+            hours, threshold, city, personal)
+
+    def test_nothing_to_say_about_a_dry_day(self):
+        self.assertIsNone(self.event([0] * 24))
+
+    def test_nothing_to_say_without_hourly_data(self):
+        self.assertIsNone(rainalert.notification_event(
+            [], rainalert.UMBRELLA_THRESHOLD, "London"))
+
+    def test_rain_in_the_current_hour_is_worth_saying(self):
+        event = self.event([0] * 9 + [80] + [0] * 14)
+        self.assertIsNotNone(event)
+        self.assertEqual(event["key"], "now:2026-10-21")
+        self.assertEqual(event["title"], "Rain likely right now")
+        self.assertIn("80% chance of rain in London right now.", event["body"])
+
+    def test_rain_about_to_start_is_worth_saying(self):
+        event = self.event([0] * 10 + [80] + [0] * 13)
+        self.assertEqual(event["key"], "hour:2026-10-21T10:00")
+        self.assertEqual(event["title"], "Rain likely from 10:00")
+        self.assertIn("80% chance of rain in London at 10:00.", event["body"])
+
+    def test_rain_further_off_than_the_lead_is_not_worth_saying(self):
+        """Two hours away is the edge; three is too far to act on."""
+        self.assertIsNone(self.event([0] * 12 + [80] + [0] * 11))
+        event = self.event([0] * 11 + [80] + [0] * 12)
+        self.assertIsNotNone(event)
+
+    def test_hours_that_have_gone_are_not_worth_saying(self):
+        """The morning's downpour is not news at nine in the morning."""
+        self.assertIsNone(self.event([80] * 9 + [0] * 15))
+
+    def test_an_unreported_hour_is_never_a_wet_hour(self):
+        """A missing value is not a chance of rain."""
+        payload = hourly_payload(
+            [0] * 10 + [None] + [0] * 13, now="2026-10-21T09:00")
+        hours = rainalert.parse_today_hours(payload)
+        self.assertIsNone(rainalert.notification_event(
+            hours, rainalert.UMBRELLA_THRESHOLD, "London"))
+
+    def test_the_readers_own_threshold_decides_what_counts(self):
+        """A 20% hour is nothing to the app and something to the reader."""
+        self.assertIsNone(self.event([0] * 10 + [20] + [0] * 13, threshold=50))
+        event = self.event([0] * 10 + [20] + [0] * 13, threshold=20)
+        self.assertEqual(event["title"], "Rain unlikely from 10:00")
+
+    def test_the_readers_own_threshold_is_named_in_the_body(self):
+        event = self.event([0] * 10 + [45] + [0] * 13, threshold=40,
+                            personal=True)
+        self.assertIn("45% chance of rain in London at 10:00.", event["body"])
+        self.assertIn("Above your 40% threshold.", event["body"])
+
+    def test_the_apps_own_advice_brings_the_umbrella(self):
+        event = self.event([0] * 10 + [80] + [0] * 13)
+        self.assertIn("Bring an umbrella.", event["body"])
+
+    def test_the_umbrella_is_not_mixed_into_the_readers_own_alert(self):
+        """The reader's limit is their own answer, not the app's advice."""
+        event = self.event([0] * 10 + [45] + [0] * 13, threshold=40,
+                            personal=True)
+        self.assertNotIn("umbrella", event["body"].lower())
+
+
+class TestAlertEndpoint(AppTestCase):
+    """The endpoint the page polls for something worth saying."""
+
+    def setUp(self):
+        super().setUp()
+        self.mock_get.return_value = FakeResponse(
+            payload=hourly_payload([0] * 10 + [80] + [0] * 13))
+
+    def alert(self, query=""):
+        response = self.client.get(f"/api/alert{query}")
+        return response, response.get_json()
+
+    def test_it_needs_a_city(self):
+        response, data = self.alert()
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("city name", data["error"])
+
+    def test_it_answers_with_the_event(self):
+        response, data = self.alert("?city=London")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(data["city"], "London")
+        self.assertEqual(data["event"]["key"], "hour:2026-10-21T10:00")
+        self.assertEqual(data["event"]["title"], "Rain likely from 10:00")
+
+    def test_it_tells_the_browser_how_often_to_poll(self):
+        _, data = self.alert("?city=London")
+        self.assertEqual(data["poll_minutes"], rainalert.NOTIFICATION_POLL_MINUTES)
+        self.assertEqual(data["lead_hours"], rainalert.NOTIFICATION_LEAD_HOURS)
+
+    def test_the_readers_own_threshold_is_used_when_it_is_sent(self):
+        _, data = self.alert("?city=London&threshold=90")
+        self.assertEqual(data["threshold"], 90)
+        self.assertTrue(data["personal_threshold"])
+        self.assertIsNone(data["event"])
+
+    def test_without_a_threshold_the_apps_own_is_used(self):
+        _, data = self.alert("?city=London")
+        self.assertEqual(data["threshold"], rainalert.UMBRELLA_THRESHOLD)
+        self.assertFalse(data["personal_threshold"])
+
+    def test_an_unknown_city_is_reported(self):
+        self.mock_geocode.return_value = None
+        response, data = self.alert("?city=Nowhereville")
+        self.assertEqual(response.status_code, 404)
+        self.assertIn("City not found", data["error"])
+
+    def test_a_geocoder_outage_is_not_reported_as_a_missing_city(self):
+        self.mock_geocode.side_effect = rainalert.GeocodingUnavailable("down")
+        response, data = self.alert("?city=London")
+        self.assertEqual(response.status_code, 503)
+        self.assertIn("geocoding service", data["error"])
+
+    def test_a_weather_outage_is_reported(self):
+        self.mock_get.side_effect = rainalert.WeatherUnavailable("down")
+        response, data = self.alert("?city=London")
+        self.assertEqual(response.status_code, 503)
+        self.assertIn("weather service", data["error"])
+
+    def test_the_forecast_is_fetched_with_a_timeout(self):
+        self.alert("?city=London")
+        _, kwargs = self.mock_get.call_args
+        self.assertGreater(kwargs["timeout"], 0)
+
+    def test_a_dry_day_answers_with_no_event(self):
+        self.mock_get.return_value = FakeResponse(
+            payload=hourly_payload([0] * 24))
+        _, data = self.alert("?city=London")
+        self.assertIsNone(data["event"])
+
+
+class TestNotificationControl(AppTestCase):
+    """The browser-side half of the notification: the button on the page.
+
+    The rule that decides what a notification says is tested above, and the
+    button's own behaviour is tested in test_browser.py, which drives a
+    real browser. What is left here is the markup the script needs.
+    """
+
+    def body_with_forecast(self):
+        self.mock_get.return_value = FakeResponse(
+            payload=hourly_payload([0] * 10 + [80] + [0] * 13))
+        return self.client.post("/", data={"city": "London"}).get_data(as_text=True)
+
+    def test_the_button_is_on_the_forecast_page(self):
+        body = self.body_with_forecast()
+        self.assertIn('id="notify-toggle"', body)
+        self.assertIn("Notify me", body)
+
+    def test_the_button_is_hidden_until_the_script_has_run(self):
+        """A button that cannot work yet must not be on the page."""
+        body = self.body_with_forecast()
+        button = body[body.index('id="notify-toggle"'):]
+        button = button[:button.index(">")]
+        self.assertIn("hidden", button)
+
+    def test_the_button_sits_with_the_hourly_title(self):
+        """It belongs to the strip: the notification says what it says."""
+        body = self.body_with_forecast()
+        head = body[body.index("hourly-head"):body.index("hourly-summary")]
+        self.assertIn('id="notify-toggle"', head)
+
+    def test_there_is_no_button_without_hourly_data(self):
+        """The notification needs the hours to say anything about."""
+        self.mock_get.return_value = FakeResponse(payload={
+            "daily": {
+                "time": ["2026-10-21"],
+                "precipitation_probability_max": [80],
+                "temperature_2m_max": [12.0],
+                "temperature_2m_min": [8.0],
+            }
+        })
+        body = self.client.post("/", data={"city": "London"}).get_data(as_text=True)
+        self.assertNotIn('id="notify-toggle"', body)
+
+    def test_there_is_no_button_on_the_start_page(self):
+        body = self.client.get("/").get_data(as_text=True)
+        self.assertNotIn('id="notify-toggle"', body)
+
+
 class TestAttribution(AppTestCase):
     """Open-Meteo's licence (CC BY 4.0) requires a credit; OSM data needs one too."""
 
@@ -1460,6 +1687,160 @@ class TestAttribution(AppTestCase):
         for anchor in footer.split("<a ")[1:]:
             opening = anchor.split(">", 1)[0]
             self.assertIn('rel="noopener noreferrer"', opening)
+
+
+class TestInstallableApp(AppTestCase):
+    """Tier 2 again: the app can be installed, and it opens offline.
+
+    The manifest says what the installed app is called and which icons it
+    has; the service worker caches the shell so the app opens without a
+    network. The forecast itself is never cached - a stale rain chance is
+    worse than none.
+    """
+
+    def get(self, path):
+        """A GET whose response is closed again.
+
+        The manifest and the worker are sent as files, and a test client
+        that throws the response away leaves the file handle open.
+        """
+        response = self.client.get(path)
+        self.addCleanup(response.close)
+        return response
+
+    def manifest(self):
+        response = self.get("/manifest.json")
+        self.assertEqual(response.status_code, 200)
+        return json.loads(response.get_data(as_text=True))
+
+    def shell_files(self):
+        """The files the service worker puts in its cache."""
+        script = self.get("/service-worker.js").get_data(as_text=True)
+        start = script.index("const SHELL")
+        block = script[start:script.index("];", start)]
+        return re.findall(r"'([^']+)'", block)
+
+    # -- the manifest ---------------------------------------------------------
+
+    def test_the_manifest_is_served_at_the_root(self):
+        response = self.get("/manifest.json")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("manifest", response.headers["Content-Type"])
+
+    def test_the_manifest_names_the_app(self):
+        data = self.manifest()
+        self.assertIn("Rain Alert", data["name"])
+        self.assertEqual(data["short_name"], "Rain Alert")
+        self.assertEqual(data["lang"], "en")
+        self.assertTrue(data["description"])
+
+    def test_the_manifest_opens_the_whole_site(self):
+        """A manifest served from a subdirectory would default to that
+        subdirectory as its scope, and the app would not be installed."""
+        data = self.manifest()
+        self.assertEqual(data["start_url"], "/")
+        self.assertEqual(data["scope"], "/")
+        self.assertEqual(data["id"], "/")
+
+    def test_the_manifest_stands_on_its_own(self):
+        """Standalone is what makes it an app rather than a web page."""
+        data = self.manifest()
+        self.assertEqual(data["display"], "standalone")
+        self.assertTrue(data["theme_color"])
+        self.assertTrue(data["background_color"])
+
+    def test_the_manifest_has_the_icons_a_browser_needs(self):
+        """Chrome wants a 192px icon, a 512px one and a maskable one."""
+        icons = self.manifest()["icons"]
+        sizes = {(icon["sizes"], icon["purpose"]) for icon in icons}
+        self.assertIn(("192x192", "any"), sizes)
+        self.assertIn(("512x512", "any"), sizes)
+        self.assertIn(("512x512", "maskable"), sizes)
+
+    def test_every_icon_is_a_real_png(self):
+        """An icon that is not there is an install prompt that fails."""
+        for icon in self.manifest()["icons"]:
+            response = self.get(icon["src"])
+            self.assertEqual(response.status_code, 200, icon["src"])
+            self.assertEqual(response.headers["Content-Type"], "image/png")
+            self.assertTrue(
+                response.get_data().startswith(b"\x89PNG\r\n\x1a\n"),
+                icon["src"])
+
+    def test_the_apple_icon_is_served(self):
+        """iOS ignores the manifest and wants its own icon."""
+        response = self.get("/static/icon-180.png")
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(
+            response.get_data().startswith(b"\x89PNG\r\n\x1a\n"))
+
+    # -- the service worker ---------------------------------------------------
+
+    def test_the_worker_is_served_from_the_root(self):
+        """A worker served from /static/ would only control /static/."""
+        response = self.get("/service-worker.js")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("javascript", response.headers["Content-Type"])
+        self.assertEqual(response.headers["Service-Worker-Allowed"], "/")
+
+    def test_the_worker_is_not_cached(self):
+        """A worker that is cached is a worker that never updates."""
+        response = self.get("/service-worker.js")
+        self.assertEqual(response.headers["Cache-Control"], "no-cache")
+
+    def test_every_file_the_worker_caches_exists(self):
+        """A typo in the list is a file that never reaches the cache, and an
+        app that opens offline with a hole in it."""
+        files = self.shell_files()
+        self.assertTrue(files)
+        for path in files:
+            self.assertEqual(self.get(path).status_code, 200, path)
+
+    def test_the_shell_has_the_files_the_page_needs(self):
+        shell = self.shell_files()
+        for path in ("/static/style.css", "/static/app.js",
+                     "/static/favicon.svg", "/static/offline.html"):
+            self.assertIn(path, shell)
+
+    def test_the_forecast_page_is_never_cached(self):
+        """The page holds the forecast, and a cached forecast is a lie."""
+        self.assertNotIn("/", self.shell_files())
+
+    # -- the offline page -----------------------------------------------------
+
+    def test_the_offline_page_is_served(self):
+        response = self.get("/static/offline.html")
+        self.assertEqual(response.status_code, 200)
+        body = response.get_data(as_text=True)
+        self.assertIn("You are offline", body)
+
+    def test_the_offline_page_shows_no_forecast(self):
+        """There is nothing to show, and a stale chance is worse than none."""
+        body = self.get("/static/offline.html").get_data(as_text=True)
+        self.assertNotIn("weather-list", body)
+        self.assertNotIn("hourly-strip", body)
+
+    def test_the_offline_page_offers_a_way_back(self):
+        body = self.get("/static/offline.html").get_data(as_text=True)
+        self.assertIn('class="offline-retry" href="/"', body)
+
+    # -- the page itself ------------------------------------------------------
+
+    def test_the_page_points_at_the_manifest(self):
+        body = self.client.get("/").get_data(as_text=True)
+        self.assertIn('rel="manifest" href="/manifest.json"', body)
+        self.assertIn('name="theme-color"', body)
+        self.assertIn('rel="apple-touch-icon"', body)
+
+    def test_the_manifest_is_on_the_forecast_page_too(self):
+        """The installed app opens on the start page, but the manifest has
+        to be there on every page."""
+        body = self.client.post("/", data={"city": "London"}).get_data(as_text=True)
+        self.assertIn('rel="manifest" href="/manifest.json"', body)
+
+    def test_the_manifest_is_on_an_error_page_too(self):
+        body = self.client.post("/", data={"city": ""}).get_data(as_text=True)
+        self.assertIn('rel="manifest" href="/manifest.json"', body)
 
 
 if __name__ == "__main__":
