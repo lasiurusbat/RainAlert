@@ -19,6 +19,11 @@ user accounts, and nothing to configure before running it.
 
 - **Seven-day forecast** for any city the geocoder recognises, with the daily
   maximum rain probability and the high/low temperature.
+- **Hour-by-hour strip for today.** One bar per hour of the city's local day,
+  coloured on the same scale as the daily list, with a pulsing dot on the
+  current hour. A one-line summary says when the rain is expected — "Rain
+  likely from about 15:00 to 16:00, up to 83%. Bring an umbrella." — so you
+  can tell whether to leave now or in an hour, which a daily maximum cannot.
 - **Visual rain severity.** Each day is colour-coded on a three-band scale —
   grey for *rain unlikely*, blue for *rain possible*, amber for *rain likely* —
   with a matching dot, tinted row, and left border. A ☔ icon marks the days
@@ -64,8 +69,8 @@ Python 3.14.5.
 ## Running the tests
 
 ```bash
-python -m unittest test_app    # 53 offline tests, no network required
-python -m unittest test_api     # 4 live integration tests, hits both APIs
+python -m unittest test_app    # 110 offline tests, no network required
+python -m unittest test_api     # 6 live integration tests, hits both APIs
 ```
 
 `test_app.py` is the suite that gates changes. It mocks both HTTP services
@@ -166,6 +171,7 @@ in a `.env` file (the app loads one via `python-dotenv`).
 | `SEVERITY_LOW_MAX` | `30` | Rain chance below which a day is banded *low* |
 | `SEVERITY_MODERATE_MAX` | `60` | Rain chance below which a day is banded *moderate* |
 | `UMBRELLA_THRESHOLD` | `50` | Rain chance at or above which the ☔ icon appears |
+| `DONATION_URL` | empty | An `https://` link to a donation page. When set, a short "Buy me a coffee" line appears under the forecast and in the footer. When empty, nothing renders. Anything that is not an absolute `https://` URL is ignored. See [Donations and data credits](#donations-and-data-credits) |
 
 Example `.env`:
 
@@ -205,6 +211,58 @@ colour alone.
 
 ---
 
+## The hourly strip
+
+The strip above the daily list shows one bar per hour of the city's local
+day, with the bar height giving the rain chance and the bar colour giving
+the same severity band the daily list uses.
+
+Four things about it are deliberate:
+
+- **The hours are the city's local hours.** The forecast is requested with
+  `timezone=auto`, so the API dates the hours in the queried location's local
+  time — a forecast for Tokyo is timed in Tokyo's hours. They are never
+  converted to the viewer's timezone, exactly like the daily dates.
+- **The current hour is marked with a pulsing dot**, taken from the `current`
+  block the API returns in the same local time. Without that block the app
+  falls back to the UTC offset, and without that too it simply omits the
+  marker. The pulse is dropped for anyone who has asked for less motion;
+  the dot stays.
+- **The bar height is bucketed into 5% steps** so that it can live in the
+  stylesheet as a class. The exact percentage is in the tooltip and in the
+  table view underneath, so the rounding never hides a value.
+- **Every value is reachable without hovering.** The "Hourly values" table
+  lists the rain chance for every hour; the tooltip only makes it easier to
+  read.
+
+The summary sentence above the strip uses the umbrella threshold, so it
+agrees with the ☔ icon on the daily list, and it only looks at hours that
+have not happened yet — a window that has already passed is not an alert.
+
+---
+
+## Donations and data credits
+
+**Donation link.** Set `DONATION_URL` to your donation page (the live site uses
+<https://buymeacoffee.com/rainalert>) and the page shows one quiet line under
+the forecast, plus a link in the footer. It is a plain text link, not an
+embedded widget, so no third-party script is loaded and no consent notice is
+needed. It opens in a new tab. It never appears on error pages, on the
+"no forecast data" page, or next to the search form. With the variable empty,
+the page is exactly as it was without the feature.
+
+**Keep donations voluntary and one-off.** Open-Meteo's free API is for
+non-commercial use. Its terms allow voluntary donations but treat advertising
+and subscriptions as commercial. So the page behind the link should not sell
+memberships, extras or recurring subscriptions. If you ever want ads, paid
+features or promotions, you need one of Open-Meteo's paid plans first.
+
+**Credits are required and always shown.** The footer credits Open-Meteo
+(data under CC BY 4.0) and OpenStreetMap (place names come from Nominatim).
+Do not remove them: the Open-Meteo licence requires attribution.
+
+---
+
 ## Project layout
 
 ```
@@ -230,11 +288,12 @@ RainAlert/
 ├── .github/                     # CI workflow and Dependabot config
 ├── DEPLOY.md                    # the deployment runbook
 ├── CLAUDE.md                    # notes for AI assistants working in this repo
+├── implementation-plan.md       # what is built, what is next, what is deferred
 └── RainAlert-Ideas-for-Alerting-Users.md
 ```
 
 `app.py` holds the entire application — routes, geocoding, forecast fetching,
-formatting and localisation — in about 400 lines. There is no package
+formatting and localisation — in about 670 lines. There is no package
 structure to navigate; a single module is the right size for an app this
 small.
 

@@ -37,6 +37,11 @@ there).
    (or the service settings), and redeploy. Render is not assumed to pick up
    new pushes by itself.
 
+`DONATION_URL` (the Buy Me a Coffee link) is set in `render.yaml`. Changing or
+removing it needs a redeploy of the service but no new image, because the
+image reads it at start-up. Remove the line, or leave it empty, to hide the
+donation link.
+
 ## 3. Attach the domain
 
 1. Service → **Settings → Custom Domains → + Add Custom Domain** →
@@ -143,6 +148,6 @@ setup is `v0.8`, to match `render.yaml`, which pins `0.8`.
   answers, not that the new version is the one answering, because the app
   does not expose its version. If that matters, add a `/healthz` route that
   returns the version.
-- **The test counts in `CLAUDE.md` and `README.md` drift.** The suite has 53
-  tests; the two documents and this one should be updated together when
-  tests are added.
+- **The test counts in `CLAUDE.md`, `README.md` and this file drift.** The suite
+  has 110 offline tests and 6 live integration tests; the three documents
+  should be updated together when tests are added.

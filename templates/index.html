@@ -25,6 +25,50 @@
             {% if weather_data %}
                 <div class="result">
                     <h3>Forecast for {{ display_city }}:</h3>
+                    {% if hourly_data %}
+                    <div class="hourly">
+                        <h4 class="hourly-title">Today, hour by hour</h4>
+                        {% if hourly_summary %}
+                        <p class="hourly-summary">{{ hourly_summary }}</p>
+                        {% endif %}
+                        <div class="hourly-strip" role="list">
+                            {% for hour in hourly_data %}
+                            <div class="hour severity-{{ hour.severity }}{% if hour.now %} hour-now{% endif %}"
+                                 role="listitem"
+                                 data-tip="{{ hour.time_label }} · {{ hour.chance_label }} · {{ hour.severity_label }}">
+                                <span class="hour-bar height-{{ hour.height }}{% if hour.unknown %} hour-bar-unknown{% endif %}" aria-hidden="true"></span>
+                                <span class="sr-only">{% if hour.now %}Now: {% endif %}{{ hour.time_label }}, {{ hour.chance_label }}. {{ hour.severity_label }}.</span>
+                            </div>
+                            {% endfor %}
+                        </div>
+                        <div class="hourly-axis" aria-hidden="true">
+                            {% for hour in hourly_data %}
+                            <span class="hour-axis-cell">
+                                {%- if hour.hour in (0, 6, 12, 18) or loop.last -%}
+                                <span class="hour-axis-label{% if hour.now %} hour-now{% endif %}">{{ hour.hour_label }}</span>
+                                {%- endif -%}
+                            </span>
+                            {% endfor %}
+                        </div>
+                        <details class="hourly-table">
+                            <summary>Hourly values</summary>
+                            <table>
+                                <caption class="sr-only">Rain chance for each hour today</caption>
+                                <thead>
+                                    <tr><th scope="col">Hour</th><th scope="col">Rain chance</th></tr>
+                                </thead>
+                                <tbody>
+                                    {% for hour in hourly_data %}
+                                    <tr{% if hour.now %} class="is-now"{% endif %}>
+                                        <th scope="row">{{ hour.time_label }}{% if hour.now %} (now){% endif %}</th>
+                                        <td>{{ hour.chance_label }}</td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </details>
+                    </div>
+                    {% endif %}
                     <div class="severity-legend">
                         <span class="legend-item severity-low"><span class="severity-dot" aria-hidden="true"></span>Rain unlikely</span>
                         <span class="legend-item severity-moderate"><span class="severity-dot" aria-hidden="true"></span>Rain possible</span>
@@ -45,6 +89,13 @@
                         </div>
                         {% endfor %}
                     </div>
+                    {% if donation_url %}
+                    <p class="donate">
+                        Saved you from getting wet?
+                        <a href="{{ donation_url }}" target="_blank" rel="noopener noreferrer">Buy me a coffee<span class="sr-only"> (donation, opens in a new tab)</span></a>
+                        and help keep Rain Alert free.
+                    </p>
+                    {% endif %}
                 </div>
             {% elif city and not error %}
                 <div class="result result-empty">
@@ -55,6 +106,14 @@
 
         <footer class="copyright">
             Rain Alert © 2026. Vedad Dizdarevic. All rights reserved.
+            {% if donation_url %}
+            <a href="{{ donation_url }}" target="_blank" rel="noopener noreferrer">Buy me a coffee<span class="sr-only"> (donation, opens in a new tab)</span></a>
+            {% endif %}
+            <span class="credits">
+                Weather data by <a href="https://open-meteo.com/" target="_blank" rel="noopener noreferrer">Open-Meteo.com</a>
+                (<a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener noreferrer">CC BY 4.0</a>)
+                · Place names © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a> contributors
+            </span>
         </footer>
     </div>
 </body>

@@ -7,9 +7,10 @@ Two free, keyless APIs are used:
 
 import locale
 import os
-from datetime import date
+from datetime import date, datetime, timedelta, timezone
 from decimal import ROUND_HALF_UP, Decimal
 from functools import lru_cache
+from urllib.parse import urlsplit
 
 import requests
 from dotenv import load_dotenv
@@ -38,6 +39,10 @@ DATE_LOCALE = os.getenv("DATE_LOCALE", "de_DE")
 FORECAST_URL = "https://api.open-meteo.com/v1/forecast"
 DAILY_FIELDS = "precipitation_probability_max,temperature_2m_max,temperature_2m_min"
 
+# The hourly rain chance for today, and the same field for the current hour.
+# Both come in the same request, so the strip costs no extra request.
+HOURLY_FIELDS = "precipitation_probability"
+
 # Rain severity bands, used to colour-code each day of the forecast. A day
 # under SEVERITY_LOW_MAX is unlikely to be wet, a day up to
 # SEVERITY_MODERATE_MAX is a real possibility, and anything above is likely.
@@ -48,6 +53,39 @@ SEVERITY_MODERATE_MAX = int(os.getenv("SEVERITY_MODERATE_MAX", "60"))
 # below the top band on purpose: a 55% day is not a certainty, but it is
 # enough to change what you wear.
 UMBRELLA_THRESHOLD = int(os.getenv("UMBRELLA_THRESHOLD", "50"))
+
+
+def clean_donation_url(value):
+    """Return ``value`` if it is a usable https link, otherwise ``""``.
+
+    The donation link is rendered into every page, so it is checked rather
+    than trusted: only absolute ``https://`` URLs are accepted. A value such
+    as ``javascript:...``, a plain ``http://`` link, a relative path, or
+    something containing whitespace, quotes, angle brackets or control
+    characters is ignored, and the link is left out. (Jinja escapes the value
+    on output as well; this keeps obviously broken input out entirely.)
+    """
+    url = (value or "").strip()
+    if not url or any(
+        character.isspace() or character in "\"'<>\\" or ord(character) < 32
+        for character in url
+    ):
+        return ""
+    try:
+        parts = urlsplit(url)
+    except ValueError:
+        return ""
+    if parts.scheme != "https" or not parts.netloc:
+        return ""
+    return url
+
+
+# Optional link to a donation page (for example Buy Me a Coffee). It is empty
+# by default, and while it is empty no donation text appears anywhere, so a
+# fresh checkout looks exactly as it always did. Only voluntary, one-off
+# donations are compatible with Open-Meteo's free, non-commercial terms, so
+# the page behind this link must not sell memberships, extras or subscriptions.
+DONATION_URL = clean_donation_url(os.getenv("DONATION_URL"))
 
 geolocator = Nominatim(user_agent=NOMINATIM_USER_AGENT, timeout=GEOCODER_TIMEOUT)
 
@@ -270,6 +308,180 @@ def needs_umbrella(chance):
     return probability is not None and probability >= UMBRELLA_THRESHOLD
 
 
+# --- Hourly rain for today ---------------------------------------------------
+# The strip shows the city's local day, one column per hour. The hours run
+# 00 to 23 in the city's own timezone - the same local time the daily
+# forecast is dated in - so "today" means the same thing in both lists.
+HOURS_PER_DAY = 24
+
+# The bar height in the strip, in percent per step. The height is bucketed
+# into steps so it can live in the stylesheet as a class rather than as an
+# inline style; the exact percentage travels in the tooltip and in the
+# screen-reader text.
+HOUR_HEIGHT_STEP = 5
+
+
+def parse_hour_timestamp(value):
+    """Parse an Open-Meteo local timestamp such as ``2026-10-21T15:00``."""
+    try:
+        return datetime.strptime(str(value).strip(), "%Y-%m-%dT%H:%M")
+    except (TypeError, ValueError):
+        return None
+
+
+def hour_height_step(chance, step=HOUR_HEIGHT_STEP):
+    """The bar height for an hourly rain chance, in percent.
+
+    The height is bucketed into steps so that it lives in the stylesheet as a
+    class. The exact percentage is still available in the tooltip and in the
+    screen-reader text, so nothing is lost by rounding the bar.
+    """
+    probability = rain_chance(chance)
+    if probability is None:
+        return 0
+    steps = round_half_up(probability / step)
+    return max(0, min(100, steps * step))
+
+
+def local_now(payload):
+    """The local hour the forecast is current for.
+
+    The API reports the current time in the queried location's own timezone,
+    which is the same local time the hourly and daily data are dated in. The
+    UTC offset is only a fallback, for a response without a current block.
+
+    The result is always a naive local time, so it can be compared with the
+    timestamps parsed out of the hourly array.
+    """
+    current = payload.get("current") or {}
+    moment = parse_hour_timestamp(current.get("time"))
+    if moment is not None:
+        return moment.replace(minute=0, second=0, microsecond=0)
+
+    try:
+        offset = int(payload.get("utc_offset_seconds"))
+    except (TypeError, ValueError):
+        return None
+    now = datetime.now(timezone.utc) + timedelta(seconds=offset)
+    # The offset is already applied, so the result is a local wall time and
+    # carries no timezone of its own.
+    return now.replace(tzinfo=None, minute=0, second=0, microsecond=0)
+
+
+def parse_today_hours(payload):
+    """Today's hourly rain chances, one entry per hour, in local time.
+
+    An empty list means the response carried no hourly data; the daily list
+    still renders on its own.
+    """
+    daily = payload.get("daily") or {}
+    hourly = payload.get("hourly") or {}
+    times = hourly.get("time") or []
+    chances = hourly.get("precipitation_probability") or []
+    if not times:
+        return []
+
+    entries = []
+    for index, stamp in enumerate(times):
+        moment = parse_hour_timestamp(stamp)
+        if moment is None:
+            continue
+        chance = chances[index] if index < len(chances) else None
+        entries.append((moment, chance))
+
+    # The hourly array starts at local midnight of the current day. Matching
+    # on the date rather than slicing the first 24 keeps the strip aligned
+    # with the daily list even if the two disagree by a day. A day with 23 or
+    # 25 hours (a clock-change day) is kept whole rather than truncated.
+    #
+    # The current time decides which day is "today" when it is available,
+    # because that is the day the now-marker belongs to. The first daily
+    # entry is the fallback.
+    now = local_now(payload)
+    today = now.date().isoformat() if now is not None \
+        else (daily.get("time") or [None])[0]
+    if today:
+        todays = [entry for entry in entries
+                  if entry[0].date().isoformat() == today]
+        if todays:
+            return _build_hours(todays, now)
+    return _build_hours(entries[:HOURS_PER_DAY], now)
+
+
+def _build_hours(entries, now):
+    """Turn (timestamp, chance) pairs into the entries the template renders."""
+    hours = []
+    for moment, chance in entries:
+        band = severity_band(chance)
+        probability = rain_chance(chance)
+        hours.append({
+            "day": moment.date().isoformat(),
+            "hour": moment.hour,
+            "hour_label": f"{moment.hour:02d}",
+            "time_label": f"{moment.hour:02d}:00",
+            "chance": chance,
+            "chance_label": format_rain_chance(chance),
+            "severity": band,
+            "severity_label": severity_label(band),
+            "height": hour_height_step(chance),
+            # A value the app cannot read is unknown, whether it arrived as
+            # null or as something that is not a number.
+            "unknown": probability is None,
+            "past": now is not None and moment < now,
+            "now": now is not None and moment == now,
+        })
+    return hours
+
+
+def summarise_hours(hours):
+    """A one-line summary of when rain is likely in the given hours.
+
+    The threshold is the umbrella threshold, so the sentence agrees with the
+    umbrella icon on the daily list. Only hours that have not happened yet
+    count: a window that has already passed is not an alert.
+
+    Returns an empty string when there is nothing to say.
+    """
+    upcoming = [hour for hour in hours if not hour["past"]]
+    if not upcoming:
+        return ""
+
+    # Group the wet hours into contiguous windows.
+    windows = []
+    window = []
+    for hour in upcoming:
+        probability = rain_chance(hour["chance"])
+        if probability is not None and probability >= UMBRELLA_THRESHOLD:
+            window.append(hour)
+        elif window:
+            windows.append(window)
+            window = []
+    if window:
+        windows.append(window)
+
+    if not windows:
+        return "No rain likely for the rest of today."
+
+    first = windows[0]
+    band = "high" if any(hour["severity"] == "high" for hour in first) \
+        else "moderate"
+    if all(hour["severity"] == "unknown" for hour in first):
+        # An unknown chance is not a wet hour, but it is also not a dry one,
+        # so it is never called "possible" or "likely".
+        band = "unknown"
+    peak = max(rain_chance(hour["chance"]) or 0 for hour in first)
+    if len(first) == 1:
+        span = f"at about {first[0]['time_label']}"
+    else:
+        span = f"from about {first[0]['time_label']} to {first[-1]['time_label']}"
+
+    sentence = f"{severity_label(band).lower()} {span}, up to {round_half_up(peak)}%"
+    if len(windows) > 1:
+        sentence += ", and at other times too"
+
+    return f"{sentence[0].upper()}{sentence[1:]}. Bring an umbrella."
+
+
 def severity_label(band):
     """A short human-readable name for a severity band.
 
@@ -328,10 +540,28 @@ def fetch_forecast(latitude, longitude, locale_name=None):
     An empty list means the service responded but had no forecast for the
     location; transport and payload problems raise :class:`WeatherUnavailable`.
     """
+    forecast, _ = fetch_weather(latitude, longitude, locale_name)
+    return forecast
+
+
+def fetch_weather(latitude, longitude, locale_name=None):
+    """Return the daily forecast and today's hourly rain chances.
+
+    Both come from a single request: Open-Meteo serves the daily and the
+    hourly fields together, and asking for both in one call keeps the app
+    to one request per page load.
+
+    The daily list is the primary result. The hourly list is an addition to
+    it, so it may be empty when the service omits the hourly block, but a
+    transport or payload problem raises :class:`WeatherUnavailable` and the
+    page shows the error rather than a half-rendered forecast.
+    """
     params = {
         "latitude": latitude,
         "longitude": longitude,
         "daily": DAILY_FIELDS,
+        "hourly": HOURLY_FIELDS,
+        "current": HOURLY_FIELDS,
         "timezone": "auto",
     }
     try:
@@ -371,13 +601,33 @@ def fetch_forecast(latitude, longitude, locale_name=None):
             "severity_label": severity_label(band),
             "umbrella": needs_umbrella(chance),
         })
-    return forecast
+
+    try:
+        hours = parse_today_hours(payload)
+    except (TypeError, ValueError) as exc:
+        # A missing hourly strip is a missing feature, not a broken forecast.
+        app.logger.warning("Hourly forecast could not be parsed: %s", exc)
+        hours = []
+
+    return forecast, hours
 
 
 # --- Routes ------------------------------------------------------------------
+@app.context_processor
+def inject_donation_url():
+    """Make the donation link available to every template.
+
+    It is read from the module on each request, not copied at import time,
+    so a test can switch it on and off.
+    """
+    return {"donation_url": DONATION_URL}
+
+
 @app.route('/', methods=['GET', 'POST'])
 def index():
     weather_data = None
+    hourly_data = None
+    hourly_summary = None
     error = None
     city = None
     display_city = None
@@ -389,7 +639,9 @@ def index():
         else:
             try:
                 latitude, longitude, display_city = get_coordinates(city)
-                weather_data = fetch_forecast(latitude, longitude, requested_locale())
+                weather_data, hourly_data = fetch_weather(
+                    latitude, longitude, requested_locale())
+                hourly_summary = summarise_hours(hourly_data or [])
             except CityNotFound:
                 error = "City not found. Please try a different name (e.g., 'Paris')."
             except GeocodingUnavailable:
@@ -404,6 +656,8 @@ def index():
     return render_template(
         'index.html',
         weather_data=weather_data,
+        hourly_data=hourly_data,
+        hourly_summary=hourly_summary,
         error=error,
         city=city,
         display_city=display_city or city,

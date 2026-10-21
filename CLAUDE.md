@@ -19,7 +19,7 @@ Serves on <http://127.0.0.1:5000>. `FLASK_DEBUG=1` enables the reloader and
 debugger.
 
 ```bash
-python -m unittest test_app    # offline suite, 53 tests, no network
+python -m unittest test_app    # offline suite, 110 tests, no network
 python -m unittest test_api     # live integration tests, hits both APIs
 ```
 
@@ -106,6 +106,25 @@ The bands are named **Rain unlikely / Rain possible / Rain likely**, not
 probability does not predict an intensity — the scale has to stay honest
 about what a percentage can tell you.
 
+**The hourly strip for today sits above the daily list.** It comes from
+`hourly=precipitation_probability` in the same request as the daily fields —
+one request per page load, not two. `parse_today_hours()` picks out the
+city's local day, and `summarise_hours()` turns it into the one-line
+"Bring an umbrella" sentence.
+
+The strip's hours are the **city's local hours**, exactly like the daily
+dates. The current hour comes from the `current` block the API returns, in
+that same local time; `utc_offset_seconds` is only a fallback for a
+response without it, and without that there is no now-marker at all.
+"Today" follows the current time when it is known, because that is the day
+the now-marker belongs to — the first daily entry is only the fallback.
+
+The bar height is **bucketed into 5% steps** so it can live in the
+stylesheet as a class rather than an inline style. The exact percentage is
+in the tooltip and in the table view, so the rounding never hides a value.
+A **known 0% still gets a 2px stub** — a hole in the strip reads as
+missing data rather than as "no rain".
+
 **Deployment runs a prebuilt image, not a build.** `render.yaml` uses
 `runtime: image` pointing at `docker.io/lasiurusbat/rainalert:0.8`. Render
 pulls that image; it never runs the `Dockerfile`. A release is therefore a
@@ -124,6 +143,22 @@ commit already on `main`, builds and tests the image, pushes it to Docker
 Hub as the version without the `v`, and calls Render's deploy hook with an
 `imgURL` parameter naming that exact tag. Pull requests never push and never
 deploy, so the secrets are only touched on a tag run.
+
+**The donation link is opt-in.** `DONATION_URL` is read once at import through
+`clean_donation_url()`, which accepts only absolute `https://` URLs without
+whitespace, quotes or angle brackets and returns `""` for anything else. A
+context processor passes it to every template as `donation_url`, reading the
+module global on each request so tests can patch `rainalert.DONATION_URL`.
+When it is empty no donation markup renders at all. The link appears under the
+forecast (only when there is a forecast) and in the footer. It is a plain link
+with `rel="noopener noreferrer"`, never an embedded widget or script.
+
+**The weather data licence limits what the site may do.** Open-Meteo's free API
+is non-commercial. Voluntary donations are allowed; advertising, affiliate
+promotions, subscriptions and paid tiers are not, and would need a paid
+Open-Meteo plan. The donation page must stay one-off donations only. The footer
+credits for Open-Meteo (CC BY 4.0) and OpenStreetMap are required and have
+tests; do not remove them.
 
 ## Gotchas
 
@@ -152,6 +187,27 @@ deploy, so the secrets are only touched on a tag run.
   height. The band name therefore lives in a **legend** above the list, and
   each row carries the same word in a `.sr-only` span for screen readers.
   Severity must never be conveyed by colour alone.
+- **The card has to stay inside a 748px-tall window.** The hourly strip
+  added ~150px above the list, which pushed the document 25px past the
+  viewport. The strip is 38px tall, the `.weather-item` padding was cut
+  from `0.45rem` to `0.32rem`, and the h3 margin from `0.5rem` to
+  `0.35rem` to claw the space back. Measure
+  `scrollHeight - clientHeight` in a real browser after changing any of
+  them — a stock GitHub runner has a different viewport than the
+  developer box, and the CI image is where the tests run.
+- **The hourly axis labels sit on the hour boundary, not on the bar.** Each
+  label is positioned at the left edge of its own cell, so "06" is under
+  the gap before the 06:00 bar rather than under the middle of it. The
+  first cell is nudged back inside, or its label would hang off the card.
+- **The current hour is a pulsing dot, not a tick.** It is a `::after`
+  pseudo-element under the baseline, animated with a growing-and-fading
+  `box-shadow` halo. The pulse is decoration, so it is dropped under
+  `prefers-reduced-motion: reduce` — the dot stays, so the hour is still
+  marked. The dot must not collide with the axis labels below it, which is
+  what the `margin-top` on `.hourly-axis` is for. The dot is 8px with a
+  10px halo and sits at `bottom: -9px`; the axis margin is 11px, which
+  leaves the dot clear of the labels. If you resize the dot, resize the
+  halo with it (twice the radius) and re-measure the axis margin.
 - **`.container` is `box-sizing: border-box`.** With the default
   content-box, `width: 90%` plus the padding pushed the card past the
   viewport edge on narrow screens.
@@ -198,5 +254,6 @@ deploy, so the secrets are only touched on a tag run.
   change.** Releases are cut by pushing a `v*` tag; the workflow derives the
   image tag from it. The tag in `render.yaml` is only the fallback for a
   manual deploy, and `DEPLOY.md` explains when to update it.
-- **The test count appears in three documents** — `README.md`, `CLAUDE.md` and
-  `DEPLOY.md`. They drift. Update all three when tests are added.
+- **The test count appears in four documents** — `README.md`, `CLAUDE.md`,
+  `DEPLOY.md` and `implementation-plan.md`. They drift. Update all four when
+  tests are added.

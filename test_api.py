@@ -50,6 +50,43 @@ class TestLiveOpenMeteo(unittest.TestCase):
         self.assertIn("precipitation_probability_max", daily)
         self.assertEqual(len(daily["time"]), len(daily["precipitation_probability_max"]))
 
+    def test_the_hourly_block_has_the_shape_the_strip_needs(self):
+        """The hourly array and the daily array must line up."""
+        response = requests.get(
+            rainalert.FORECAST_URL,
+            params={
+                "latitude": 51.5074,
+                "longitude": -0.1278,
+                "hourly": rainalert.HOURLY_FIELDS,
+                "current": rainalert.HOURLY_FIELDS,
+                "timezone": "auto",
+            },
+            timeout=rainalert.WEATHER_TIMEOUT,
+        )
+        response.raise_for_status()
+        payload = response.json()
+        hourly = payload["hourly"]
+        self.assertIn("time", hourly)
+        self.assertIn("precipitation_probability", hourly)
+        self.assertEqual(len(hourly["time"]),
+                         len(hourly["precipitation_probability"]))
+        # The first hour is local midnight of the current day.
+        self.assertTrue(hourly["time"][0].endswith("T00:00"))
+        # The current time is reported in the same local time.
+        self.assertIn("time", payload["current"])
+
+    def test_the_live_hourly_strip_renders(self):
+        """The strip is built from a real response, not just a mock."""
+        latitude, longitude, _ = rainalert.get_coordinates("London")
+        forecast, hours = rainalert.fetch_weather(latitude, longitude)
+        self.assertGreater(len(forecast), 0)
+        self.assertGreater(len(hours), 0)
+        for hour in hours:
+            self.assertIn("severity", hour)
+            self.assertTrue(hour["time_label"].endswith(":00"))
+            self.assertGreaterEqual(hour["height"], 0)
+            self.assertLessEqual(hour["height"], 100)
+
     def test_city_with_no_forecast_still_resolves(self):
         """A resolvable city returns coordinates even if data is sparse."""
         latitude, longitude, _ = rainalert.get_coordinates("Reykjavik")

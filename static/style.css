@@ -48,6 +48,26 @@ body {
     text-shadow: 0 1px 3px rgba(0, 0, 0, 0.7);
 }
 
+/* Links in the footer sit over the background photo, so they are white like
+   the text around them and underlined to show they are links. */
+.copyright a {
+    color: inherit;
+    text-decoration: underline;
+}
+
+.copyright a:hover,
+.copyright a:focus-visible {
+    text-decoration-thickness: 2px;
+}
+
+/* The data credits (Open-Meteo requires attribution) are a second, smaller
+   line under the copyright notice. */
+.credits {
+    display: block;
+    margin-top: 0.15rem;
+    font-size: 0.7rem;
+}
+
 h1 {
     color: #2c3e50;
     text-align: center;
@@ -98,7 +118,7 @@ button:hover {
     margin-top: 0;
     /* The default h3 bottom margin is generous; trimming it keeps the whole
        card inside a 768px-tall window once the forecast list is rendered. */
-    margin-bottom: 0.5rem;
+    margin-bottom: 0.35rem;
 }
 
 .result-empty {
@@ -123,7 +143,7 @@ button:hover {
     gap: 0.5rem 1rem;
     /* Wrap rather than squeeze the two columns on narrow screens. */
     flex-wrap: wrap;
-    padding: 0.45rem 0.75rem;
+    padding: 0.32rem 0.75rem;
     /* The negative margin lets the tint reach the card's padding edge, but
        it must not push the row past the card, so the right margin cancels
        the left one out. */
@@ -210,6 +230,278 @@ button:hover {
     color: var(--severity-text);
     font-weight: bold;
     white-space: nowrap;
+}
+
+/* --- Hour-by-hour strip ----------------------------------------------------
+   One column per hour of the city's local day. The bar height is the rain
+   chance; the bar colour is the same severity band the daily list uses, so
+   the two lists read the same way. The exact percentage is in the tooltip
+   and in the screen-reader text, never only in the bar. */
+.hourly {
+    margin: 0.25rem 0 0.45rem;
+    padding: 0.4rem 0.6rem 0.35rem;
+    background: #f8fafb;
+    border-radius: 6px;
+}
+
+.hourly-title {
+    margin: 0;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: #2c3e50;
+    line-height: 1.2;
+}
+
+.hourly-summary {
+    margin: 0.1rem 0 0;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: #1a5e96;
+    line-height: 1.2;
+}
+
+/* The strip is a flex row of equal columns and the axis below it is the
+   same row of cells, so every label sits under its own bar. The 2px gap is
+   the surface gap that separates one bar from the next - no borders. */
+.hourly-strip {
+    display: flex;
+    align-items: flex-end;
+    gap: 2px;
+    height: 38px;
+    /* The gap above the strip is where the hover tooltip opens. It is sized
+       so that a tooltip on the tallest bar clears the summary line above
+       it: tooltip height plus its margin. */
+    margin-top: 24px;
+    /* The baseline the bars grow from: a solid hairline, one step off the
+       surface, recessive. */
+    border-bottom: 1px solid #e3e8ea;
+}
+
+.hour {
+    position: relative;
+    flex: 1 1 0;
+    min-width: 0;
+    height: 100%;
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+}
+
+/* The hover tooltip. It is a CSS tooltip rather than a title attribute so
+   that a screen reader does not read the value twice: the tooltip is for
+   the pointer, the .sr-only span is for the reader. The table view below
+   the strip carries the same values without either. */
+.hour:hover::before {
+    content: attr(data-tip);
+    position: absolute;
+    bottom: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    margin-bottom: 5px;
+    padding: 0.18rem 0.4rem;
+    background: #2c3e50;
+    color: #ffffff;
+    font-size: 0.65rem;
+    line-height: 1.2;
+    white-space: nowrap;
+    border-radius: 4px;
+    /* The tooltip must not be clipped by the strip. */
+    z-index: 5;
+    pointer-events: none;
+}
+
+/* The first and last bars would push their tooltip off the card, so those
+   two are anchored to the edge instead of to the middle of the bar. */
+.hour:first-child:hover::before {
+    left: 0;
+    transform: none;
+}
+
+.hour:last-child:hover::before {
+    left: auto;
+    right: 0;
+    transform: none;
+}
+
+.hour-bar {
+    width: 100%;
+    /* Capped so a bar never fills its whole slot; the leftover is air. */
+    max-width: 24px;
+    height: 0;
+    /* A known 0% chance is still a value, so the bar keeps a visible stub
+       rather than disappearing. Without it the strip has holes in it, and a
+       hole reads as missing data rather than as "no rain". */
+    min-height: 2px;
+    /* Rounded data-end, square at the baseline. */
+    border-radius: 3px 3px 0 0;
+    background: var(--severity-accent);
+}
+
+/* The bar height carries the rain chance. It is bucketed into steps so it
+   can live here as a class rather than as an inline style. */
+.hour-bar.height-5 { height: 5%; }
+.hour-bar.height-10 { height: 10%; }
+.hour-bar.height-15 { height: 15%; }
+.hour-bar.height-20 { height: 20%; }
+.hour-bar.height-25 { height: 25%; }
+.hour-bar.height-30 { height: 30%; }
+.hour-bar.height-35 { height: 35%; }
+.hour-bar.height-40 { height: 40%; }
+.hour-bar.height-45 { height: 45%; }
+.hour-bar.height-50 { height: 50%; }
+.hour-bar.height-55 { height: 55%; }
+.hour-bar.height-60 { height: 60%; }
+.hour-bar.height-65 { height: 65%; }
+.hour-bar.height-70 { height: 70%; }
+.hour-bar.height-75 { height: 75%; }
+.hour-bar.height-80 { height: 80%; }
+.hour-bar.height-85 { height: 85%; }
+.hour-bar.height-90 { height: 90%; }
+.hour-bar.height-95 { height: 95%; }
+.hour-bar.height-100 { height: 100%; }
+
+/* An hour the service reported no value for gets a flat stub, not a zero
+   bar: a missing value is not the same thing as a 0% chance. */
+.hour-bar.hour-bar-unknown {
+    height: 2px;
+    background: #aab7b8;
+}
+
+/* The current hour is marked with a pulsing dot under the baseline, in ink
+   rather than in a data colour, so the data mark itself is not altered. */
+.hourly-strip .hour-now::after {
+    content: "";
+    position: absolute;
+    /* The dot hangs below the baseline, with a 1px gap under it. An 8px dot
+       therefore needs 9px of offset to keep that gap. */
+    bottom: -9px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #2c3e50;
+    animation: hour-now-pulse 2.4s ease-out infinite;
+}
+
+/* A slow, small pulse: a halo grows a few pixels and fades, so the marker
+   reads as "now" without pulling the eye off the data. The dot dims
+   slightly at the midpoint, which is what makes it feel like a breath
+   rather than a blink. The halo is twice the dot's radius, so the two
+   stay in proportion when the dot is resized. */
+@keyframes hour-now-pulse {
+    0% {
+        box-shadow: 0 0 0 0 rgba(44, 62, 80, 0.4);
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.7;
+    }
+    100% {
+        box-shadow: 0 0 0 10px rgba(44, 62, 80, 0);
+        opacity: 1;
+    }
+}
+
+/* The pulse is decoration, so it is dropped for anyone who has asked for
+   less motion. The dot stays, so the current hour is still marked. */
+@media (prefers-reduced-motion: reduce) {
+    .hourly-strip .hour-now::after {
+        animation: none;
+    }
+}
+
+.hourly-axis {
+    display: flex;
+    gap: 2px;
+    /* Room for the pulsing dot, which hangs below the baseline. An 8px dot
+       needs 9px of offset plus a 1px gap, so the axis sits 11px down to
+       keep the dot clear of the hour labels. */
+    margin-top: 11px;
+}
+
+.hour-axis-cell {
+    position: relative;
+    flex: 1 1 0;
+    min-width: 0;
+    height: 0.75rem;
+    font-size: 0.6rem;
+    color: #5d6d7e;
+    font-variant-numeric: tabular-nums;
+}
+
+/* The label marks the start of its hour, so it sits on the boundary
+   between two bars rather than in the middle of one. The first cell would
+   push its label off the left edge, so it is nudged back inside. */
+.hour-axis-label {
+    position: absolute;
+    left: 0;
+    transform: translateX(-50%);
+    white-space: nowrap;
+}
+
+.hour-axis-cell:first-child .hour-axis-label {
+    left: 0.2rem;
+    transform: none;
+}
+
+.hour-axis-label.hour-now {
+    color: #2c3e50;
+    font-weight: 700;
+}
+
+/* The table view. Every value in the strip is reachable here without
+   hovering, so the tooltip is never the only way to read a number. */
+.hourly-table {
+    margin-top: 0.4rem;
+    font-size: 0.72rem;
+}
+
+.hourly-table summary {
+    cursor: pointer;
+    color: #5d6d7e;
+}
+
+.hourly-table table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 0.3rem;
+}
+
+.hourly-table th,
+.hourly-table td {
+    padding: 0.15rem 0.3rem;
+    text-align: left;
+    border-bottom: 1px solid #eef1f2;
+    font-weight: normal;
+    color: #5d6d7e;
+    font-variant-numeric: tabular-nums;
+}
+
+.hourly-table thead th {
+    font-weight: 600;
+    color: #2c3e50;
+}
+
+.hourly-table tr.is-now th,
+.hourly-table tr.is-now td {
+    color: #2c3e50;
+    font-weight: 700;
+}
+
+/* The optional donation line under the forecast. It is quiet on purpose: one
+   short sentence, no box and no button, well away from the search form. */
+.donate {
+    margin: 0.5rem 0 0;
+    font-size: 0.75rem;
+    line-height: 1.3;
+    text-align: center;
+    color: #5d6d7e;
+}
+
+.donate a {
+    color: #1a5e96;
+    font-weight: 600;
 }
 
 .umbrella {

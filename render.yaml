@@ -28,3 +28,8 @@ services:
       # back to English for a supported language.
       - key: DATE_LOCALE
         value: auto
+      # Optional donation link. Voluntary one-off donations only: Open-Meteo's
+      # free terms are non-commercial, so the page behind this link must not
+      # sell memberships, extras or subscriptions. Remove the line to hide it.
+      - key: DONATION_URL
+        value: https://buymeacoffee.com/rainalert
