@@ -19,6 +19,7 @@ which turns a missing browser into a failure instead of a skip.
 """
 
 import os
+import re
 import socket
 import tempfile
 import threading
@@ -28,6 +29,7 @@ from unittest import mock
 
 try:
     from selenium import webdriver
+    from selenium.common.exceptions import WebDriverException
     from selenium.webdriver.chrome.options import Options
     from selenium.webdriver.common.by import By
     from selenium.webdriver.support.ui import WebDriverWait
@@ -74,6 +76,26 @@ MILD_PAYLOAD = {
         "time": ["2026-10-21", "2026-10-22", "2026-10-23", "2026-10-24",
                  "2026-10-25", "2026-10-26", "2026-10-27"],
         "precipitation_probability_max": [60, 40, 20, 15, 5, 0, None],
+        "temperature_2m_max": [11.1, 14.0, 16.7, 12.0, 10.0, 9.0, 8.0],
+        "temperature_2m_min": [8.5, 8.6, 10.3, 7.0, 6.0, 5.0, 4.0],
+    },
+    "hourly": {
+        "time": [f"2026-10-21T{hour:02d}:00" for hour in range(24)],
+        "precipitation_probability": [0] * 24,
+    },
+    "current": {"time": "2026-10-21T09:00"},
+    "utc_offset_seconds": 3600,
+}
+
+
+# A dry week: nothing reaches the app's own threshold of 50, so there is
+# nothing to export. The server decides that, and a reader without a
+# script is told so as well.
+DRY_PAYLOAD = {
+    "daily": {
+        "time": ["2026-10-21", "2026-10-22", "2026-10-23", "2026-10-24",
+                 "2026-10-25", "2026-10-26", "2026-10-27"],
+        "precipitation_probability_max": [40, 30, 20, 15, 5, 0, None],
         "temperature_2m_max": [11.1, 14.0, 16.7, 12.0, 10.0, 9.0, 8.0],
         "temperature_2m_min": [8.5, 8.6, 10.3, 7.0, 6.0, 5.0, 4.0],
     },
@@ -283,6 +305,19 @@ class BrowserTestCase(BrowserServerMixin, unittest.TestCase):
                 }).filter(function (value) { return value !== null; });
         """)
 
+    def marked_dates(self):
+        """The dates of the days that carry the threshold marker."""
+        return self.driver.execute_script("""
+            return Array.prototype.map.call(
+                document.querySelectorAll('.weather-item'),
+                function (row) {
+                    if (!row.querySelector('.alert-marker')) { return null; }
+                    var text = row.querySelector('.date').textContent;
+                    var match = /(\\d{2}\\.\\d{2}\\.\\d{4})/.exec(text);
+                    return match ? match[1] : null;
+                }).filter(function (value) { return value !== null; });
+        """)
+
     def set_threshold(self, value):
         """Type a threshold into the field, the way a reader would."""
         self.driver.execute_script("""
@@ -460,6 +495,22 @@ class BrowserTestCase(BrowserServerMixin, unittest.TestCase):
         self.driver.get(self.base + "/?city=London")
         self.wait_for("return document.querySelector('.weather-list') !== null;")
 
+    def ical_dates(self, dates):
+        """``21.10.2026`` as an iCalendar date: ``20261021``."""
+        return [day[6:10] + day[3:5] + day[0:2] for day in dates]
+
+    def exported_dates(self):
+        """The dates in the file the export link points at."""
+        body = self.driver.execute_async_script("""
+            var done = arguments[arguments.length - 1];
+            var href = document.getElementById('calendar-export')
+                .getAttribute('href');
+            fetch(href).then(function (response) {
+                return response.text();
+            }).then(done, function () { done(''); });
+        """)
+        return re.findall(r"DTSTART;VALUE=DATE:(\d{8})", body)
+
     def test_the_export_link_is_on_the_forecast_page(self):
         self.open_the_forecast()
         self.assertTrue(self.export_link().is_displayed())
@@ -541,6 +592,56 @@ class BrowserTestCase(BrowserServerMixin, unittest.TestCase):
         # The reader is left on the page, not on a file.
         self.assertIn("city=London", self.driver.current_url)
         self.assertIn("weather-list", self.driver.page_source)
+
+    def test_the_file_holds_exactly_the_days_the_page_marks(self):
+        """The calendar and the list can never disagree about the wet days.
+
+        The reader's own threshold is the one that goes into the file, so
+        the days in it have to be the days the ▲ marks on the page.
+        """
+        self.open_the_forecast()
+        self.set_threshold(90)
+        self.wait_for("return document.querySelector('.alert-marker') !== null;")
+        marked = self.marked_dates()
+        self.assertEqual(len(marked), 1)
+        self.assertEqual(self.exported_dates(), self.ical_dates(marked))
+
+    def test_the_file_leaves_out_the_days_below_the_threshold(self):
+        """A dry day is not in the file, and a missing one is not either."""
+        self.open_the_forecast()
+        self.set_threshold(60)
+        self.wait_for("return document.querySelector('.alert-marker') !== null;")
+        exported = self.exported_dates()
+        # 100, 86 and 60 per cent are at or above the threshold; 40 is
+        # not, and the day the service did not report never is.
+        self.assertEqual(exported, ["20261021", "20261022", "20261026"])
+
+    def test_the_link_is_there_without_javascript(self):
+        """The export is a link, so it does not need a script to work."""
+        self.driver.execute_cdp_cmd(
+            "Emulation.setScriptExecutionDisabled", {"value": True})
+        try:
+            self.driver.get(self.base + "/?city=London")
+            link = self.driver.find_element(By.ID, "calendar-export")
+            self.assertTrue(link.is_displayed())
+            self.assertIn("/calendar.ics?city=London",
+                          link.get_attribute("href"))
+        finally:
+            self.driver.execute_cdp_cmd(
+                "Emulation.setScriptExecutionDisabled", {"value": False})
+
+    def test_the_link_is_hidden_without_javascript_when_there_is_nothing_to_export(self):
+        """The server decides, so a reader without a script is told too."""
+        self.mock_get.return_value = FakeResponse(payload=DRY_PAYLOAD)
+        self.driver.execute_cdp_cmd(
+            "Emulation.setScriptExecutionDisabled", {"value": True})
+        try:
+            self.driver.get(self.base + "/?city=London")
+            self.assertFalse(
+                self.driver.find_element(By.ID, "calendar-export").is_displayed())
+        finally:
+            self.driver.execute_cdp_cmd(
+                "Emulation.setScriptExecutionDisabled", {"value": False})
 
     # -- notifications --------------------------------------------------------
 
@@ -826,6 +927,32 @@ class PwaBrowserTestCase(BrowserServerMixin, unittest.TestCase):
         self.wait_for("return document.querySelector('.weather-list') !== null;")
         self.assertIn("Forecast for London", self.driver.page_source)
 
+    def test_the_export_downloads_with_the_worker_in_charge(self):
+        """The worker must not get in the way of the export either."""
+        self.wait_for_the_worker()
+        directory = tempfile.mkdtemp()
+        self.driver.execute_cdp_cmd("Browser.setDownloadBehavior", {
+            "behavior": "allow",
+            "downloadPath": directory,
+        })
+        self.driver.get(self.base + "/?city=London")
+        self.wait_for("return document.querySelector('.weather-list') !== null;")
+        self.driver.find_element(By.ID, "calendar-export").click()
+
+        path = None
+        deadline = time.time() + 15
+        while time.time() < deadline and path is None:
+            names = [name for name in os.listdir(directory)
+                     if name.endswith(".ics")]
+            if names:
+                path = os.path.join(directory, names[0])
+            else:
+                time.sleep(0.2)
+        self.assertIsNotNone(path, "the calendar file was not downloaded")
+        with open(path, encoding="utf-8") as handle:
+            content = handle.read()
+        self.assertIn("BEGIN:VCALENDAR", content)
+
 
 @unittest.skipUnless(
     HAS_SELENIUM or REQUIRE_BROWSER,
@@ -936,6 +1063,27 @@ class OfflineBrowserTestCase(BrowserServerMixin, unittest.TestCase):
         self.driver.get(self.base + "/?city=London")
         self.wait_for("return document.querySelector('.weather-list') !== null;")
         self.assertIn("Forecast for London", self.driver.page_source)
+
+    def test_the_export_is_not_answered_with_the_offline_page(self):
+        """An offline page is a page, and it must not stand in for a file.
+
+        The worker answers a navigation with the offline page when there
+        is no network, so the export has to be let through: a reader must
+        never end up with a saved file that pretends to be a calendar.
+        """
+        self.wait_for_the_worker()
+        self.take_the_server_away()
+        try:
+            try:
+                self.driver.get(self.base + "/calendar.ics?city=London")
+                body = self.driver.execute_script(
+                    "return document.body.innerText || '';")
+            except WebDriverException:
+                # The browser's own error page: no server, no file.
+                body = ""
+            self.assertNotIn("You are offline", body)
+        finally:
+            self.bring_the_server_back()
 
 
 if __name__ == "__main__":

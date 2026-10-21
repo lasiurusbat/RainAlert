@@ -7,6 +7,7 @@ never touches Nominatim or Open-Meteo.
 import json
 import re
 import unittest
+from datetime import date
 from unittest import mock
 
 import requests
@@ -1689,6 +1690,17 @@ class TestCalendarFile(unittest.TestCase):
         self.assertEqual(rainalert.calendar_day("2026-10-21"), "20261021")
         self.assertEqual(rainalert.calendar_next_day("2026-10-21"), "20261022")
 
+    def test_the_day_after_a_month_is_the_first_of_the_next(self):
+        """The end of an all-day event is the start of the next day.
+
+        A month or a year has to roll over, and a leap day has to be
+        counted, or the event covers the wrong days.
+        """
+        self.assertEqual(rainalert.calendar_next_day("2026-10-31"), "20261101")
+        self.assertEqual(rainalert.calendar_next_day("2026-12-31"), "20270101")
+        self.assertEqual(rainalert.calendar_next_day("2028-02-28"), "20280229")
+        self.assertEqual(rainalert.calendar_next_day("2026-02-28"), "20260301")
+
     def test_an_unreadable_date_is_left_out(self):
         self.assertEqual(rainalert.calendar_day("not a date"), "")
         self.assertEqual(rainalert.calendar_next_day("not a date"), "")
@@ -1710,6 +1722,20 @@ class TestCalendarFile(unittest.TestCase):
         self.assertNotIn("\n\n", text)
         for line in text.split("\r\n")[:-1]:
             self.assertNotIn("\n", line)
+
+    def test_no_line_of_the_finished_file_is_too_long(self):
+        """The 75-octet limit is a property of the file, not of one value.
+
+        The description, the summary and the calendar name are all built
+        out of what the page says, so a long city name can make any of
+        them long.
+        """
+        text = rainalert.build_calendar(
+            [{"iso_date": "2026-10-21", "date": "Wednesday 21.10.2026",
+              "chance": 80, "chance_number": 80, "severity": "high"}],
+            "München, Bayern, Deutschland", 50)
+        for line in text.split("\r\n"):
+            self.assertLessEqual(len(line.encode("utf-8")), 75, line)
 
 
 class TestCalendarExport(AppTestCase):
@@ -1765,6 +1791,8 @@ class TestCalendarExport(AppTestCase):
         response = self.export()
         self.assertEqual(response.status_code, 200)
         self.assertIn("text/calendar", response.headers["Content-Type"])
+        # The city can be anything, so the file has to say it is UTF-8.
+        self.assertIn("charset=utf-8", response.headers["Content-Type"])
 
     def test_the_file_is_offered_as_a_download(self):
         response = self.export()
@@ -1824,6 +1852,47 @@ class TestCalendarExport(AppTestCase):
         """A missing value is not a chance of anything."""
         text = self.text(chances=(80, None))
         self.assertEqual(text.count("BEGIN:VEVENT"), 1)
+
+    def test_an_unreadable_threshold_falls_back_to_the_apps_own(self):
+        """A nonsense threshold is not the reader's own, so it is not used.
+
+        The browser only ever sends a number, but the link can be edited
+        or typed by hand, and a hand-typed threshold must not be taken as
+        the reader's own answer.
+        """
+        text = self.readable("?city=London&threshold=soon")
+        self.assertIn("Bring an umbrella.", text)
+        self.assertNotIn("alert threshold", text)
+        # The app's own threshold still decides which days go in.
+        self.assertIn("DTSTART;VALUE=DATE:20261021", text)
+        self.assertNotIn("DTSTART;VALUE=DATE:20261023", text)
+
+    def test_a_threshold_of_zero_takes_every_reported_day(self):
+        """Zero is a threshold a reader can set, and it means every day."""
+        text = self.readable("?city=London&threshold=0",
+                             chances=(100, 86, 40, 0, None))
+        self.assertEqual(text.count("BEGIN:VEVENT"), 4)
+        # The day the service did not report is still not in the file.
+        self.assertNotIn("DTSTART;VALUE=DATE:20261025", text)
+
+    def test_the_events_are_the_days_the_page_shows(self):
+        """The calendar and the list can never disagree about the wet days.
+
+        The same forecast produces both, so the dates in the file have to
+        be the dates on the page.
+        """
+        chances = [100, 86, 40, 15]
+        self.mock_get.return_value = FakeResponse(payload=self.payload(chances))
+        page = self.client.get("/?city=London").get_data(as_text=True)
+        text = self.readable(chances=chances)
+
+        # The app's own threshold is 50, so the first two days are the wet
+        # ones, and the file holds exactly those two.
+        starts = re.findall(r"DTSTART;VALUE=DATE:(\d{8})", text)
+        self.assertEqual(starts, ["20261021", "20261022"])
+        for start in starts:
+            day = date(int(start[:4]), int(start[4:6]), int(start[6:]))
+            self.assertIn(day.strftime("%d.%m.%Y"), page)
 
     def test_a_dry_week_produces_a_calendar_with_no_events(self):
         """The file is still a calendar; it simply has nothing in it."""
@@ -2087,6 +2156,22 @@ class TestInstallableApp(AppTestCase):
     def test_the_forecast_page_is_never_cached(self):
         """The page holds the forecast, and a cached forecast is a lie."""
         self.assertNotIn("/", self.shell_files())
+
+    def test_the_export_is_not_in_the_shell(self):
+        """The file holds a forecast, so it is never cached with the shell."""
+        self.assertNotIn("/calendar.ics", self.shell_files())
+
+    def test_the_export_is_never_intercepted(self):
+        """An offline page is not a calendar, and must not stand in for one.
+
+        The worker answers a navigation with the offline page when there
+        is no network, so the export has to be let through before that
+        branch is reached.
+        """
+        script = self.get("/service-worker.js").get_data(as_text=True)
+        self.assertIn("/calendar.ics", script)
+        self.assertLess(script.index("/calendar.ics"),
+                        script.index("request.mode === 'navigate'"))
 
     # -- the offline page -----------------------------------------------------
 

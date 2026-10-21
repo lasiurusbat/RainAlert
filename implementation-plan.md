@@ -33,7 +33,7 @@ without a network.
 - [x] Geocoding cache, explicit timeouts, configuration through environment variables
 - [x] City-local dates (`timezone=auto`) and English weekday names
 - [x] Temperature rounding fix (round half up)
-- [x] Offline unit tests (271), browser tests (44) and live API tests (7)
+- [x] Offline unit tests (278), browser tests (50) and live API tests (7)
 - [x] Comprehensive `README.md` with screenshot, `CLAUDE.md` project notes
 
 ### Alert ideas, Tier 1 (done)

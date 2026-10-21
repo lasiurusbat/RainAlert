@@ -107,8 +107,8 @@ Python 3.14.5.
 ## Running the tests
 
 ```bash
-python -m unittest test_app    # 271 offline tests, no network required
-python -m unittest test_browser  # 44 browser tests, needs Chrome
+python -m unittest test_app    # 278 offline tests, no network required
+python -m unittest test_browser  # 50 browser tests, needs Chrome
 python -m unittest test_api     # 7 live integration tests, hits both APIs
 ```
 

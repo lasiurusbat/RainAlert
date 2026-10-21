@@ -25,8 +25,8 @@ Serves on <http://127.0.0.1:5000>. `FLASK_DEBUG=1` enables the reloader and
 debugger.
 
 ```bash
-python -m unittest test_app    # offline suite, 271 tests, no network
-python -m unittest test_browser  # browser suite, 44 tests, needs Chrome
+python -m unittest test_app    # offline suite, 278 tests, no network
+python -m unittest test_browser  # browser suite, 50 tests, needs Chrome
 python -m unittest test_api     # live integration tests, hits both APIs
 ```
 
