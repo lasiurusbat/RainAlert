@@ -155,6 +155,8 @@ nothing else.
 | `API.md` | The HTTP API reference: every route, the parameters, the status codes, the upstream services |
 | `openapi.yaml` | The same API as an OpenAPI 3.1 spec, for tools that read one |
 | `DEPLOY.md` | Deployment runbook: Render setup, domain, CI/CD, releases |
+| `implementation-plan.md` | What is built, what is next, and the go-live checklist |
+| `RainAlert-Ideas-for-Alerting-Users.md` | The alerting tiers as proposed, each annotated with what was built |
 | `.github/workflows/ci-cd.yml` | CI on every PR and push; release on a git tag |
 | `.github/dependabot.yml` | Weekly grouped PRs for actions, pip and the base image |
 
@@ -441,6 +443,13 @@ title is still the alert: on a city's page it reads "Rain tomorrow in
 London - Rain Alert", which is the same `UMBRELLA_THRESHOLD` as the ☔ icon
 and the banner. `page_title()` is the only builder of a title.
 
+The other pages - the city index, the release notes and the 404 - write
+their own title and description, but every page, the forecast included,
+hands its head to the template through `page_meta()` in
+`rainalert/present/seo.py`. That is what puts the same social card, the same
+structured data and an absolute canonical link on every page, so no page
+can forget one of them.
+
 **`SITE_URL` is the site's own address.** It is read from the environment
 (with `https://rainalert.live` as the default) and used for the canonical
 link, the Open Graph image, the sitemap and the structured data. It is
@@ -688,9 +697,12 @@ already has.
   the app's advice are two different answers and never stand in for each
   other. `alert_threshold()` decides it, so the notification and the export
   always draw the line in the same place.
-- **The days are the ones the page shows.** The comparison is against
-  `chance_number`, the whole number in the row, so the calendar and the list
-  can never disagree about which days are wet. A day the service did not
+- **The days are the ones the page shows.** The file is built from the
+  same parsed `Day`s as the page, and the comparison is against
+  `chance_number()`, the whole number in the row, so the calendar and the
+  list can never disagree about which days are wet. The page counts the days
+  that would go in the file from those same `Day`s, to decide whether to
+  offer the link. A day the service did not
   report is never in the file: an unknown chance is not a chance of
   anything.
 - **The events are all-day events**, because the forecast is a daily maximum.
@@ -801,9 +813,10 @@ because the app works without it.
   so any route that renders `index.html` has to pass them too — otherwise the
   title renders empty and the icon URL breaks. Two routes render that
   template today, `/` and `/city/<slug>`, and both go through
-  `render_forecast_page()`; the other four (`/api/alert`, `/calendar.ics`,
-  `/manifest.json` and `/service-worker.js`) render nothing, and `/cities`
-  and the 404 handler render their own templates with their own titles. The
+  `render_forecast_page()`; six (`/api/alert`, `/calendar.ics`,
+  `/robots.txt`, `/sitemap.xml`, `/manifest.json` and `/service-worker.js`)
+  render no template at all, and `/cities`, `/release-notes` and the 404
+  handler render their own templates with their own titles. The
   forecast page keeps the plain "Rain Alert" title and the default icon
   whenever there is no forecast, which is the case for the empty page and
   for every error page.
@@ -956,6 +969,12 @@ because the app works without it.
   package - a label in `present/labels.py`, a sentence about the rain in
   `domain/alerts.py`, an error in `errors.py` - and the UI text is English,
   and so are the weekday names.
+- **A change that must not change what the site serves is checked by
+  snapshot.** Run `python tools/snapshot.py snapshots/before` before the
+  change and `python tools/snapshot.py snapshots/after` after it, then
+  `diff -r` the two directories (`snapshots/` is git-ignored): every route's answer,
+  with both upstreams mocked, has to be identical. The tests check what they
+  were written to check; the snapshot checks everything else.
 - **A test lives with the module it tests**, in `tests/offline/`, and
   imports that module directly. Patch a name where it is defined:
   `rainalert.config`, `geocoding.geolocator`, `requests.get`.

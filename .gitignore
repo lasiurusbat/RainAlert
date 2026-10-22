@@ -79,3 +79,6 @@ _site/
 # screenshot that is committed lives in docs/screenshot.png.
 shot-*.png
 crop-*.png
+
+# The output of tools/snapshot.py, saved before and after a refactor
+snapshots/

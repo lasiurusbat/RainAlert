@@ -152,6 +152,19 @@ needs them to be reachable.
 The offline suite needs nothing from the host beyond Python itself: the
 weekday names are hard-coded, so there is no locale to install.
 
+For a change that must not alter what the site serves — a refactor, a
+rename, a move — there is a second check besides the tests:
+
+```bash
+python tools/snapshot.py snapshots/before   # on the old code
+python tools/snapshot.py snapshots/after    # on the new code
+diff -r snapshots/before snapshots/after    # must print nothing
+```
+
+It saves what every route answers, with both services mocked, including the
+error pages and the calendar file, so the diff catches a change the tests
+were never written to look for.
+
 ---
 
 ## Running with Docker
@@ -868,9 +881,12 @@ where it is, and the page's canonical link points at the address, so there
 is still only one page per city.
 
 The canonical link, the title, the description, the Open Graph tags and the
-JSON-LD are all decided in one place, `render_forecast_page()`, so that every
-page of the site — the start page, a city's page, an error page — carries
-the same set and they cannot disagree with each other.
+JSON-LD of a forecast page are all decided in one place,
+`render_forecast_page()`, so that the start page, a city's page and an error
+page carry the same set and they cannot disagree with each other. Every page
+of the site, the city index, the release notes and the 404 included, hands
+its head to the template through `page_meta()` in `rainalert/present/seo.py`,
+so none of them can leave out the social card or the canonical link.
 
 ### The browser half
 
