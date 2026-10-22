@@ -1206,33 +1206,22 @@ button:focus-visible {
     font-size: 0.7rem;
 }
 
-/* Which build this is, under the credits. It is the quietest thing on the
-   page: an answer to "which version is this?", not a headline. */
+/* Which build this is, under the credits. It is a third line of the same
+   kind as the credits: the same size, the same weight, the same plain
+   treatment. It answers "which version is this?", and that is a line of
+   the footer, not a caption. */
 .build-info {
     display: block;
-    margin-top: 0.1rem;
-    font-size: 0.65rem;
-    opacity: 0.72;
+    margin-top: 0.15rem;
+    font-size: 0.7rem;
 }
 
 /* The release notes link, after the build. The separator is a pipe rather
    than a dot, so the two read as two different kinds of thing: one is
-   which build is answering, the other is a page to read. */
+   which build is answering, the other is a page to read. The link itself
+   is styled like every other link in the footer. */
 .build-sep {
     margin: 0 0.35rem;
-    opacity: 0.7;
-}
-
-.release-link {
-    color: inherit;
-    text-decoration: underline;
-    text-decoration-color: rgba(255, 255, 255, 0.4);
-    text-underline-offset: 3px;
-}
-
-.release-link:hover,
-.release-link:focus-visible {
-    text-decoration-color: currentColor;
 }
 
 /* --- The release notes ------------------------------------------------------
