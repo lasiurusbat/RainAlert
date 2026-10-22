@@ -1,5 +1,9 @@
-"""What the route modules share: reporting a failure, and the forecast in
-the form the template renders.
+"""What the route modules share: reporting a failure.
+
+The forecast in the form the template renders is here too, in
+:func:`fetch_weather`, but the routes build their own views from the
+parsed forecast and do not go through it - it is the one place that turns
+a whole forecast into views, which is what the tests want.
 """
 
 from flask import current_app

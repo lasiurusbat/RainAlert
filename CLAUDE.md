@@ -9,9 +9,11 @@ Both APIs are free, keyless, and need no signup. There is no database and no
 user account system.
 
 **The app runs locally only.** Nothing is deployed: `rainalert.live` does not
-serve this app, no release tag has ever been cut, and no image has been
-pushed to Docker Hub. The deployment machinery is written and committed, but
-it has never been run end to end. `DEPLOY.md` is the runbook, and the
+serve this app, no image has been pushed to Docker Hub, and no deploy has
+been requested. The first release tag (`v1.0`) was cut on 2026-10-22, but
+the workflow run it triggered never got past the Docker Hub push. The
+deployment machinery is written and committed, and it has now been run
+end to end except for the last step. `DEPLOY.md` is the runbook, and the
 "Still to do" section below is the list of what is actually ahead.
 
 ## Running it
@@ -70,8 +72,6 @@ gets none of them, because the offline suite asserts the app's own defaults.
 **The app is not live.** Checked on 2026-10-22, and every one of these is
 still true:
 
-- **No release tag exists.** `git tag -l` is empty. The workflow only pushes
-  and deploys on a `v*` tag, so nothing has ever been released.
 - **The Docker Hub image does not exist.** The repository
   `lasiurusbat/rainalert` is there, with **zero tags** — so the
   `docker.io/lasiurusbat/rainalert:1.0` that `render.yaml` points at cannot
@@ -87,19 +87,38 @@ still true:
   own A record is `0.0.0.0` — so the second hop answers nothing, and
   `https://` on the root does not answer at all. No Render address appears
   in the DNS at all.
-- **CI itself has run, and is green.** The workflow builds the image, runs
-  the offline suite inside it and the browser suite on the runner. Only the
-  tag-gated half — the push and the deploy — has never fired.
+
+**The first release tag has been cut, and the run it triggered failed
+three times.** `v1.0` points at `e7e04b4` on `main`, and the tag-gated
+half of the workflow has now run, so the machinery is not untested:
+
+- **Attempt 1 failed at the Docker Hub login.** The `DOCKERHUB_USERNAME`
+  and `DOCKERHUB_TOKEN` secrets were not set, so the login step had
+  nothing to log in with.
+- **Attempt 2 failed at the push**, with `unauthorized: access token has
+  insufficient scopes`. The token existed but had the **Read** scope; a
+  push needs **Read & Write**. The token was replaced on 2026-10-22.
+- **Attempt 3 failed in the browser suite**, on
+  `test_the_export_downloads_with_the_worker_in_charge`. It is a flake in
+  the test's own wait, not a fault in the app: the worker installed and
+  activated, and the page was not taken over by it, so the wait for
+  `navigator.serviceWorker.controller` ran out. The wait now waits for
+  the registration to be *active* and loads the page once more when it is
+  not controlled yet, which is what the test actually means.
+
+CI is green in every other respect: the image builds, the offline suite
+passes inside it, and the browser suite passes on the runner.
 
 So the app is served by `python app.py` or `docker compose up`, and by
 nothing else.
 
 ### Still to do
 
-- [ ] Cut the first release tag (`git tag v1.0 && git push origin v1.0`),
-      which builds, tests, pushes and deploys in one workflow run.
-- [ ] Confirm the Docker Hub credentials and the Render deploy hook are set
-      as GitHub secrets, and that the free Render plan includes a hook.
+- [ ] Re-run the failed jobs of the `v1.0` run. The tag does not have to
+      be cut again — it is already on `main` — and the run builds, tests,
+      pushes and deploys in one go.
+- [ ] Confirm the Render deploy hook is set as a GitHub secret, and that
+      the free Render plan includes a hook.
 - [ ] Point the domain at Render: add `rainalert.live` to the service,
       then replace the Namecheap forwarding records with the DNS records
       Render gives, and verify HTTPS.
@@ -107,15 +126,16 @@ nothing else.
       not `1.0`.
 - [ ] Re-check the smoke test in the workflow: it greps the live page for
       `Version <tag>`, so it proves the new build is the one answering and
-      not an old one. **It will fail on the first tag run** as long as the
-      domain is still on Namecheap forwarding, so the first release ends
-      red even when the deploy itself worked.
+      not an old one. **It will fail on the first successful tag run** as
+      long as the domain is still on Namecheap forwarding, so the release
+      ends red even when the deploy itself worked.
 
 ## Layout
 
 | Path | Purpose |
 |---|---|
 | `app.py` | The entry point for `python app.py` and `gunicorn app:app`; it only calls `create_app()` |
+| `requirements.txt` | The runtime dependencies, installed by the Dockerfile and by `pip install -r` |
 | `rainalert/config.py` | Every setting read from the environment |
 | `rainalert/errors.py` | The three failures, and `FAILURES`: what each one says and which status it answers |
 | `rainalert/domain/rain.py` | The bands, the umbrella and the alert threshold |
@@ -133,7 +153,7 @@ nothing else.
 | `rainalert/web/pages.py` | `/`, `/city/<slug>`, `/cities`, `/release-notes` and `render_forecast_page()` |
 | `rainalert/web/api.py` | `/api/alert` and `/calendar.ics` |
 | `rainalert/web/site.py` | `robots.txt`, `sitemap.xml`, the manifest, the service worker, the 404 |
-| `rainalert/web/common.py` | What the route modules share: reporting a failure, the forecast as views |
+| `rainalert/web/common.py` | What the route modules share: reporting a failure. The forecast as views is a helper here, but only the tests call it |
 | `rainalert/data/cities.py` | The curated list of cities that have a page of their own |
 | `rainalert/data/releases.py` | What each release brought, for the release notes page |
 | `templates/index.html` | Single page; inline styles are out, classes live in `style.css` |
@@ -142,7 +162,7 @@ nothing else.
 | `templates/_footer.html` | The shared footer, a Jinja macro the pages call |
 | `templates/404.html` | The page for an address that is not on this site |
 | `static/style.css` | All styling |
-| `static/fonts/` | The self-hosted Archivo variable face (Latin subset) |
+| `static/fonts/` | The self-hosted Archivo variable face: the Latin subset and the Latin Extended subset, for the accented letters of a city nobody looked up in advance |
 | `static/app.js` | The browser half: saved city, personal alert threshold, notifications |
 | `static/manifest.json` | The web app manifest: the app's name, icons and install metadata |
 | `static/service-worker.js` | The service worker: caches the shell, never the forecast |
@@ -170,10 +190,13 @@ nothing else.
 | `render.yaml` | Render Blueprint; runs a prebuilt image, not a build (not deployed yet) |
 | `API.md` | The HTTP API reference: every route, the parameters, the status codes, the upstream services |
 | `openapi.yaml` | The same API as an OpenAPI 3.1 spec, for tools that read one |
+| `README.md` | The front door: what the app is, how to run it, and the rest of the documents |
 | `DEPLOY.md` | Deployment runbook: Render setup, domain, CI/CD, releases |
 | `tech-stack.md` | What the app is built with, what each piece does, and why it is that piece |
 | `implementation-plan.md` | What is built, what is next, and the go-live checklist |
 | `RainAlert-Ideas-for-Alerting-Users.md` | The alerting tiers as proposed, each annotated with what was built |
+| `design/` | The design mockups: what the page could look like. Not part of the app |
+| `docs/` | The committed screenshot the README shows |
 | `.github/workflows/ci-cd.yml` | CI on every PR and push; release on a git tag |
 | `.github/dependabot.yml` | Weekly grouped PRs for actions, pip and the base image |
 
@@ -259,11 +282,13 @@ photograph — the same night the picture shows, lit by the same sodium lamps
 — and the colours are taken from the image: asphalt, haze, mist, paper and
 the amber of a street lamp. **Amber is the only accent**, so a colour on the
 page always means something about the rain and never just decoration. The
-type is **Archivo, self-hosted** (`static/fonts/archivo-latin.woff2`, the
-Latin subset of a variable face), so the page asks no third party for
-anything and still works with no network. The width axis does the work: the
-city name is set wide, the labels narrow, the figures wide again in tabular
-numerals.
+type is **Archivo, self-hosted** (`static/fonts/archivo-latin.woff2` and
+`static/fonts/archivo-latin-ext.woff2`, the Latin and the Latin Extended
+subsets of a variable face, the second one for the accented letters of a
+city nobody looked up in advance — Gdańsk, Malmö, Zürich), so the page
+asks no third party for anything and still works with no network. The
+width axis does the work: the city name is set wide, the labels narrow,
+the figures wide again in tabular numerals.
 
 **The answer is at the top of the page.** The city is the `h1`, the sentence
 about the week is the banner under it, and the strip and the week follow.
@@ -544,9 +569,11 @@ plate behind it.
 
 **The week says "chance of rain" once, in the column heading.** The phrase
 used to be on all seven rows, where it carried nothing after the first one.
-Now `format_rain_chance()` returns the bare number for the visible column
-and `describe_rain_chance()` returns the full phrase for screen readers and
-tooltips, and the wording itself lives in the `.severity-legend` row above
+Now `format_rain_chance()` returns the number with its sign for the visible
+column, `format_rain_chance_short()` returns the bare number for the
+hourly strip's value row, and `describe_rain_chance()` returns the full
+phrase for screen readers and tooltips, and the wording itself lives in
+the `.severity-legend` row above
 the week. That row is also the **heading row of the week**: "Rain chance"
 names what the figures are, the three band names say what the colours
 mean, and the temperature switch sits on the right of it.
@@ -558,9 +585,11 @@ is too narrow for the bands and the switch, the switch wraps to a second
 line and stays on the right of that line.
 
 The visible number is wrapped in `aria-hidden="true"` and a `.sr-only` span
-carries "100% chance of rain. Take an umbrella." The heading is a `<span>`,
-not a real table header, so the column itself has to say what the number
-means. The hourly table below *does* have a real `<th scope="col">Rain
+carries "100% chance of rain" beside it. The umbrella carries its own
+words in a second `.sr-only` span — "Take an umbrella." — so the two
+sentences are read one after the other and neither is lost. The heading is
+a `<span>`, not a real table header, so the column itself has to say what
+the number means. The hourly table below *does* have a real `<th scope="col">Rain
 chance</th>`, so its cells can be bare numbers.
 
 **The narrow layout is decided, not left to flexbox.** Below 560px the
@@ -650,10 +679,12 @@ tests; do not remove them.
 server.** `static/app.js` keeps both in `localStorage`, and the server
 stays stateless: it never sees either value, and a first-time visitor sees
 exactly the page a returning one does. The server's only job is to tell the
-page what kind of page it is, through three attributes on `<body>`:
+page what kind of page it is, through four attributes on `<body>`:
 `data-autoload` (may this page load a remembered city by itself?),
 `data-search` (`ok`, `error` or `none` — was the last search worth
-remembering?) and `data-city`. Without JavaScript neither control can do
+remembering?), `data-city` and `data-unit` (the scale the temperatures in
+the forecast are in — the browser cannot work it out on its own). Without
+JavaScript neither control can do
 anything, so the preferences row is hidden by the `.no-js` class and the
 page is exactly what it was before.
 
@@ -826,7 +857,9 @@ because the app works without it.
 - **Banker's rounding.** Python's `round(8.5)` is `8`, not `9`. Use the
   `round_half_up()` helper for temperatures, where halves are common.
 - **Do not use `.title()` on user input.** It turns `"st john's"` into
-  `"St John'S"`. The app displays the geocoder's own `display_name` instead.
+  `"St John'S"`. The app shows the first comma-separated segment of the
+  geocoder's own `display_name` — "Gdansk", not "Gdansk, Pomeranian
+  Voivodeship, Poland".
 - **The CSS file once contained a literal `\n`** (backslash-n, not a
   newline) that silently swallowed the next declaration. If `background-size`
   ever stops applying, check for stray escape sequences in the raw bytes.
@@ -847,6 +880,17 @@ because the app works without it.
   selenium or Chrome is missing, so a plain `python -m unittest` never
   fails because of it — but a skipped suite is not a passing suite, so
   check that it actually ran before trusting it.
+- **A page is not controlled by a service worker just because it is
+  active.** `clients.claim()` takes charge of the pages that are open at
+  the moment it runs, and a page navigated after that is not controlled
+  until it is loaded again. So a test that wants "the worker is in
+  charge" cannot wait for `navigator.serviceWorker.controller` alone: it
+  has to wait for the registration to be **active** first, and then load
+  the page once more when it is not controlled yet. Waiting only for the
+  controller timed out on a CI runner that had just moved to a new
+  image, with the worker installed and activated and the page still
+  uncontrolled. `wait_for_the_worker()` in `tests/test_browser.py` does
+  this now.
 - **A local Docker image is never rebuilt on its own.** Compose reuses
   `rainalert:latest` whenever it exists, so `docker compose run --rm tests`
   can test yesterday's code and still say `OK`. The compose file now sets
@@ -869,9 +913,12 @@ because the app works without it.
   `/robots.txt`, `/sitemap.xml`, `/manifest.json` and `/service-worker.js`)
   render no template at all, and `/cities`, `/release-notes` and the 404
   handler render their own templates with their own titles. The
-  forecast page keeps the plain "Rain Alert" title and the default icon
-  whenever there is no forecast, which is the case for the empty page and
-  for every error page.
+  forecast page keeps the default icon whenever there is no alert, which is
+  the case for the empty page and
+  for every error page. The title is never a bare "Rain Alert" either:
+  without an alert it reads "7-day rain chance for London - Rain Alert" on
+  a city's page and "Rain Alert - 7-day rain chance for any city" on the
+  start page, so every page says what it is about.
 - **A city page is a `404` or a `503`, not a page with a message on it.**
   A `200` that says "not found" is a soft 404. The start page is different:
   a failed *search* there is not a missing *page*, so it stays `200`.

@@ -3,13 +3,17 @@
 **The site is not live.** The Docker half of this has been exercised
 locally: the image builds, both test suites pass inside it, and a forecast
 renders with English weekday names. The CI workflow itself has run and is
-green on every push to `main`, but the **tag-gated half has never fired** —
-no release has been pushed and no deploy has been requested.
+green on every push to `main`. The **tag-gated half has fired** — `v1.0`
+was cut on 2026-10-22 — and the run it triggered failed: once at the
+Docker Hub login, once at the push (the token had the Read scope, and a
+push needs Read & Write), and once in the browser suite. No image has
+been pushed and no deploy has been requested.
 
 State of the world, checked on 2026-10-22:
 
-- **No release tag exists** (`git tag -l` is empty), so the image has never
-  been pushed.
+- **The first release tag exists** (`v1.0`, on `main`), so the workflow
+  has run its push-and-deploy half, and the run is to be repeated with
+  the fixed secrets. The tag does not have to be cut again.
 - **The Docker Hub repository `lasiurusbat/rainalert` exists and is
   public, but it has zero tags** (the API answers
   `{"count":0,...}`). `render.yaml` points at
@@ -139,8 +143,9 @@ page:
 ## 5. CI/CD pipeline (GitHub Actions)
 
 The workflow is `.github/workflows/ci-cd.yml`. The build-and-test half runs
-on every push to `main` and is green; only the tag-gated half — the push and
-the deploy — has never fired.
+on every push to `main` and is green. The tag-gated half — the push and
+the deploy — fired on `v1.0` and failed at the push; the deploy half has
+never run.
 
 ```
 pull request / push to main          push of a tag such as v1.0
@@ -187,11 +192,15 @@ pull request / push to main          push of a tag such as v1.0
 ### One-time setup
 
 1. **Docker Hub:** Account Settings -> Personal access tokens -> new token
-   with Read & Write scope. Never use the account password.
+   with Read & Write scope. Never use the account password. A token with
+   the **Read** scope alone logs in fine and then fails at the push with
+   `unauthorized: access token has insufficient scopes` — the token has to
+   be able to write, not only to read.
 2. **Render:** service -> Settings -> Deploy Hook -> copy the URL. Treat it as
    a secret: anyone with it can trigger deploys.
 3. **GitHub:** repository -> Settings -> Secrets and variables -> Actions ->
    add `DOCKERHUB_USERNAME`, `DOCKERHUB_TOKEN`, `RENDER_DEPLOY_HOOK_URL`.
+   The username is the Docker Hub account name, not an email address.
 4. **GitHub (optional):** Settings -> Environments -> `production` -> add
    yourself as a required reviewer for a manual approval before each deploy.
 5. **GitHub (recommended):** protect `main` and require the

@@ -53,9 +53,11 @@ def format_date_parts(value):
 def format_rain_chance(value):
     """The rain chance as a short label for a row or a table cell.
 
-    The rows say "chance of rain" once, in the column header, so this is
-    just the number. The full phrase is what a screen reader needs, and
-    that is :func:`describe_rain_chance`.
+    The rows say "chance of rain" once, in the column heading, so this is
+    the number and its sign - "100%" - and nothing more. The bare number,
+    without the sign, is :func:`format_rain_chance_short`, and the full
+    phrase is what a screen reader needs, which is
+    :func:`describe_rain_chance`.
 
     A value the service did not report is "unknown" rather than "0%", so
     it can never be mistaken for a dry day.

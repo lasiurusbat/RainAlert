@@ -534,9 +534,10 @@ The forecast.
 ## Deployment status
 
 **The API is not live.** `rainalert.live` does not serve this app: the domain
-is on Namecheap URL forwarding, no release tag has ever been cut, and the
-Docker Hub image does not exist. Every URL above is a local one. `DEPLOY.md`
-is the runbook, and the first release tag is the step that makes any of it
+is on Namecheap URL forwarding, the Docker Hub image does not exist, and
+the release run that would push it has not got that far yet. Every URL
+above is a local one. `DEPLOY.md`
+is the runbook, and the release is the step that makes any of it
 public.
 
 Note that `https://rainalert.onrender.com` is **not** this app — it answers
