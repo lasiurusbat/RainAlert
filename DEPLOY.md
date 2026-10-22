@@ -124,6 +124,9 @@ page:
 - Confirm that `https://rainalert.live/city/atlantis` answers `404` and not
   `200`. A page that says "not found" but answers `200` is a soft 404, and
   search engines treat it as one.
+- Confirm that `https://rainalert.live/city/---` answers `404` too. An
+  address made only of punctuation stands for no city, so there is no
+  page there and no redirect to one.
 
 ## 4. Optional
 
@@ -208,9 +211,22 @@ setup is `v1.0`, to match `render.yaml`, which pins `1.0`.
 **Cutting a release means adding an entry to `rainalert/data/releases.py`.** The release
 notes page at `/release-notes` is a page of the site, and it says what each
 release brought. Add the new release at the top of `RELEASES`, with the
-version the tag carries and the points that release made, and the footer of
+version the tag carries and the features it brought, and the footer of
 every page will link to it. The top entry's version is the one the build
 stamps into the footer, so the page and the running build agree.
+
+**Bump `CACHE_VERSION` if the release changes the shell.** The shell is
+the stylesheet, the script, the icons, the font and the background photo —
+the files that make the page *look* like Rain Alert. The service worker
+caches them, and a reader who has the app installed gets the cached copy
+until the cache version changes. So if the release touches
+`static/style.css`, `static/app.js`, an icon or the font, bump
+`CACHE_VERSION` in `static/service-worker.js` in the same commit.
+
+This is easy to forget, because the app still *works*: the page comes up
+and the forecast is right, and only the styles are old. The rule is
+"bump it when the shell changes", and the file to look at is
+`static/service-worker.js`, where the version is the first constant.
 
 ### Known limits
 
@@ -233,6 +249,13 @@ stamps into the footer, so the page and the running build agree.
   packages in `requirements.txt`, and one for the Dockerfile base image.
   Each PR runs the pipeline's tests, so merge only when it is green. The
   first PRs may appear right after the first push to GitHub.
+- **A live page can answer `503`, and that is the app working.** The
+  forecast service and the geocoder are third parties, and either can be
+  unreachable or slow at the moment a reader arrives. A city's page then
+  answers `503` and says the service is unavailable; the start page
+  answers `200`, because a failed *search* is not a missing *page*. A
+  `503` on the live site is worth a look at the Render logs and at
+  Open-Meteo's status, not a redeploy.
 - **Deploy hooks on the free plan.** Render's deploy-hooks page does not say
   whether the free plan includes them. Check the service's Settings page.
   If there is no hook, redeploy manually from the dashboard after each push.
