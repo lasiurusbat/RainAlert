@@ -1,7 +1,9 @@
-"""The settings read from the environment: the donation link and the
-build's identity.
+"""The settings read from the environment: the donation link, the build's
+identity and the temperature scale.
 """
 
+import importlib
+import os
 import unittest
 from unittest import mock
 
@@ -110,6 +112,52 @@ class TestDonationLink(AppTestCase):
         self.assertEqual(config.clean_donation_url("javascript:alert(1)"), "")
         with mock.patch.object(config, "DONATION_URL", ""):
             self.assertNotIn("javascript:", self.post())
+
+
+class TestTemperatureUnit(unittest.TestCase):
+    """The scale the service converts to, and what a bad setting does.
+
+    The setting is read at import, so the module is reloaded with the
+    environment patched. The reload puts the module back the way it was
+    afterwards, so the rest of the suite is not affected.
+    """
+
+    def reload_with(self, value):
+        """The default scale with TEMPERATURE_UNIT set to ``value``."""
+        try:
+            with mock.patch.dict(os.environ, clear=False):
+                if value is None:
+                    os.environ.pop("TEMPERATURE_UNIT", None)
+                else:
+                    os.environ["TEMPERATURE_UNIT"] = value
+                # A reload replaces the module's contents in place, so the
+                # value has to be read before the module is put back.
+                importlib.reload(config)
+                return config.DEFAULT_TEMPERATURE_UNIT
+        finally:
+            # The environment is back to what it was, so the module is
+            # reloaded once more to match it.
+            importlib.reload(config)
+
+    def test_celsius_is_the_default(self):
+        self.assertEqual(self.reload_with(None), "celsius")
+
+    def test_fahrenheit_can_be_asked_for(self):
+        self.assertEqual(self.reload_with("fahrenheit"), "fahrenheit")
+
+    def test_a_scale_that_does_not_exist_falls_back_to_celsius(self):
+        """A typo in the environment must not break every page.
+
+        The service is asked for a scale it does not know and would
+        answer with an error, so an unrecognised scale falls back to the
+        one the service uses itself.
+        """
+        for value in ("kelvin", "Celsius", "FAHRENHEIT", "c", " "):
+            with self.subTest(value=value):
+                self.assertEqual(self.reload_with(value), "celsius")
+
+    def test_the_scales_the_app_offers_are_the_two_it_knows(self):
+        self.assertEqual(config.TEMPERATURE_UNITS, ("celsius", "fahrenheit"))
 
 
 class TestBuildInfo(AppTestCase):

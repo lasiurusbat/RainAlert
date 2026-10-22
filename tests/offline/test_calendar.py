@@ -77,6 +77,23 @@ class TestCalendarFile(unittest.TestCase):
         self.assertEqual(calendar_ics.calendar_day("not a date"), "")
         self.assertEqual(calendar_ics.calendar_next_day("not a date"), "")
 
+    def test_a_day_the_service_dated_badly_is_not_in_the_file(self):
+        """A day is left out rather than written as a broken date.
+
+        An event with a broken start date would sit in the reader's
+        calendar at a time nobody chose, so the day goes in only when its
+        date can be read.
+        """
+        text = calendar_ics.build_calendar(
+            [Day(iso_date="not a date", chance=80),
+             Day(iso_date="2026-10-22", chance=80)],
+            "London", 50)
+        self.assertIn("DTSTART;VALUE=DATE:20261022", text)
+        self.assertNotIn("DTSTART;VALUE=DATE:not a date", text)
+        # The day that could be read is still there, and the other is not
+        # counted as a second one either.
+        self.assertEqual(text.count("BEGIN:VEVENT"), 1)
+
     def test_the_file_name_is_safe(self):
         self.assertEqual(calendar_ics.calendar_slug("London, England"), "london-england")
         self.assertEqual(calendar_ics.calendar_slug("../../etc/passwd"), "etc-passwd")

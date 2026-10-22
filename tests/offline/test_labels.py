@@ -2,7 +2,9 @@
 """
 
 import re
+import unittest
 
+from rainalert.present import labels
 from tests.fixtures import AppTestCase, FakeResponse, hourly_payload
 
 
@@ -90,3 +92,81 @@ class TestRainChanceLabel(AppTestCase):
         self.mock_get.return_value = FakeResponse(payload=payload)
         body = self.client.post("/", data={"city": "London"}).get_data(as_text=True)
         self.assertIn("63% chance of rain", body)
+
+
+class TestShortDate(unittest.TestCase):
+    """The short forms of a date, for the row of columns."""
+
+    def test_the_weekday_and_the_day_and_month(self):
+        self.assertEqual(labels.format_date_parts("2026-10-22"),
+                         ("Thu", "22.10"))
+
+    def test_the_weekday_is_always_english(self):
+        """The names are hard-coded, so a locale cannot change them."""
+        for iso_date, short in (("2026-10-19", "Mon"), ("2026-10-25", "Sun")):
+            with self.subTest(iso_date=iso_date):
+                self.assertEqual(labels.format_date_parts(iso_date)[0], short)
+
+    def test_a_date_that_cannot_be_read_has_no_short_form(self):
+        """A day the service dated unreadably has no weekday and no date.
+
+        An empty string is not "on " and not a wrong weekday: the column
+        says nothing rather than something that is not true.
+        """
+        for value in ("not-a-date", "", None):
+            with self.subTest(value=value):
+                self.assertEqual(labels.format_date_parts(value), ("", ""))
+
+
+class TestUnreadableValues(unittest.TestCase):
+    """A value the service did not report is not a zero.
+
+    Every one of these turns a value that cannot be read into an empty
+    label, so the page says nothing rather than something that is not
+    true. A chance the service did not report is "unknown", not "0%".
+    """
+
+    def test_an_unreadable_chance_is_unknown(self):
+        for value in (None, "not a number", ""):
+            with self.subTest(value=value):
+                self.assertEqual(labels.format_rain_chance(value), "unknown")
+                self.assertEqual(labels.format_rain_chance_short(value), "?")
+                self.assertEqual(labels.describe_rain_chance(value),
+                                 "chance of rain unknown")
+
+    def test_an_unreadable_amount_says_nothing(self):
+        """A day with no rain in it says nothing about the millimetres.
+
+        "0 mm" beside a chance of rain would read as a contradiction,
+        because the two come from different parts of the model.
+        """
+        for value in (None, "not a number", 0, 0.0, -1):
+            with self.subTest(value=value):
+                self.assertEqual(labels.format_precipitation(value), "")
+
+    def test_an_amount_is_shown_with_one_decimal(self):
+        """A difference between 4 mm and 5 mm is a drizzle and a shower."""
+        self.assertEqual(labels.format_precipitation(4.04), "4.0 mm")
+        self.assertEqual(labels.format_precipitation(5), "5.0 mm")
+
+    def test_an_unreadable_number_of_hours_says_nothing(self):
+        for value in (None, "not a number", 0, -1):
+            with self.subTest(value=value):
+                self.assertEqual(labels.format_rain_hours(value), "")
+
+    def test_the_hours_are_rounded_to_whole(self):
+        self.assertEqual(labels.format_rain_hours(3.2), "3 h of rain")
+        self.assertEqual(labels.format_rain_hours(3.6), "4 h of rain")
+
+    def test_an_unreadable_temperature_is_left_out(self):
+        """One unreadable temperature does not take the other one with it."""
+        self.assertEqual(labels.format_temperature("not a number", 8.4),
+                         "8°")
+        self.assertEqual(labels.format_temperature(11.1, "not a number"),
+                         "11°")
+        self.assertEqual(labels.format_temperature("not a number",
+                                                  "not a number"), "")
+
+    def test_a_temperature_with_no_low_is_only_the_high(self):
+        self.assertEqual(labels.format_temperature(14.0, None), "14°")
+        self.assertEqual(labels.format_temperature(None, 8.4), "8°")

@@ -48,8 +48,9 @@ import requests
 from werkzeug.serving import WSGIRequestHandler, make_server
 
 from app import app
+from rainalert import config
 from rainalert.upstream import geocoding
-from tests.fixtures import FakeLocation, FakeResponse
+from tests.fixtures import (DONATION_URL, FakeLocation, FakeResponse)
 
 
 # A week with a wet start, a dry middle and one day the service reports no
@@ -1623,6 +1624,263 @@ class ReleaseNotesBrowserTestCase(BrowserServerMixin, unittest.TestCase):
         self.assertEqual(self.driver.current_url.rstrip("/"),
                          self.base.rstrip("/"))
         self.assertEqual(self.driver.title, "Rain Alert - 7-day rain chance for any city")
+
+
+class SiteNavigationBrowserTestCase(BrowserServerMixin, unittest.TestCase):
+    """The pages a reader moves between, followed in a real browser.
+
+    The offline suite checks what each route answers. These check what a
+    reader gets when they follow a link: that the link is there, that it
+    goes where it says, and that the page it lands on is the page it
+    promised.
+    """
+
+    def open(self, path):
+        self.driver.get(self.base + path)
+        self.wait_for("return document.readyState === 'complete';")
+        self.wait_for("return document.fonts.status === 'loaded';")
+
+    # -- the city index --------------------------------------------------------
+
+    def test_the_city_index_is_reachable_from_the_404_page(self):
+        """There is a way into the list of cities from the page a reader
+        lands on when an address is wrong."""
+        self.open("/no-such-page")
+        link = self.driver.execute_script(
+            "var links = Array.prototype.map.call("
+            "    document.querySelectorAll('a'),"
+            "    function (a) { return a.getAttribute('href'); });"
+            "return links.indexOf('/cities') !== -1;")
+        self.assertTrue(link)
+
+    def test_the_city_index_lists_the_cities(self):
+        self.open("/cities")
+        self.wait_for("return document.querySelector('.city-list') !== null;")
+        count = self.driver.execute_script(
+            "return document.querySelectorAll('.city-list li').length;")
+        self.assertGreater(count, 0)
+
+    def test_a_city_on_the_index_opens_its_forecast(self):
+        """Following a link lands on the forecast, and the address is the
+        one the link carried."""
+        self.open("/cities")
+        self.wait_for("return document.querySelector('.city-list a') !== null;")
+        href = self.driver.execute_script(
+            "return document.querySelector('.city-list a').getAttribute('href');")
+        self.driver.find_element(By.CSS_SELECTOR, ".city-list a").click()
+        self.wait_for("return document.querySelector('.weather-list') !== null;")
+        self.assertIn(href, self.driver.current_url)
+        # The tab title is the alert, and it names the city.
+        self.assertIn("Rain Alert", self.driver.title)
+
+    def test_the_city_index_does_not_scroll_sideways(self):
+        self.driver.execute_cdp_cmd("Emulation.setDeviceMetricsOverride", {
+            "width": 400, "height": 780,
+            "deviceScaleFactor": 1, "mobile": False,
+        })
+        self.open("/cities")
+        sideways = self.driver.execute_script(
+            "return document.documentElement.scrollWidth - "
+            "document.documentElement.clientWidth;")
+        self.assertEqual(sideways, 0)
+
+    # -- the page that is not there --------------------------------------------
+
+    def test_an_unknown_address_gives_the_404_page(self):
+        """A real 404 page, with the site's own frame and a search on it."""
+        self.open("/no-such-page")
+        self.assertEqual(self.driver.title, "Page not found - Rain Alert")
+        body = self.driver.find_element(By.TAG_NAME, "body").text
+        self.assertIn("There is no page at this address.", body)
+
+    def test_the_404_page_offers_a_search(self):
+        """A reader who landed on the wrong address can still search."""
+        self.open("/no-such-page")
+        self.assertTrue(self.driver.find_element(By.CSS_SELECTOR,
+                                                 "form input[name='city']"))
+
+    def test_an_unknown_city_gives_the_404_page(self):
+        """A city nobody knows is a missing page, and says so with its
+        status code."""
+        self.mock_geocode.return_value = None
+        self.open("/city/nowhereville")
+        body = self.driver.find_element(By.TAG_NAME, "body").text
+        self.assertIn("City not found", body)
+
+    # -- the one address per city ----------------------------------------------
+
+    def test_a_search_leaves_the_reader_on_the_city_address(self):
+        """Typing a city and searching lands on /city/<slug>, not on a
+        query string: one city, one address."""
+        self.open("/")
+        self.driver.find_element(By.CSS_SELECTOR, "form input[name='city']")\
+            .send_keys("London")
+        self.driver.find_element(By.CSS_SELECTOR, "form button[type='submit']")\
+            .click()
+        self.wait_for("return document.querySelector('.weather-list') !== null;")
+        self.assertTrue(self.driver.current_url.endswith("/city/london"),
+                        self.driver.current_url)
+
+    def test_the_city_address_is_the_canonical_one(self):
+        """The page claims the address it is on, and the head agrees with
+        the address in the bar."""
+        self.open("/city/london")
+        canonical = self.driver.execute_script(
+            "var c = document.querySelector('link[rel=canonical]');"
+            "return c ? c.getAttribute('href') : null;")
+        self.assertEqual(canonical, "https://rainalert.live/city/london")
+
+    def test_the_tab_title_is_the_alert(self):
+        """The title names the day the rain is on, and the app's name is
+        the suffix.
+
+        The mocked week has rain today but the hours of today are all dry,
+        so today is judged on the hours that are left - and there is no
+        rain in them. The title names tomorrow instead, which is the day
+        the rain is actually on.
+        """
+        self.open("/city/london")
+        self.assertEqual(self.driver.title, "Rain tomorrow in London - Rain Alert")
+
+    def test_the_favicon_changes_with_the_alert(self):
+        """Two separate files, so a browser that cached the old icon
+        still shows the new one."""
+        self.open("/city/london")
+        icon = self.driver.execute_script(
+            "var l = document.querySelector('link[rel=icon]');"
+            "return l ? l.getAttribute('href') : null;")
+        self.assertTrue(icon.endswith("favicon-rain.svg"), icon)
+
+    # -- the temperature scale -------------------------------------------------
+
+    def test_the_scale_can_be_switched_with_a_link(self):
+        """The switch is a pair of links, so it works without a script."""
+        self.open("/city/london")
+        self.driver.find_element(By.CSS_SELECTOR,
+                                 ".unit-option[href*='fahrenheit']").click()
+        self.wait_for("return document.querySelector('.weather-list') !== null;")
+        self.assertIn("unit=fahrenheit", self.driver.current_url)
+
+    def test_the_switched_scale_is_marked_as_the_current_one(self):
+        self.open("/city/london")
+        self.driver.find_element(By.CSS_SELECTOR,
+                                 ".unit-option[href*='fahrenheit']").click()
+        self.wait_for("return document.querySelector('.weather-list') !== null;")
+        active = self.driver.execute_script(
+            "var a = document.querySelector('.unit-option.is-active');"
+            "return a ? a.textContent.trim() : null;")
+        self.assertEqual(active, "°F")
+
+    def test_the_service_was_asked_for_the_other_scale(self):
+        """The app never does the arithmetic: the service converts."""
+        self.mock_get.reset_mock()
+        self.open("/city/london")
+        self.driver.find_element(By.CSS_SELECTOR,
+                                 ".unit-option[href*='fahrenheit']").click()
+        self.wait_for("return document.querySelector('.weather-list') !== null;")
+        params = self.mock_get.call_args.kwargs["params"]
+        self.assertEqual(params["temperature_unit"], "fahrenheit")
+
+    def test_the_switch_is_not_on_the_start_page(self):
+        """There is no forecast to switch the scale of."""
+        self.open("/")
+        self.assertEqual(self.driver.execute_script(
+            "return document.querySelectorAll('.unit-option').length;"), 0)
+
+    # -- the strip --------------------------------------------------------------
+
+    def test_the_now_marker_is_labelled(self):
+        """The current hour is a rule with words on it, not a colour."""
+        self.open("/city/london")
+        self.wait_for("return document.querySelector('.now-label') !== null;")
+        label = self.driver.find_element(By.CSS_SELECTOR, ".now-label").text
+        self.assertEqual(label, "now 09:00")
+
+    def test_the_now_marker_sits_over_its_own_hour(self):
+        """The label is over the hour it points at, and not over a
+        neighbour.
+
+        The label is wider than its column, so it hangs over the columns
+        beside it; what has to hold is that its centre is over the centre
+        of the hour it names.
+        """
+        self.open("/city/london")
+        self.wait_for("return document.querySelector('.now-label') !== null;")
+        offsets = self.driver.execute_script("""
+            var label = document.querySelector('.now-label');
+            var l = label.getBoundingClientRect();
+            var cells = document.querySelectorAll('.hourly-values .hour-value');
+            var best = null;
+            for (var i = 0; i < cells.length; i++) {
+                var c = cells[i].getBoundingClientRect();
+                var d = Math.abs(c.left + c.width / 2 -
+                                 (l.left + l.width / 2));
+                if (best === null || d < best) { best = d; }
+            }
+            return best;
+        """)
+        self.assertIsNotNone(offsets)
+        self.assertLess(offsets, 2)
+
+    def test_the_hourly_table_opens(self):
+        """The table is the readable version of the strip, and it opens."""
+        self.open("/city/london")
+        self.wait_for("return document.querySelector('.hourly-table') !== null;")
+        table = self.driver.find_element(By.CSS_SELECTOR, ".hourly-table")
+        self.assertFalse(table.get_attribute("open"))
+        self.driver.find_element(By.CSS_SELECTOR, ".hourly-table summary").click()
+        self.assertTrue(table.get_attribute("open"))
+
+    def test_the_table_lists_every_hour(self):
+        self.open("/city/london")
+        self.wait_for("return document.querySelector('.hourly-table') !== null;")
+        rows = self.driver.execute_script(
+            "return document.querySelectorAll('.hourly-table tbody tr').length;")
+        self.assertEqual(rows, 24)
+
+    def test_the_table_marks_the_current_hour(self):
+        self.open("/city/london")
+        self.wait_for("return document.querySelector('.hourly-table') !== null;")
+        now = self.driver.execute_script("""
+            var row = document.querySelector('.hourly-table tbody tr.is-now');
+            return row ? row.textContent.trim() : null;
+        """)
+        self.assertIsNotNone(now)
+        self.assertIn("09:00", now)
+
+    # -- the donation link -----------------------------------------------------
+
+    def test_the_donation_link_is_shown_when_it_is_configured(self):
+        """The link is opt-in: it appears only when there is one."""
+        with mock.patch.object(config, "DONATION_URL", DONATION_URL):
+            self.open("/")
+            links = self.driver.execute_script(
+                "return Array.prototype.map.call("
+                "    document.querySelectorAll('a'),"
+                "    function (a) { return a.getAttribute('href'); });")
+        self.assertIn(DONATION_URL, links)
+
+    def test_there_is_no_donation_link_without_one(self):
+        """With no link configured, no donation markup renders at all."""
+        with mock.patch.object(config, "DONATION_URL", ""):
+            self.open("/")
+            links = self.driver.execute_script(
+                "return Array.prototype.map.call("
+                "    document.querySelectorAll('a'),"
+                "    function (a) { return a.getAttribute('href'); });")
+        self.assertNotIn(DONATION_URL, links)
+        self.assertEqual(self.driver.execute_script(
+            "return document.querySelectorAll('p.donate').length;"), 0)
+
+    def test_the_donation_link_opens_safely(self):
+        with mock.patch.object(config, "DONATION_URL", DONATION_URL):
+            self.open("/")
+            rels = self.driver.execute_script(
+                "return Array.prototype.map.call("
+                "    document.querySelectorAll('a'),"
+                "    function (a) { return a.getAttribute('rel'); })"
+                ".filter(function (r) { return r && r.indexOf('noopener') >= 0; });")
+        self.assertTrue(rels)
 
 
 if __name__ == "__main__":
