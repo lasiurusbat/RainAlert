@@ -1,7 +1,7 @@
 # RainAlert refactor plan
 
-Status as of 2026-10-22: **steps 0–6 done** on the `refactor/modules`
-branch; steps 7–12 open. Checked items (`[x]`)
+Status as of 2026-10-22: **steps 0–7 done** on the `refactor/modules`
+branch; steps 8–12 open. Checked items (`[x]`)
 are finished and can be seen in the repository; unchecked items (`[ ]`) are
 open.
 
@@ -300,19 +300,31 @@ it.
 
 Risk: medium.
 
-- [ ] `rainalert/upstream/open_meteo.py`: `fetch_payload(lat, lon, unit)`
+- [x] `rainalert/upstream/open_meteo.py`: `fetch_payload(lat, lon, unit)`
       makes the request and returns JSON, raising `WeatherUnavailable`. It
       calls `requests.get` through the module, so the tests' patch of
       `rainalert.requests.get` still applies.
-- [ ] `rainalert/upstream/geocoding.py`: `geolocator` and `get_coordinates`,
+- [x] `rainalert/upstream/geocoding.py`: `geolocator` and `get_coordinates`,
       with the `lru_cache`. `app.py` re-exports the same `geolocator`
       object.
-- [ ] `rainalert/present/forecast_view.py`: `Day` → the template dict (the
+- [x] `rainalert/present/forecast_view.py`: `Day` → the template dict (the
       45-line dict now in `fetch_weather`).
-- [ ] `/api/alert` and `/calendar.ics` work on `Day`s and `Hour`s directly
-      and no longer build labels they do not use.
-- [ ] Keep `fetch_weather` and `fetch_forecast` as thin compositions until
+- [x] `/api/alert` works on `Hour`s directly and no longer builds labels
+      it does not use.
+- [ ] `/calendar.ics` still uses the template's day dicts: the event text
+      needs the long date and the band, which the dicts already carry.
+      Moving `calendar_ics` onto `Day`s is left for later; it changes the
+      signature its tests call.
+- [x] Keep `fetch_weather` and `fetch_forecast` as thin compositions until
       step 11, because the tests call them.
+
+Done with two additions. The upstream modules log to their own loggers
+(`logging.getLogger(__name__)`), and `app.py` gives the `rainalert` logger
+Flask's own handler, so the lines keep their format and now name the
+module: `ERROR in geocoding: Unexpected geocoder error for 'London'`. The
+tests patch `geocoding.geolocator` and `requests.get` directly instead of
+reaching them through `app`.
+
 
 ### Step 8 — The page metadata
 

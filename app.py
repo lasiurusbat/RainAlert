@@ -5,51 +5,35 @@ Two free, keyless APIs are used:
   * Open-Meteo returns the daily forecast for those coordinates.
 """
 
+import logging
 import os
 import re
 import unicodedata
 from datetime import date
-from functools import lru_cache
 
-import requests
 from flask import (Flask, Response, abort, jsonify, make_response, redirect,
                    render_template, request, send_from_directory)
-from geopy.exc import GeocoderQueryError, GeocoderServiceError, GeocoderTimedOut
-from geopy.geocoders import Nominatim
+from flask.logging import default_handler
 
 from rainalert import config
-from rainalert.data.cities import CITY_NAMES, CITY_SLUGS, CURATED_CITIES
 from rainalert.calendar_ics import build_calendar, calendar_days, calendar_slug
+from rainalert.data.cities import CITY_NAMES, CITY_SLUGS, CURATED_CITIES
 from rainalert.data.releases import RELEASES
 from rainalert.domain.alerts import (clock, forecast_headline, notification_event,
-                                     summarise_hours, tab_alert)
-from rainalert.domain.days import day_name
-from rainalert.domain.parse import parse_forecast
-from rainalert.domain.rain import (alert_threshold, chance_number, needs_umbrella,
-                                   rain_chance, severity_band, severity_label)
+                                     tab_alert)
+from rainalert.domain.rain import alert_threshold
 from rainalert.errors import CityNotFound, GeocodingUnavailable, WeatherUnavailable
-from rainalert.present.labels import (describe_rain_chance, format_date,
-                                      format_date_parts, format_precipitation,
-                                      format_rain_chance, format_rain_chance_short,
-                                      format_rain_hours, format_temperature,
-                                      hour_height_step)
+from rainalert.present.forecast_view import day_view, hour_view
+from rainalert.upstream.geocoding import get_coordinates
+from rainalert.upstream.open_meteo import load_forecast
 
 app = Flask(__name__)
 
-FORECAST_URL = "https://api.open-meteo.com/v1/forecast"
+# The package's modules log to their own loggers, under "rainalert". They
+# get the same handler, and so the same format, as app.logger.
+logging.getLogger("rainalert").addHandler(default_handler)
 
-# The daily fields. The chance is the figure the week is built on, the
-# temperatures are the figures beside it, and the last two say how much rain
-# falls and how long it lasts - the day panel shows them for the day the
-# reader picks.
-DAILY_FIELDS = ("precipitation_probability_max,temperature_2m_max,"
-                "temperature_2m_min,precipitation_sum,precipitation_hours")
 
-# The hourly rain chance for today, and the same field for the current hour.
-# Both come in the same request, so the strip costs no extra request.
-HOURLY_FIELDS = "precipitation_probability"
-
-geolocator = Nominatim(user_agent=config.NOMINATIM_USER_AGENT, timeout=config.GEOCODER_TIMEOUT)
 
 
 # --- The tab title and the favicon --------------------------------------------
@@ -278,181 +262,9 @@ def calendar_failure(message, status):
 
 
 # --- Data sources ------------------------------------------------------------
-@lru_cache(maxsize=256)
-def get_coordinates(city_name):
-    """Resolve a city name to ``(latitude, longitude, display_name)``.
-
-    Results are cached per process because a city name always maps to the same
-    place; this keeps repeated searches from hammering Nominatim, which is
-    rate-limited. Failures are not cached, so a retry re-attempts the lookup.
-    """
-    try:
-        location = geolocator.geocode(city_name, exactly_one=True)
-    except GeocoderTimedOut as exc:
-        raise GeocodingUnavailable("the geocoder timed out") from exc
-    except GeocoderQueryError as exc:
-        # The geocoder understood the request and rejected the query.
-        raise CityNotFound(city_name) from exc
-    except GeocoderServiceError as exc:
-        # Rate limiting, 5xx responses, and connection failures land here.
-        raise GeocodingUnavailable(str(exc)) from exc
-    except Exception as exc:  # noqa: BLE001 - no unexpected error should 500
-        app.logger.exception("Unexpected geocoder error for %r", city_name)
-        raise GeocodingUnavailable("unexpected geocoder error") from exc
-
-    if location is None:
-        # The service answered normally and simply had no match.
-        raise CityNotFound(city_name)
-
-    raw = getattr(location, "raw", None) or {}
-    display_name = raw.get("display_name")
-    label = display_name.split(",")[0].strip() if display_name else city_name
-    return location.latitude, location.longitude, label
-
-
-def fetch_payload(latitude, longitude, unit=None):
-    """The forecast service's answer, as the JSON it sent.
-
-    The daily and the hourly fields come from a single request: Open-Meteo
-    serves them together, and asking for both in one call keeps the app to
-    one request per page load. A transport or payload problem raises
-    :class:`WeatherUnavailable`.
-
-    ``unit`` is the temperature scale to ask the service for. The service
-    converts the values itself, so the app never does the arithmetic.
-    """
-    params = {
-        "latitude": latitude,
-        "longitude": longitude,
-        "daily": DAILY_FIELDS,
-        "hourly": HOURLY_FIELDS,
-        "current": HOURLY_FIELDS,
-        "timezone": "auto",
-        "temperature_unit": unit or config.DEFAULT_TEMPERATURE_UNIT,
-    }
-    try:
-        response = requests.get(FORECAST_URL, params=params, timeout=config.WEATHER_TIMEOUT)
-        response.raise_for_status()
-    except requests.Timeout as exc:
-        raise WeatherUnavailable("the forecast request timed out") from exc
-    except requests.HTTPError as exc:
-        status = exc.response.status_code if exc.response is not None else "?"
-        raise WeatherUnavailable(f"the forecast service returned HTTP {status}") from exc
-    except requests.RequestException as exc:
-        raise WeatherUnavailable(f"the forecast request failed: {exc}") from exc
-
-    try:
-        return response.json()
-    except ValueError as exc:
-        raise WeatherUnavailable("the forecast response was not valid JSON") from exc
-
-
-def _hourly_failed(exc):
-    # A missing hourly strip is a missing feature, not a broken forecast.
-    app.logger.warning("Hourly forecast could not be parsed: %s", exc)
-
-
-def load_forecast(latitude, longitude, unit=None):
-    """The forecast for a place, parsed once: the days and today's hours."""
-    payload = fetch_payload(latitude, longitude, unit)
-    return parse_forecast(payload, on_hourly_error=_hourly_failed)
-
-
-def hour_view(hour):
-    """One hour of the strip, in the form the template renders."""
-    band = severity_band(hour.chance)
-    return {
-        "day": hour.day,
-        "hour": hour.moment.hour,
-        "hour_label": f"{hour.moment.hour:02d}",
-        "time_label": clock(hour),
-        "chance": hour.chance,
-        # The tooltip and the screen-reader text stand on their own, so
-        # they carry the full phrase. The table cell sits under a real
-        # "Rain chance" column heading, so it can be the bare number.
-        "chance_label": describe_rain_chance(hour.chance),
-        "chance_cell": format_rain_chance(hour.chance),
-        # The bare number, for the strip's own value row: one narrow
-        # column per hour does not have room for the sign.
-        "chance_short": format_rain_chance_short(hour.chance),
-        "severity": band,
-        "severity_label": severity_label(band),
-        "height": hour_height_step(hour.chance),
-        # A value the app cannot read is unknown, whether it arrived as
-        # null or as something that is not a number.
-        "unknown": rain_chance(hour.chance) is None,
-        "past": hour.past,
-        "now": hour.now,
-    }
-
-
-def parse_today_hours(payload):
-    """Today's hours, in the form the template renders."""
-    return [hour_view(hour) for hour in parse_forecast(payload).today]
-
-
-def day_view(day, index):
-    """One day of the week, in the form the template renders."""
-    chance = day.chance
-    band = severity_band(chance)
-    weekday_short, date_short = format_date_parts(day.iso_date)
-    panel_name = day_name(day.iso_date, index, "panel")
-    return {
-        "date": format_date(day.iso_date),
-        # The raw date, kept so the headline can name the weekday without
-        # having to take the formatted date apart again.
-        "iso_date": day.iso_date,
-        # The short forms, for the week that is a row of seven narrow
-        # columns. The long date is still on the page, for screen
-        # readers.
-        "weekday_short": weekday_short,
-        "date_short": date_short,
-        # The visible number, and the full phrase for the screen reader.
-        # The column heading above the list says "chance of rain" once.
-        "rain_label": format_rain_chance(chance),
-        "rain_sr_label": describe_rain_chance(chance),
-        "temp_label": format_temperature(day.high, day.low),
-        # What the day panel says about this day: which day it is, how
-        # much rain falls in it and how long it lasts. The panel is
-        # built from the same chance the column shows, so the two can
-        # never disagree.
-        "day_name": panel_name,
-        "day_label": f"{panel_name} {date_short}".strip(),
-        "chance_label": (
-            f"{chance_number(chance)}% chance of rain"
-            if chance_number(chance) is not None
-            else ""
-        ),
-        "amount_label": format_precipitation(day.amount),
-        "hours_label": format_rain_hours(day.rain_hours),
-        "chance": chance,
-        # The number the row shows, and the number a personal alert
-        # threshold in the browser is compared against. The browser
-        # reads it from the markup, so the threshold and the number on
-        # the page are always the same value.
-        "chance_number": chance_number(chance),
-        "severity": band,
-        "severity_label": severity_label(band),
-        # The panel names the band in words. A day the service did not
-        # report is named as such, and the panel leaves the figures out
-        # altogether: a day with no chance reported is never counted as
-        # a dry one.
-        "band_label": ("Rain not reported" if band == "unknown"
-                       else severity_label(band)),
-        "umbrella": needs_umbrella(chance),
-        # The hours of this day, for the strip the reader can pick.
-        # The strip and the panel are the same day, so the two can
-        # never be about different days.
-        "hours": [hour_view(hour) for hour in day.hours],
-        # The title the strip carries while this day is the one that
-        # shows, and the sentence under it.
-        "hourly_title": f"{panel_name}, hour by hour",
-        "hourly_summary": (summarise_hours(
-            day.hours, day_name(day.iso_date, index, "summary"))
-            if day.hours else ""),
-        # How a caption names this day.
-        "day_when": day_name(day.iso_date, index, "caption"),
-    }
+# The clients live in rainalert/upstream/, and the views they feed in
+# rainalert/present/forecast_view.py. These two keep the shape the tests of
+# the whole pipeline call.
 
 
 def fetch_forecast(latitude, longitude, unit=None):

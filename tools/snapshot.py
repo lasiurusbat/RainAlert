@@ -23,6 +23,7 @@ sys.path.insert(0, REPO)
 import requests  # noqa: E402
 
 import app as rainalert  # noqa: E402
+from rainalert.upstream import geocoding  # noqa: E402
 
 DAYS = ["2026-10-21", "2026-10-22", "2026-10-23", "2026-10-24",
         "2026-10-25", "2026-10-26", "2026-10-27"]
@@ -143,9 +144,9 @@ def main():
     client = rainalert.app.test_client()
     for name, method, path, form, location, forecast in REQUESTS:
         rainalert.get_coordinates.cache_clear()
-        with mock.patch.object(rainalert.geolocator, "geocode",
+        with mock.patch.object(geocoding.geolocator, "geocode",
                                return_value=location), \
-                mock.patch.object(rainalert.requests, "get",
+                mock.patch.object(requests, "get",
                                   return_value=forecast):
             response = client.open(path, method=method, data=form)
         lines = [f"{method} {path} {form or ''}".rstrip(),

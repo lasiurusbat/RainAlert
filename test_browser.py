@@ -44,9 +44,11 @@ REQUIRE_BROWSER = os.environ.get("RAINALERT_REQUIRE_BROWSER", "").lower() in {
     "1", "true", "yes",
 }
 
+import requests
 from werkzeug.serving import WSGIRequestHandler, make_server
 
 import app as rainalert
+from rainalert.upstream import geocoding
 
 
 # A week with a wet start, a dry middle and one day the service reports no
@@ -256,9 +258,9 @@ class BrowserServerMixin:
         })
 
         cls.geocode_patcher = mock.patch.object(
-            rainalert.geolocator, "geocode", return_value=FakeLocation())
+            geocoding.geolocator, "geocode", return_value=FakeLocation())
         cls.get_patcher = mock.patch.object(
-            rainalert.requests, "get", return_value=FakeResponse())
+            requests, "get", return_value=FakeResponse())
         cls.mock_geocode = cls.geocode_patcher.start()
         cls.mock_get = cls.get_patcher.start()
 

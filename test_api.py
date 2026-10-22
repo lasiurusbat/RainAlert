@@ -13,6 +13,7 @@ import unittest
 import requests
 
 import app as rainalert
+from rainalert.upstream import open_meteo
 
 
 class TestLiveOpenMeteo(unittest.TestCase):
@@ -35,11 +36,11 @@ class TestLiveOpenMeteo(unittest.TestCase):
 
     def test_response_contains_the_fields_we_request(self):
         response = requests.get(
-            rainalert.FORECAST_URL,
+            open_meteo.FORECAST_URL,
             params={
                 "latitude": 51.5074,
                 "longitude": -0.1278,
-                "daily": rainalert.DAILY_FIELDS,
+                "daily": open_meteo.DAILY_FIELDS,
                 "timezone": "auto",
             },
             timeout=rainalert.config.WEATHER_TIMEOUT,
@@ -53,12 +54,12 @@ class TestLiveOpenMeteo(unittest.TestCase):
     def test_the_hourly_block_has_the_shape_the_strip_needs(self):
         """The hourly array and the daily array must line up."""
         response = requests.get(
-            rainalert.FORECAST_URL,
+            open_meteo.FORECAST_URL,
             params={
                 "latitude": 51.5074,
                 "longitude": -0.1278,
-                "hourly": rainalert.HOURLY_FIELDS,
-                "current": rainalert.HOURLY_FIELDS,
+                "hourly": open_meteo.HOURLY_FIELDS,
+                "current": open_meteo.HOURLY_FIELDS,
                 "timezone": "auto",
             },
             timeout=rainalert.config.WEATHER_TIMEOUT,

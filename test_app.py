@@ -14,6 +14,10 @@ from unittest import mock
 import requests
 
 import app as rainalert
+from rainalert.domain import alerts
+from rainalert.present import forecast_view
+from rainalert.upstream import geocoding
+from rainalert.present import labels
 from rainalert import calendar_ics
 from rainalert.domain import days, parse, rain
 from rainalert.domain.model import Day, Hour
@@ -84,10 +88,10 @@ class AppTestCase(unittest.TestCase):
     def setUp(self):
         rainalert.get_coordinates.cache_clear()
         self.geocode_patcher = mock.patch.object(
-            rainalert.geolocator, "geocode", return_value=FakeLocation()
+            geocoding.geolocator, "geocode", return_value=FakeLocation()
         )
         self.get_patcher = mock.patch.object(
-            rainalert.requests, "get", return_value=FakeResponse()
+            requests, "get", return_value=FakeResponse()
         )
         self.mock_geocode = self.geocode_patcher.start()
         self.mock_get = self.get_patcher.start()
@@ -314,29 +318,29 @@ class TestRainSeverity(AppTestCase):
         return self.client.post("/", data={"city": "London"}).get_data(as_text=True)
 
     def test_severity_bands_cover_the_thresholds(self):
-        self.assertEqual(rainalert.severity_band(0), "low")
-        self.assertEqual(rainalert.severity_band(29), "low")
-        self.assertEqual(rainalert.severity_band(30), "moderate")
-        self.assertEqual(rainalert.severity_band(60), "moderate")
-        self.assertEqual(rainalert.severity_band(61), "high")
-        self.assertEqual(rainalert.severity_band(100), "high")
+        self.assertEqual(rain.severity_band(0), "low")
+        self.assertEqual(rain.severity_band(29), "low")
+        self.assertEqual(rain.severity_band(30), "moderate")
+        self.assertEqual(rain.severity_band(60), "moderate")
+        self.assertEqual(rain.severity_band(61), "high")
+        self.assertEqual(rain.severity_band(100), "high")
 
     def test_missing_chance_gets_the_unknown_band(self):
-        self.assertEqual(rainalert.severity_band(None), "unknown")
-        self.assertEqual(rainalert.severity_band("not a number"), "unknown")
+        self.assertEqual(rain.severity_band(None), "unknown")
+        self.assertEqual(rain.severity_band("not a number"), "unknown")
 
     def test_bands_are_configurable(self):
         with mock.patch.object(rainalert.config, "SEVERITY_LOW_MAX", 10):
             with mock.patch.object(rainalert.config, "SEVERITY_MODERATE_MAX", 40):
-                self.assertEqual(rainalert.severity_band(5), "low")
-                self.assertEqual(rainalert.severity_band(20), "moderate")
-                self.assertEqual(rainalert.severity_band(80), "high")
+                self.assertEqual(rain.severity_band(5), "low")
+                self.assertEqual(rain.severity_band(20), "moderate")
+                self.assertEqual(rain.severity_band(80), "high")
 
     def test_umbrella_threshold(self):
-        self.assertFalse(rainalert.needs_umbrella(49))
-        self.assertTrue(rainalert.needs_umbrella(50))
-        self.assertTrue(rainalert.needs_umbrella(100))
-        self.assertFalse(rainalert.needs_umbrella(None))
+        self.assertFalse(rain.needs_umbrella(49))
+        self.assertTrue(rain.needs_umbrella(50))
+        self.assertTrue(rain.needs_umbrella(100))
+        self.assertFalse(rain.needs_umbrella(None))
 
     def test_each_day_gets_a_severity_class(self):
         body = self._forecast_for([10, 45, 80])
@@ -603,7 +607,7 @@ class TestHourlySummary(AppTestCase):
     def _summary_for(self, chances, now="2026-10-21T09:00"):
         payload = hourly_payload(chances, now=now)
         hours = parse.parse_forecast(payload).today
-        return rainalert.summarise_hours(hours)
+        return alerts.summarise_hours(hours)
 
     def test_a_wet_window_is_reported(self):
         chances = [0] * 9 + [80] * 4 + [0] * 11
@@ -1043,20 +1047,20 @@ class TestHourlyParsing(unittest.TestCase):
 
     def test_a_day_of_hours_is_parsed(self):
         payload = hourly_payload([0, 10, 20] * 8)
-        hours = rainalert.parse_today_hours(payload)
+        hours = forecast_view.parse_today_hours(payload)
         self.assertEqual(len(hours), 24)
         self.assertEqual(hours[0]["hour_label"], "00")
         self.assertEqual(hours[23]["hour_label"], "23")
 
     def test_hours_before_now_are_marked_past(self):
         payload = hourly_payload([0] * 24, now="2026-10-21T09:00")
-        hours = rainalert.parse_today_hours(payload)
+        hours = forecast_view.parse_today_hours(payload)
         self.assertTrue(hours[8]["past"])
         self.assertFalse(hours[9]["past"])
 
     def test_the_current_hour_is_marked_now(self):
         payload = hourly_payload([0] * 24, now="2026-10-21T09:00")
-        hours = rainalert.parse_today_hours(payload)
+        hours = forecast_view.parse_today_hours(payload)
         self.assertTrue(hours[9]["now"])
         self.assertFalse(hours[10]["now"])
 
@@ -1068,7 +1072,7 @@ class TestHourlyParsing(unittest.TestCase):
             + [f"2026-10-21T{hour:02d}:00" for hour in range(24)]
         )
         payload["hourly"]["precipitation_probability"] = [5] * 48
-        hours = rainalert.parse_today_hours(payload)
+        hours = forecast_view.parse_today_hours(payload)
         self.assertEqual(len(hours), 24)
         self.assertTrue(all(hour["day"] == "2026-10-21" for hour in hours))
 
@@ -1087,7 +1091,7 @@ class TestHourlyParsing(unittest.TestCase):
             + [f"2026-10-22T{hour:02d}:00" for hour in range(24)]
         )
         payload["hourly"]["precipitation_probability"] = [5] * 48
-        hours = rainalert.parse_today_hours(payload)
+        hours = forecast_view.parse_today_hours(payload)
         self.assertEqual(len(hours), 24)
         self.assertTrue(all(hour["day"] == "2026-10-22" for hour in hours))
         self.assertTrue(any(hour["now"] for hour in hours))
@@ -1095,16 +1099,16 @@ class TestHourlyParsing(unittest.TestCase):
     def test_a_day_with_23_hours_is_kept_whole(self):
         """A clock-change day is not truncated to 24 entries."""
         payload = hourly_payload([5] * 23, day="2026-10-21")
-        hours = rainalert.parse_today_hours(payload)
+        hours = forecast_view.parse_today_hours(payload)
         self.assertEqual(len(hours), 23)
 
     def test_a_page_parses_the_hours_once(self):
         """The hours are grouped once per request, and today is picked
         out of the groups rather than parsed a second time."""
         rainalert.get_coordinates.cache_clear()
-        with mock.patch.object(rainalert.geolocator, "geocode",
+        with mock.patch.object(geocoding.geolocator, "geocode",
                                return_value=FakeLocation()), \
-                mock.patch.object(rainalert.requests, "get",
+                mock.patch.object(requests, "get",
                                   return_value=FakeResponse()), \
                 mock.patch.object(parse, "_parse_hourly_days",
                                   wraps=parse._parse_hourly_days) as grouped:
@@ -1113,16 +1117,16 @@ class TestHourlyParsing(unittest.TestCase):
         self.assertEqual(grouped.call_count, 1)
 
     def test_an_empty_hourly_block_gives_no_hours(self):
-        self.assertEqual(rainalert.parse_today_hours({}), [])
-        self.assertEqual(rainalert.parse_today_hours({"hourly": {}}), [])
+        self.assertEqual(forecast_view.parse_today_hours({}), [])
+        self.assertEqual(forecast_view.parse_today_hours({"hourly": {}}), [])
 
     def test_the_height_is_bucketed_into_steps(self):
-        self.assertEqual(rainalert.hour_height_step(0), 0)
-        self.assertEqual(rainalert.hour_height_step(2), 0)
-        self.assertEqual(rainalert.hour_height_step(3), 5)
-        self.assertEqual(rainalert.hour_height_step(100), 100)
-        self.assertEqual(rainalert.hour_height_step(130), 100)
-        self.assertEqual(rainalert.hour_height_step(None), 0)
+        self.assertEqual(labels.hour_height_step(0), 0)
+        self.assertEqual(labels.hour_height_step(2), 0)
+        self.assertEqual(labels.hour_height_step(3), 5)
+        self.assertEqual(labels.hour_height_step(100), 100)
+        self.assertEqual(labels.hour_height_step(130), 100)
+        self.assertEqual(labels.hour_height_step(None), 0)
 
     def test_the_local_now_falls_back_to_the_utc_offset(self):
         """Without a current block the offset still says what time it is."""
@@ -1160,47 +1164,47 @@ class TestCaching(AppTestCase):
 class TestForecastParsing(unittest.TestCase):
     def test_format_date(self):
         self.assertEqual(
-            rainalert.format_date("2026-10-21"), "Wednesday 21.10.2026")
+            labels.format_date("2026-10-21"), "Wednesday 21.10.2026")
         self.assertEqual(
-            rainalert.format_date("2026-10-22"), "Thursday 22.10.2026")
+            labels.format_date("2026-10-22"), "Thursday 22.10.2026")
         self.assertEqual(
-            rainalert.format_date("2026-11-01"), "Sunday 01.11.2026")
+            labels.format_date("2026-11-01"), "Sunday 01.11.2026")
 
     def test_format_date_pads_day_and_month(self):
         self.assertEqual(
-            rainalert.format_date("2026-01-05"), "Monday 05.01.2026")
+            labels.format_date("2026-01-05"), "Monday 05.01.2026")
 
     def test_format_date_leaves_unparseable_values_alone(self):
-        self.assertEqual(rainalert.format_date("not-a-date"), "not-a-date")
-        self.assertEqual(rainalert.format_date(None), "None")
+        self.assertEqual(labels.format_date("not-a-date"), "not-a-date")
+        self.assertEqual(labels.format_date(None), "None")
 
     def test_format_rain_chance(self):
         """The row shows the number alone; the wording is in the header."""
-        self.assertEqual(rainalert.format_rain_chance(100), "100%")
-        self.assertEqual(rainalert.format_rain_chance(86.4), "86%")
-        self.assertEqual(rainalert.format_rain_chance(0), "0%")
-        self.assertEqual(rainalert.format_rain_chance(None), "unknown")
+        self.assertEqual(labels.format_rain_chance(100), "100%")
+        self.assertEqual(labels.format_rain_chance(86.4), "86%")
+        self.assertEqual(labels.format_rain_chance(0), "0%")
+        self.assertEqual(labels.format_rain_chance(None), "unknown")
 
     def test_describe_rain_chance(self):
         """The full phrase is what a screen reader and a tooltip need."""
         self.assertEqual(
-            rainalert.describe_rain_chance(100), "100% chance of rain")
+            labels.describe_rain_chance(100), "100% chance of rain")
         self.assertEqual(
-            rainalert.describe_rain_chance(86.4), "86% chance of rain")
+            labels.describe_rain_chance(86.4), "86% chance of rain")
         self.assertEqual(
-            rainalert.describe_rain_chance(0), "0% chance of rain")
+            labels.describe_rain_chance(0), "0% chance of rain")
         self.assertEqual(
-            rainalert.describe_rain_chance(None), "chance of rain unknown"
+            labels.describe_rain_chance(None), "chance of rain unknown"
         )
 
     def test_format_temperature(self):
-        self.assertEqual(rainalert.format_temperature(11.1, 8.4), "11° / 8°")
-        self.assertEqual(rainalert.format_temperature(14.0, None), "14°")
-        self.assertEqual(rainalert.format_temperature(None, None), "")
+        self.assertEqual(labels.format_temperature(11.1, 8.4), "11° / 8°")
+        self.assertEqual(labels.format_temperature(14.0, None), "14°")
+        self.assertEqual(labels.format_temperature(None, None), "")
 
     def test_half_rounds_up(self):
         """Temperatures ending in .5 must round up, not to even."""
-        self.assertEqual(rainalert.format_temperature(8.5, 9.5), "9° / 10°")
+        self.assertEqual(labels.format_temperature(8.5, 9.5), "9° / 10°")
         self.assertEqual(rain.round_half_up(8.5), 9)
         self.assertEqual(rain.round_half_up(9.5), 10)
         # Negative halves round away from zero, so -0.5C reads as -1C.
