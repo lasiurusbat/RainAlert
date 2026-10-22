@@ -16,6 +16,19 @@ from rainalert.domain.model import Day, Forecast, Hour
 HOURS_PER_DAY = 24
 
 
+def _as_list(value):
+    """The value as a list of entries, or an empty one.
+
+    The service sends its values as arrays. A field that is not an array
+    cannot be read as one, and a field that cannot be read is an empty
+    one rather than a failure: the parser never raises on the shape of
+    the answer.
+    """
+    if isinstance(value, (list, tuple)):
+        return list(value)
+    return []
+
+
 def parse_hour_timestamp(value):
     """Parse an Open-Meteo local timestamp such as ``2026-10-21T15:00``."""
     try:
@@ -32,9 +45,15 @@ def local_now(payload):
     UTC offset is only a fallback, for a response without a current block.
 
     The result is always a naive local time, so it can be compared with the
-    timestamps parsed out of the hourly array.
+    timestamps parsed out of the hourly array. A current block that cannot be
+    read is no current block: the strip still draws, it just carries no
+    now-marker.
     """
-    current = payload.get("current") or {}
+    if not isinstance(payload, dict):
+        return None
+    current = payload.get("current")
+    if not isinstance(current, dict):
+        current = {}
     moment = parse_hour_timestamp(current.get("time"))
     if moment is not None:
         return moment.replace(minute=0, second=0, microsecond=0)
@@ -49,6 +68,19 @@ def local_now(payload):
     return now.replace(tzinfo=None, minute=0, second=0, microsecond=0)
 
 
+def _daily_block(payload):
+    """The daily block of the answer, or an empty one.
+
+    The service sends the block as an object with an array of days in it.
+    A block that is not an object carries no days, and a forecast with no
+    days is a forecast the page says there is no data for.
+    """
+    if not isinstance(payload, dict):
+        return {}
+    daily = payload.get("daily")
+    return daily if isinstance(daily, dict) else {}
+
+
 def parse_forecast(payload, on_hourly_error=None):
     """The whole forecast: the days, each with its hours, and today's hours.
 
@@ -58,19 +90,24 @@ def parse_forecast(payload, on_hourly_error=None):
     forecast. ``on_hourly_error`` is called with the exception in that case
     and the days come back without hours; without it, the exception is
     raised.
+
+    Nothing in the answer can make this raise. A field that is not the
+    shape the service documents is read as no values at all, so a strange
+    answer gives a page with fewer numbers on it rather than a broken
+    one.
     """
-    daily = payload.get("daily") or {}
-    dates = daily.get("time") or daily.get("time_string") or []
-    chances = daily.get("precipitation_probability_max") or []
-    highs = daily.get("temperature_2m_max") or []
-    lows = daily.get("temperature_2m_min") or []
-    amounts = daily.get("precipitation_sum") or []
-    hours_of_rain = daily.get("precipitation_hours") or []
+    daily = _daily_block(payload)
+    dates = _as_list(daily.get("time")) or _as_list(daily.get("time_string"))
+    chances = _as_list(daily.get("precipitation_probability_max"))
+    highs = _as_list(daily.get("temperature_2m_max"))
+    lows = _as_list(daily.get("temperature_2m_min"))
+    amounts = _as_list(daily.get("precipitation_sum"))
+    hours_of_rain = _as_list(daily.get("precipitation_hours"))
 
     try:
         hourly_days, now = _parse_hourly_days(payload)
         today = _today_hours(hourly_days, now)
-    except (TypeError, ValueError) as exc:
+    except (TypeError, ValueError, KeyError, AttributeError) as exc:
         if on_hourly_error is None:
             raise
         on_hourly_error(exc)
@@ -107,11 +144,26 @@ def _parse_hourly_days(payload):
     Returns a list of ``(date, hours)`` pairs and the current local hour. An
     empty list means the response carried no hourly data; the daily list
     still renders on its own.
+
+    A block that is there but cannot be read raises, and the caller turns
+    that into a missing strip: the hours are an addition to the forecast,
+    and an addition that cannot be read is a missing feature rather than a
+    broken forecast.
     """
-    daily = payload.get("daily") or {}
-    hourly = payload.get("hourly") or {}
-    times = hourly.get("time") or []
-    chances = hourly.get("precipitation_probability") or []
+    daily = _daily_block(payload)
+    hourly = payload.get("hourly") if isinstance(payload, dict) else None
+    if hourly is None:
+        return [], None
+    if not isinstance(hourly, dict):
+        raise ValueError("the hourly block is not an object")
+    times = hourly.get("time")
+    if times is not None and not isinstance(times, (list, tuple)):
+        raise ValueError("the hourly times are not a list")
+    chances = hourly.get("precipitation_probability")
+    if chances is not None and not isinstance(chances, (list, tuple)):
+        raise ValueError("the hourly chances are not a list")
+    times = list(times or [])
+    chances = list(chances or [])
     if not times:
         return [], None
     now = local_now(payload)
@@ -129,7 +181,7 @@ def _parse_hourly_days(payload):
     # with the daily list even if the two disagree by a day. A day with 23 or
     # 25 hours (a clock-change day) is kept whole rather than truncated.
     days = []
-    for day in (daily.get("time") or []):
+    for day in _as_list(daily.get("time")):
         todays = [entry for entry in entries
                   if entry[0].date().isoformat() == day]
         days.append((day, _build_hours(todays, now)))

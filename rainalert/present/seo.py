@@ -53,6 +53,11 @@ def city_from_slug(slug):
     if key in CITY_SLUGS:
         return CITY_SLUGS[key]
     name = key.replace("-", " ")
+    if not city_slug(name):
+        # A slug made only of punctuation stands for no city: there is no
+        # name behind it, and a city with no address of its own has no
+        # page either. The address has to exist before the page does.
+        return ""
     return name[:1].upper() + name[1:]
 
 

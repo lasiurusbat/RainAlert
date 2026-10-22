@@ -248,6 +248,26 @@ class TestSearchEngineOptimisation(AppTestCase):
         self.assertIn("There is no page at this address.", body)
         self.assertIn('<meta name="robots" content="noindex, follow">', body)
 
+    def test_an_address_with_nothing_in_it_is_a_404(self):
+        """A slug made only of punctuation stands for no city.
+
+        There is no name behind it, and a city with no address of its own
+        has no page either: the address has to exist before the page does.
+        A slug of nothing but punctuation used to be turned into an empty
+        address and a redirect to nowhere.
+        """
+        for slug in ("---", "!!!", "..", "-"):
+            with self.subTest(slug=slug):
+                response = self.client.get(f"/city/{slug}")
+                self.assertEqual(response.status_code, 404)
+                self.assertIn("There is no page at this address.",
+                              response.get_data(as_text=True))
+
+    def test_an_address_of_nothing_in_it_is_a_404(self):
+        """The same, with the slug left out altogether."""
+        response = self.client.get("/city/")
+        self.assertEqual(response.status_code, 404)
+
     def test_a_page_with_an_error_is_not_to_be_indexed(self):
         self.mock_geocode.return_value = None
         body = self.body("/city/nowhereville")

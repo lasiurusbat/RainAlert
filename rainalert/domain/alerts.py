@@ -53,10 +53,10 @@ def summarise_hours(hours, when="for the rest of today"):
     first = windows[0]
     bands = [severity_band(hour.chance) for hour in first]
     band = "high" if "high" in bands else "moderate"
-    if all(each == "unknown" for each in bands):
-        # An unknown chance is not a wet hour, but it is also not a dry one,
-        # so it is never called "possible" or "likely".
-        band = "unknown"
+    # A window only holds hours whose chance is a number at or above the
+    # threshold, so the band is never "unknown" here: an unknown chance is
+    # not a wet hour, but it is also not a dry one, and it never enters a
+    # window at all.
     peak = max(rain_chance(hour.chance) or 0 for hour in first)
     if len(first) == 1:
         span = f"at about {clock(first[0])}"

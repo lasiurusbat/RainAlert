@@ -62,9 +62,48 @@ def fetch_payload(latitude, longitude, unit=None):
         raise WeatherUnavailable(f"the forecast request failed: {exc}") from exc
 
     try:
-        return response.json()
+        payload = response.json()
     except ValueError as exc:
         raise WeatherUnavailable("the forecast response was not valid JSON") from exc
+    if not _is_a_forecast(payload):
+        raise WeatherUnavailable("the forecast response was not a forecast")
+    return payload
+
+
+# The fields the daily block carries, and the shape each one has to have.
+# A field that is not there is a field the service did not send, and a
+# field that is there but is not a list is not a forecast.
+DAILY_ARRAYS = ("time", "precipitation_probability_max", "temperature_2m_max",
+                "temperature_2m_min", "precipitation_sum",
+                "precipitation_hours")
+
+
+def _is_a_forecast(payload):
+    """Whether the answer is shaped like a forecast.
+
+    The service is a third party, so its answer is checked before it is
+    used. An answer that is not a forecast at all - a list, a string, an
+    error page served as JSON - is not a forecast with nothing in it: it
+    is a broken answer, and it is reported as one, so the reader is told
+    to come back in a moment rather than shown an empty week.
+
+    A block that is there but is the wrong shape is a broken answer in
+    the same way. The hourly block is not checked: the hours are an
+    addition to the forecast, and a missing or unreadable strip is a
+    missing feature rather than a broken forecast.
+    """
+    if not isinstance(payload, dict):
+        return False
+    daily = payload.get("daily")
+    if daily is None:
+        # No daily block at all: the service answered, and it had no
+        # forecast to give. The page says so and stays up.
+        return True
+    if not isinstance(daily, dict):
+        return False
+    return all(daily.get(field) is None
+               or isinstance(daily.get(field), (list, tuple))
+               for field in DAILY_ARRAYS)
 
 
 def _hourly_failed(exc):

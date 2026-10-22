@@ -208,9 +208,12 @@ def city_page(city_slug):
     ``200`` is a soft 404 and search engines treat it as one.
     """
     city = city_from_slug(city_slug)
-    if not city:
-        abort(404)
     canonical = city_path(city)
+    if not canonical:
+        # The slug names no city, or names one that has no address of its
+        # own. Either way there is no page here, and a redirect to an empty
+        # address is not an answer.
+        abort(404)
     if request.path != canonical:
         return redirect(canonical, code=301)
     return render_forecast_page(city, temperature_unit_from_request(),
@@ -249,9 +252,9 @@ def release_notes():
         'release_notes.html',
         **page_meta("Release notes - Rain Alert",
                     ("What Rain Alert is and what it does: the 7-day rain "
-                    "chance for any city, hour by hour, with the umbrella "
-                    "answer, your own threshold, a calendar export and an "
-                    "installable app."),
+                     "chance for any city, hour by hour, with the umbrella "
+                     "answer, your own threshold, a calendar export and an "
+                     "installable app."),
                     "/release-notes"),
         releases=RELEASES,
     )
