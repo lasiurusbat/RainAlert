@@ -13,7 +13,7 @@ State of the world, checked on 2026-10-22:
 - **The Docker Hub repository `lasiurusbat/rainalert` exists and is
   public, but it has zero tags** (the API answers
   `{"count":0,...}`). `render.yaml` points at
-  `lasiurusbat/rainalert:0.8`, which does not exist.
+  `lasiurusbat/rainalert:1.0`, which does not exist.
 - **A Render service named `rainalert` answers at
   <https://rainalert.onrender.com>, but it is not this app.** Its `/`
   returns the JSON `{"message": "Rain Alert API is running 🌂", "status":
@@ -38,10 +38,10 @@ and these commands are only a fallback.
 
 ```bash
 docker build --platform linux/amd64 \
-  --build-arg APP_VERSION=0.8 --build-arg APP_COMMIT=$(git rev-parse --short HEAD) \
-  -t lasiurusbat/rainalert:0.8 .
+  --build-arg APP_VERSION=1.0 --build-arg APP_COMMIT=$(git rev-parse --short HEAD) \
+  -t lasiurusbat/rainalert:1.0 .
 docker login
-docker push lasiurusbat/rainalert:0.8
+docker push lasiurusbat/rainalert:1.0
 ```
 
 Render runs `linux/amd64`. Use a new tag for every release (0.9, 1.0, ...)
@@ -64,7 +64,7 @@ working tree.
    already connected at `github.com/lasiurusbat/RainAlert`).
 2. Render dashboard → **New → Blueprint** → select the repository.
 3. Render proposes a free web service named `rainalert` running
-   `docker.io/lasiurusbat/rainalert:0.8`. Apply it.
+   `docker.io/lasiurusbat/rainalert:1.0`. Apply it.
 4. Open the `*.onrender.com` URL and search a city to confirm it works.
    (The first request after idle takes about a minute: free-tier cold start.)
 5. To release a new version: push the new tag, edit the tag in `render.yaml`
@@ -140,18 +140,18 @@ on every push to `main` and is green; only the tag-gated half — the push and
 the deploy — has never fired.
 
 ```
-pull request / push to main          push of a tag such as v0.9
+pull request / push to main          push of a tag such as v1.0
         |                                      |
   build image (linux/amd64)             build image (linux/amd64)
   run unit tests inside it              run unit tests inside it
   run browser tests on the runner       run browser tests on the runner
         |                               verify the tag is on main
-      done                              docker push lasiurusbat/rainalert:0.9
+      done                              docker push lasiurusbat/rainalert:1.0
                                                 |
                                         Render deploy hook with that tag
                                                 |
                                         smoke test: does the live page
-                                        carry "Version 0.9"?
+                                        carry "Version 1.0"?
 ```
 
 ### Design decisions
@@ -167,8 +167,8 @@ pull request / push to main          push of a tag such as v0.9
   failing browser test means the image is never pushed at all.
 - **One build, tested then pushed.** The image that passed the tests is the
   one that is pushed. It is not rebuilt for the push.
-- **Releases are git tags.** Push `v0.9` and the image is tagged `0.9`.
-  Tags must look like `v0.9` or `v1.2.3` and must point at a commit already
+- **Releases are git tags.** Push `v1.0` and the image is tagged `1.0`.
+  Tags must look like `v1.0` or `v1.2.3` and must point at a commit already
   on `main`; anything else fails before anything is pushed.
 - **Deploys name the exact tag.** Render does not redeploy an image service
   when a new image appears on Docker Hub. The workflow calls the service's
@@ -198,12 +198,12 @@ pull request / push to main          push of a tag such as v0.9
 
 ```bash
 git switch main && git pull
-git tag v0.9
-git push origin v0.9
+git tag v1.0
+git push origin v1.0
 ```
 
 Watch the run under the repository's Actions tab. The first release after
-setup is `v0.8`, to match `render.yaml`, which pins `0.8`.
+setup is `v1.0`, to match `render.yaml`, which pins `1.0`.
 
 **Cutting a release means adding an entry to `rainalert/data/releases.py`.** The release
 notes page at `/release-notes` is a page of the site, and it says what each
@@ -218,7 +218,7 @@ stamps into the footer, so the page and the running build agree.
   and the CI workflow runs green on every push to `main`, but the tag-gated
   half — the push and the deploy — has never executed. Expect to fix small
   things on the first release, and use a throwaway tag for it. The image
-  `lasiurusbat/rainalert:0.8` does not exist on Docker Hub yet, so section 1
+  `lasiurusbat/rainalert:1.0` does not exist on Docker Hub yet, so section 1
   is still ahead.
 - **The smoke test will fail on the first release.** It hits
   `https://rainalert.live/`, which still answers nothing while the domain

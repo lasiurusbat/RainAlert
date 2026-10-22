@@ -51,23 +51,32 @@
             </div>
             <div class="intro">
                 <h1 class="page-title">Release notes</h1>
-                <p class="notes-lead">What each release brought, newest first.
+                <p class="notes-lead">What Rain Alert is and what it does.
                     The build that is answering you right now is
                     <span class="notes-version">{{ app_version }}</span>.</p>
             </div>
             <ol class="releases">
                 {% for release in releases %}
                 <li class="release">
-                    <h2 class="release-version">{{ release.version }}</h2>
+                    <h2 class="release-version">Version {{ release.version }}</h2>
                     <p class="release-name">{{ release.name }}</p>
-                    <ul class="release-points">
-                        {% for point in release.points %}
-                        <li>{{ point }}</li>
+                    <ul class="release-features">
+                        {% for feature in release.features %}
+                        <li class="release-feature">
+                            <h3 class="feature-title">{{ feature.title }}</h3>
+                            <p class="feature-text">{{ feature.text }}</p>
+                        </li>
                         {% endfor %}
                     </ul>
                 </li>
                 {% endfor %}
             </ol>
+            <!-- The way back into the app, still inside the panel, so the
+                 reader is never left at the end of the notes with nowhere
+                 to go. -->
+            <p class="notes-back">
+                <a href="{{ url_for('index') }}">Back to Rain Alert</a>
+            </p>
         </div>
 
         {{ site_footer(release_notes=False) }}

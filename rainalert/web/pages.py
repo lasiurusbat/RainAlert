@@ -248,9 +248,10 @@ def release_notes():
     return render_template(
         'release_notes.html',
         **page_meta("Release notes - Rain Alert",
-                    ("What changed in each release of Rain Alert: the "
-                     "night street page, the calendar export, the "
-                     "browser notification and the installable app."),
+                    ("What Rain Alert is and what it does: the 7-day rain "
+                    "chance for any city, hour by hour, with the umbrella "
+                    "answer, your own threshold, a calendar export and an "
+                    "installable app."),
                     "/release-notes"),
         releases=RELEASES,
     )

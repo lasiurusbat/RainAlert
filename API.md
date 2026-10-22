@@ -219,6 +219,9 @@ release means adding an entry there, and the version on the top entry is the
 one the build stamps into the footer, so the page and the footer never
 disagree about which release is running.
 
+Each release is a version, a name for it, and the features it brought. A
+feature is a title and a paragraph, and both are rendered on the page.
+
 The page is a page like any other: it has a title, a description, a
 canonical link and a social card, and it is in the sitemap.
 

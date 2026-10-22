@@ -4,6 +4,8 @@
 import re
 from unittest import mock
 
+from markupsafe import escape
+
 from rainalert import config
 from rainalert.data import releases
 from tests.fixtures import (AppTestCase, FakeLocation, FakeResponse,
@@ -401,12 +403,26 @@ class TestReleaseNotes(AppTestCase):
         versions = [release["version"] for release in releases.RELEASES]
         self.assertEqual(versions, sorted(versions, reverse=True))
 
-    def test_every_release_says_something(self):
-        """A release with no points is a heading and nothing else."""
+    def test_the_page_carries_every_feature(self):
+        """A feature is a title and a paragraph, and both are on the page.
+
+        The text is escaped on the way out, so an apostrophe in a feature
+        arrives as an entity. The page is compared the way a browser sees
+        it, which is the way it has to be right.
+        """
+        body = self.client.get("/release-notes").get_data(as_text=True)
         for release in releases.RELEASES:
-            self.assertTrue(release["points"], release["version"])
-            for point in release["points"]:
-                self.assertTrue(point.strip(), release["version"])
+            for feature in release["features"]:
+                self.assertIn(feature["title"], body)
+                self.assertIn(escape(feature["text"]), body)
+
+    def test_every_release_says_something(self):
+        """A release with no features is a heading and nothing else."""
+        for release in releases.RELEASES:
+            self.assertTrue(release["features"], release["version"])
+            for feature in release["features"]:
+                self.assertTrue(feature["title"].strip(), release["version"])
+                self.assertTrue(feature["text"].strip(), release["version"])
 
     def test_the_page_says_which_build_is_answering(self):
         """The notes and the footer agree about the running build."""
@@ -414,6 +430,34 @@ class TestReleaseNotes(AppTestCase):
             body = self.client.get("/release-notes").get_data(as_text=True)
         self.assertIn("Version 0.8", self.footer(body))
         self.assertIn('<span class="notes-version">0.8</span>', body)
+
+    # -- the way back -----------------------------------------------------------
+
+    def test_there_is_a_way_back_into_the_app(self):
+        """The reader is never left at the end of the notes with nowhere
+        to go."""
+        body = self.client.get("/release-notes").get_data(as_text=True)
+        self.assertIn('class="notes-back"', body)
+        self.assertIn('<a href="/">Back to Rain Alert</a>', body)
+
+    def test_the_way_back_is_inside_the_panel(self):
+        """Still in the box, so the page does not end in a stray link
+        floating on the photograph."""
+        body = self.client.get("/release-notes").get_data(as_text=True)
+        back = body.index('class="notes-back"')
+        panel = body.index('class="container container-wide"')
+        self.assertLess(panel, back)
+        self.assertLess(back, body.index("</footer>"))
+
+    def test_the_way_back_leads_to_the_start_page(self):
+        response = self.client.get("/release-notes").get_data(as_text=True)
+        self.assertIn('href="/"', response)
+        self.assertEqual(self.client.get("/").status_code, 200)
+
+    def test_the_way_back_is_not_on_any_other_page(self):
+        """It belongs to the notes: the other pages have a footer link."""
+        for body in self.pages():
+            self.assertNotIn('class="notes-back"', body)
 
     # -- the link to it ---------------------------------------------------------
 

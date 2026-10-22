@@ -205,7 +205,7 @@ what the footer of every page then shows — pass them as build arguments:
 
 ```bash
 docker build \
-  --build-arg APP_VERSION=0.8 \
+  --build-arg APP_VERSION=1.0 \
   --build-arg APP_COMMIT=$(git rev-parse --short HEAD) \
   -t rainalert .
 ```
@@ -704,7 +704,7 @@ features or promotions, you need one of Open-Meteo's paid plans first.
 Do not remove them: the Open-Meteo licence requires attribution.
 
 **Which build is answering is on the page too.** Under the credits, the
-footer says `Version 0.8 · build 1a2b3c4` on a release build, and
+footer says `Version 1.0 · build 1a2b3c4` on a release build, and
 `Version dev` on a development run — a working tree is not a commit, so it
 names none. The version and the commit come from `APP_VERSION` and
 `APP_COMMIT`, which the Docker build takes as arguments and the CI workflow
@@ -714,8 +714,9 @@ from "the new build is up".
 
 **The changelog is a page of the site.** Next to the version, the footer
 carries a link to `/release-notes`, which says what each release brought,
-newest first, in the same night-street frame as the rest of the site. The
-content lives in `rainalert/data/releases.py`, so cutting a release means adding an entry
+newest first, in the same night-street frame as the rest of the site. A
+release is a version, a name and the features it brought; a feature is a
+title and a paragraph. The content lives in `rainalert/data/releases.py`, so cutting a release means adding an entry
 there.
 
 ---
@@ -1057,7 +1058,7 @@ that runs a prebuilt image from Docker Hub:
 ```yaml
 runtime: image
 image:
-  url: docker.io/lasiurusbat/rainalert:0.8
+  url: docker.io/lasiurusbat/rainalert:1.0
 ```
 
 Render pulls the image; it does not build the Dockerfile. Releases are cut by

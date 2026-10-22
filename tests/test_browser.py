@@ -1599,6 +1599,31 @@ class ReleaseNotesBrowserTestCase(BrowserServerMixin, unittest.TestCase):
             "document.documentElement.clientWidth;")
         self.assertEqual(sideways, 0)
 
+    def test_the_way_back_is_on_the_notes_page(self):
+        """The reader is never left at the end of the notes with nowhere
+        to go: there is a link back into the app, in the panel."""
+        self.driver.get(self.base + "/release-notes")
+        self.wait_for("return document.querySelector('.notes-back') !== null;")
+        back = self.driver.execute_script(
+            "var b = document.querySelector('.notes-back a');"
+            "return b ? {text: b.innerText.trim(),"
+            "            href: b.getAttribute('href'),"
+            "            visible: b.getBoundingClientRect().height > 0}"
+            "       : null;")
+        self.assertIsNotNone(back)
+        self.assertEqual(back["text"], "Back to Rain Alert")
+        self.assertEqual(back["href"], "/")
+        self.assertTrue(back["visible"])
+
+    def test_the_way_back_leads_to_the_start_page(self):
+        self.driver.get(self.base + "/release-notes")
+        self.wait_for("return document.querySelector('.notes-back a') !== null;")
+        self.driver.find_element(By.CSS_SELECTOR, ".notes-back a").click()
+        self.wait_for("return document.querySelector('.page-title') !== null;")
+        self.assertEqual(self.driver.current_url.rstrip("/"),
+                         self.base.rstrip("/"))
+        self.assertEqual(self.driver.title, "Rain Alert - 7-day rain chance for any city")
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

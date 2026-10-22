@@ -1240,7 +1240,8 @@ button:focus-visible {
 /* --- The release notes ------------------------------------------------------
    A page like any other: the same panel over the same photograph. The
    notes are the app's own history, so the type does the work - the version
-   is narrow, the name is wide, and the points are quiet prose.
+   is narrow, the release's name is wide, and each feature is a title and a
+   quiet paragraph under it.
 
    No amber here. The lamp means rain on the forecast page, and a colour
    that means one thing on one page must not mean nothing on the next. */
@@ -1274,42 +1275,41 @@ button:focus-visible {
 
 .release-version {
     margin: 0;
-    font-size: 0.72rem;
+    font-size: 0.78rem;
     font-variation-settings: 'wdth' 74, 'wght' 600;
     letter-spacing: 0.06em;
     color: var(--mist);
 }
 
 .release-name {
-    margin: 0.15rem 0 0.6rem;
+    margin: 0.15rem 0 0.9rem;
     font-size: 1.02rem;
     line-height: 1.25;
     font-variation-settings: 'wdth' 100, 'wght' 600;
     color: var(--paper);
 }
 
-.release-points {
+/* The features. Each one is a title and a paragraph, so the list reads as
+   a set of things the app does rather than as a wall of prose. */
+.release-features {
     margin: 0;
     padding: 0;
     list-style: none;
-    font-size: 0.85rem;
-    line-height: 1.55;
-    color: var(--mist);
 }
 
-.release-points li {
+.release-feature {
     position: relative;
     padding-left: 0.9rem;
-    margin-bottom: 0.5rem;
+    margin-bottom: 0.85rem;
 }
 
-.release-points li:last-child {
+.release-feature:last-child {
     margin-bottom: 0;
 }
 
 /* A small rule rather than a bullet: the same mark as the app's own
    accents, and it cannot be mistaken for a rain mark. */
-.release-points li::before {
+.release-feature::before {
     content: "";
     position: absolute;
     left: 0;
@@ -1317,6 +1317,44 @@ button:focus-visible {
     width: 0.4rem;
     height: 1px;
     background: var(--dim);
+}
+
+.feature-title {
+    margin: 0 0 0.2rem;
+    font-size: 0.9rem;
+    line-height: 1.3;
+    font-variation-settings: 'wdth' 100, 'wght' 600;
+    color: var(--paper);
+}
+
+.feature-text {
+    margin: 0;
+    font-size: 0.83rem;
+    line-height: 1.55;
+    color: var(--mist);
+}
+
+/* The way back to the app, at the foot of the notes and in the middle of
+   the panel. A reader who has reached the end of the notes should be able
+   to leave without hunting for the logo in the corner. The hairline above
+   it separates it from the last release, whose own rule is removed. */
+.notes-back {
+    margin: 1.1rem 0 0.2rem;
+    padding-top: 0.9rem;
+    border-top: 1px solid var(--line);
+    text-align: center;
+    font-size: 0.83rem;
+}
+
+.notes-back a {
+    color: var(--paper);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+}
+
+.notes-back a:hover,
+.notes-back a:focus-visible {
+    text-decoration-thickness: 2px;
 }
 
 /* --- The offline page ------------------------------------------------------

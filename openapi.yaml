@@ -2,7 +2,7 @@ openapi: 3.1.0
 
 info:
   title: RainAlert API
-  version: "0.8"
+  version: "1.0"
   summary: The 7-day rain chance for any city.
   description: |
     RainAlert is a small Flask app that shows the 7-day rain chance for any
@@ -208,7 +208,8 @@ paths:
         than a file that only exists in the repository.
 
         The content comes from `rainalert/data/releases.py`, so cutting a release means
-        adding an entry there.
+        adding an entry there. Each release is a version, a name for it, and
+        the features it brought; a feature is a title and a paragraph.
       responses:
         "200":
           description: The release notes.
