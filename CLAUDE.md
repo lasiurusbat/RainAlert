@@ -114,9 +114,9 @@ nothing else.
 
 ### Still to do
 
-- [ ] Re-run the failed jobs of the `v1.0` run. The tag does not have to
-      be cut again — it is already on `main` — and the run builds, tests,
-      pushes and deploys in one go.
+- [ ] Watch the `v1.0` run, which was re-fired by moving the tag to the
+      commit that carries the test fix. The run builds, tests, pushes and
+      deploys in one go.
 - [ ] Confirm the Render deploy hook is set as a GitHub secret, and that
       the free Render plan includes a hook.
 - [ ] Point the domain at Render: add `rainalert.live` to the service,
@@ -891,6 +891,13 @@ because the app works without it.
   image, with the worker installed and activated and the page still
   uncontrolled. `wait_for_the_worker()` in `tests/test_browser.py` does
   this now.
+- **A "re-run failed jobs" re-runs the commit the tag points at.** The
+  release run is pinned to the tag, so a fix to the test suite does not
+  reach it: the button replays the old workflow against the old commit,
+  and the same test fails again. A fix has to be pushed into the tag
+  itself. The `v1.0` tag was moved to the fixed commit on 2026-10-22,
+  which is what re-fired the run — and it is safe to do, because a tag
+  that never produced a published image has nothing to move.
 - **A local Docker image is never rebuilt on its own.** Compose reuses
   `rainalert:latest` whenever it exists, so `docker compose run --rm tests`
   can test yesterday's code and still say `OK`. The compose file now sets

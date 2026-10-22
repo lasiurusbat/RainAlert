@@ -217,6 +217,20 @@ git push origin v1.0
 Watch the run under the repository's Actions tab. The first release after
 setup is `v1.0`, to match `render.yaml`, which pins `1.0`.
 
+**A failed run cannot be fixed with "Re-run failed jobs".** The release run
+is pinned to the commit the tag points at, so the button replays the old
+workflow against the old commit, and a test that was fixed in a later
+commit fails again in exactly the same way. To get a fix into a release
+run, the tag has to point at it:
+
+```bash
+git tag -f v1.0 <commit> && git push --force origin v1.0
+```
+
+That is safe on a tag that never produced a published image, because
+nothing that was released moves. On a tag that *was* released, cut a new
+version instead.
+
 **Cutting a release means adding an entry to `rainalert/data/releases.py`.** The release
 notes page at `/release-notes` is a page of the site, and it says what each
 release brought. Add the new release at the top of `RELEASES`, with the
