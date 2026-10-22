@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <!-- The lit state: the same mark, with the rain falling and the plate
+       turned to the sodium-lamp amber. The shape changes as well as the
+       colour, so the two icons are told apart at 16 pixels by their
+       silhouette and not by their hue alone. -->
+  <rect width="64" height="64" rx="14" fill="#D99A2B"/>
+  <g fill="none" stroke="#14100A" stroke-width="5" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M9 33c6-20 40-20 46 0"/>
+    <path d="M32 20v24a8 8 0 0 1-8 8"/>
+    <path d="M18 38v7"/>
+    <path d="M46 38v7"/>
+  </g>
+</svg>

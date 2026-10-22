@@ -32,6 +32,7 @@ try:
     from selenium.common.exceptions import WebDriverException
     from selenium.webdriver.chrome.options import Options
     from selenium.webdriver.common.by import By
+    from selenium.webdriver.common.keys import Keys
     from selenium.webdriver.support.ui import WebDriverWait
     HAS_SELENIUM = True
 except ImportError:  # pragma: no cover - the suite skips without selenium
@@ -102,6 +103,30 @@ DRY_PAYLOAD = {
     "hourly": {
         "time": [f"2026-10-21T{hour:02d}:00" for hour in range(24)],
         "precipitation_probability": [0] * 24,
+    },
+    "current": {"time": "2026-10-21T09:00"},
+    "utc_offset_seconds": 3600,
+}
+
+
+# A week with an hour for every day of it, so the graph can be checked
+# against the day the reader picks. Each day is wet at a different
+# strength, so one strip can be told from another.
+WEEK_HOURLY_PAYLOAD = {
+    "daily": {
+        "time": ["2026-10-21", "2026-10-22", "2026-10-23", "2026-10-24",
+                 "2026-10-25", "2026-10-26", "2026-10-27"],
+        "precipitation_probability_max": [20, 30, 40, 50, 60, 70, 80],
+        "temperature_2m_max": [11.1, 14.0, 16.7, 12.0, 10.0, 9.0, 8.0],
+        "temperature_2m_min": [8.5, 8.6, 10.3, 7.0, 6.0, 5.0, 4.0],
+    },
+    "hourly": {
+        "time": [f"2026-10-{21 + day:02d}T{hour:02d}:00"
+                 for day in range(7) for hour in range(24)],
+        "precipitation_probability": [
+            0 if hour < 8 else (20 + day * 10 if hour < 14 else 0)
+            for day in range(7) for hour in range(24)
+        ],
     },
     "current": {"time": "2026-10-21T09:00"},
     "utc_offset_seconds": 3600,
@@ -349,8 +374,8 @@ class BrowserTestCase(BrowserServerMixin, unittest.TestCase):
             "window.localStorage.setItem('rainalert.city', 'London');")
         self.driver.get(self.base + "/")
         self.wait_for("return document.querySelector('.weather-list') !== null;")
-        self.assertIn("city=London", self.driver.current_url)
-        self.assertIn("Forecast for London", self.driver.page_source)
+        self.assertIn("city/london", self.driver.current_url)
+        self.assertIn("7-day rain chance for London", self.driver.page_source)
 
     def test_the_remember_box_shows_that_a_city_is_saved(self):
         self.driver.execute_script(
@@ -401,7 +426,7 @@ class BrowserTestCase(BrowserServerMixin, unittest.TestCase):
             "window.localStorage.setItem('rainalert.city', 'London');")
         self.driver.get(self.base + "/?city=Paris")
         self.wait_for("return document.querySelector('.weather-list') !== null;")
-        self.assertIn("city=Paris", self.driver.current_url)
+        self.assertIn("city/paris", self.driver.current_url)
 
     # -- the personal threshold -------------------------------------------------
 
@@ -590,7 +615,7 @@ class BrowserTestCase(BrowserServerMixin, unittest.TestCase):
         self.assertIn("BEGIN:VCALENDAR", content)
         self.assertIn("DTSTART;VALUE=DATE:20261021", content)
         # The reader is left on the page, not on a file.
-        self.assertIn("city=London", self.driver.current_url)
+        self.assertIn("city/london", self.driver.current_url)
         self.assertIn("weather-list", self.driver.page_source)
 
     def test_the_file_holds_exactly_the_days_the_page_marks(self):
@@ -917,7 +942,10 @@ class PwaBrowserTestCase(BrowserServerMixin, unittest.TestCase):
             }, function () { done(false); });
         """)
         for url in self.cached_urls():
-            self.assertNotIn(url, self.base + "/?city=London")
+            # Neither the query string nor the city's own address may be
+            # in the cache: both of them show the forecast.
+            self.assertNotIn(url, self.base + "/city/london")
+            self.assertFalse(url.endswith("/city/london"))
             self.assertFalse(url.endswith("/?city=London"))
 
     def test_the_page_still_works_with_the_worker_in_charge(self):
@@ -925,7 +953,7 @@ class PwaBrowserTestCase(BrowserServerMixin, unittest.TestCase):
         self.wait_for_the_worker()
         self.driver.get(self.base + "/?city=London")
         self.wait_for("return document.querySelector('.weather-list') !== null;")
-        self.assertIn("Forecast for London", self.driver.page_source)
+        self.assertIn("7-day rain chance for London", self.driver.page_source)
 
     def test_the_export_downloads_with_the_worker_in_charge(self):
         """The worker must not get in the way of the export either."""
@@ -1019,12 +1047,13 @@ class OfflineBrowserTestCase(BrowserServerMixin, unittest.TestCase):
             # It is still Rain Alert, and not a browser error page.
             self.assertIn("Rain Alert", body)
             # The stylesheet came from the cache, so the page looks like
-            # the app rather than like a wall of unstyled text.
+            # the app rather than like a wall of unstyled text: the panel
+            # is the night's dark plate.
             self.assertEqual(
                 self.driver.execute_script(
                     "return getComputedStyle("
                     "document.querySelector('.container')).backgroundColor;"),
-                "rgb(255, 255, 255)")
+                "rgb(13, 18, 22)")
         finally:
             self.bring_the_server_back()
 
@@ -1062,7 +1091,7 @@ class OfflineBrowserTestCase(BrowserServerMixin, unittest.TestCase):
         self.bring_the_server_back()
         self.driver.get(self.base + "/?city=London")
         self.wait_for("return document.querySelector('.weather-list') !== null;")
-        self.assertIn("Forecast for London", self.driver.page_source)
+        self.assertIn("7-day rain chance for London", self.driver.page_source)
 
     def test_the_export_is_not_answered_with_the_offline_page(self):
         """An offline page is a page, and it must not stand in for a file.
@@ -1084,6 +1113,358 @@ class OfflineBrowserTestCase(BrowserServerMixin, unittest.TestCase):
             self.assertNotIn("You are offline", body)
         finally:
             self.bring_the_server_back()
+
+
+@unittest.skipUnless(
+    HAS_SELENIUM or REQUIRE_BROWSER,
+    "selenium is not installed")
+class NightStreetLayoutTestCase(BrowserServerMixin, unittest.TestCase):
+    """The night street layout, measured in a real browser.
+
+    The design moved the answer to the top and the week to seven columns
+    of figures, so the things that can go wrong are measured rather than
+    assumed: the page has to fit its window, the columns have to be
+    columns, and the numbers have to sit over their own bars.
+    """
+
+    def open_the_forecast(self, width=1366, height=768):
+        self.set_viewport(width, height)
+        self.driver.get(self.base + "/?city=London")
+        self.wait_for("return document.querySelector('.weather-list') !== null;")
+        # The script turns each column into a button, so the page is only
+        # finished when the buttons are there.
+        self.wait_for("return document.querySelector('.day-pick') !== null;")
+        self.wait_for("return document.fonts.status === 'loaded';")
+
+    def set_viewport(self, width, height):
+        """Set the viewport exactly, chrome and all."""
+        self.driver.execute_cdp_cmd("Emulation.setDeviceMetricsOverride", {
+            "width": width, "height": height,
+            "deviceScaleFactor": 1, "mobile": False,
+        })
+
+    def overflow(self):
+        return self.driver.execute_script(
+            "return document.documentElement.scrollHeight - "
+            "document.documentElement.clientHeight;")
+
+    def test_the_forecast_page_fits_a_standard_window(self):
+        """The card is at its vertical limit, so the page has to fit a
+        768px window with no scrollbar."""
+        self.open_the_forecast()
+        self.assertEqual(self.overflow(), 0)
+
+    def test_the_page_does_not_scroll_sideways(self):
+        self.open_the_forecast()
+        sideways = self.driver.execute_script(
+            "return document.documentElement.scrollWidth - "
+            "document.documentElement.clientWidth;")
+        self.assertEqual(sideways, 0)
+
+    def test_the_narrow_page_does_not_scroll_sideways(self):
+        self.open_the_forecast(width=400, height=780)
+        sideways = self.driver.execute_script(
+            "return document.documentElement.scrollWidth - "
+            "document.documentElement.clientWidth;")
+        self.assertEqual(sideways, 0)
+
+    def test_the_week_is_seven_columns_on_one_row(self):
+        """The week is a row of columns, not a stack of rows."""
+        self.open_the_forecast()
+        boxes = self.driver.execute_script("""
+            return Array.prototype.map.call(
+                document.querySelectorAll('.weather-item'),
+                function (row) {
+                    var r = row.getBoundingClientRect();
+                    return {top: Math.round(r.top),
+                            left: Math.round(r.left),
+                            width: Math.round(r.width)};
+                });
+        """)
+        self.assertEqual(len(boxes), 7)
+        self.assertEqual(len({row["top"] for row in boxes}), 1)
+        self.assertEqual(len({row["left"] for row in boxes}), 7)
+
+    def test_the_columns_are_the_same_width(self):
+        self.open_the_forecast()
+        widths = self.driver.execute_script("""
+            return Array.prototype.map.call(
+                document.querySelectorAll('.weather-item'),
+                function (row) {
+                    return Math.round(row.getBoundingClientRect().width);
+                });
+        """)
+        self.assertEqual(len(set(widths)), 1)
+
+    def test_every_number_sits_over_its_own_bar(self):
+        """The value row and the strip are the same row of cells."""
+        self.open_the_forecast()
+        offsets = self.driver.execute_script("""
+            var values = document.querySelectorAll('.hour-value');
+            var bars = document.querySelectorAll('.hour .hour-bar');
+            var out = [];
+            for (var i = 0; i < values.length && i < bars.length; i++) {
+                var v = values[i].getBoundingClientRect();
+                var b = bars[i].getBoundingClientRect();
+                out.push(Math.round(v.left + v.width / 2 -
+                                   (b.left + b.width / 2)));
+            }
+            return out;
+        """)
+        self.assertEqual(len(offsets), 24)
+        for offset in offsets:
+            self.assertLessEqual(abs(offset), 2, offset)
+
+    def test_the_panel_is_dark(self):
+        """The page is a night panel over the photograph."""
+        self.open_the_forecast()
+        background = self.driver.execute_script(
+            "return getComputedStyle(document.querySelector('.container'))"
+            ".backgroundColor;")
+        self.assertEqual(background, "rgb(13, 18, 22)")
+
+    def test_the_type_is_the_self_hosted_face(self):
+        """No third party is asked for a font, so the family that comes
+        back has to be the one that was loaded."""
+        self.open_the_forecast()
+        family = self.driver.execute_script(
+            "return getComputedStyle(document.querySelector('.city-name'))"
+            ".fontFamily;")
+        self.assertIn("Archivo", family)
+
+    def test_the_umbrella_is_the_amber_text_glyph(self):
+        """The pictograph, not a colour emoji."""
+        self.open_the_forecast()
+        colour = self.driver.execute_script("""
+            var mark = document.querySelector('.umbrella');
+            return mark ? getComputedStyle(mark).color : '';
+        """)
+        self.assertEqual(colour, "rgb(233, 169, 60)")
+
+    def test_the_export_link_sits_on_the_caption_line(self):
+        """The link and "7-day rain chance" are one line, not two rows.
+
+        The two are set at slightly different sizes, so their boxes are not
+        the same height. What has to be the same is the line they sit on,
+        which is where the text stands on the page - so that is what is
+        measured.
+        """
+        self.open_the_forecast()
+        lines = self.driver.execute_script("""
+            function baseline(el) {
+                // A box with no height, standing on the text's baseline.
+                var marker = document.createElement('span');
+                marker.style.display = 'inline-block';
+                marker.style.width = '0';
+                marker.style.height = '0';
+                marker.style.verticalAlign = 'baseline';
+                el.appendChild(marker);
+                var y = marker.getBoundingClientRect().top;
+                marker.remove();
+                return y;
+            }
+            return {
+                caption: baseline(document.querySelector('.result-caption')),
+                link: baseline(document.querySelector('.calendar-text')),
+            };
+        """)
+        self.assertLessEqual(abs(lines["caption"] - lines["link"]), 1)
+
+    def test_the_export_icon_does_not_climb_above_the_caption(self):
+        """The icon is part of the caption's line, not of the city's name."""
+        self.open_the_forecast()
+        tops = self.driver.execute_script("""
+            return {
+                city: document.querySelector('.city-name')
+                    .getBoundingClientRect().bottom,
+                icon: document.querySelector('.calendar-icon')
+                    .getBoundingClientRect().top,
+                caption: document.querySelector('.result-caption')
+                    .getBoundingClientRect().top,
+            };
+        """)
+        self.assertGreaterEqual(tops["icon"], tops["caption"] - 1)
+        self.assertGreater(tops["icon"], tops["city"])
+
+
+@unittest.skipUnless(
+    HAS_SELENIUM or REQUIRE_BROWSER,
+    "selenium is not installed")
+class DayPickerTestCase(BrowserServerMixin, unittest.TestCase):
+    """Picking a day out of the week.
+
+    The week is seven columns, and a column can be picked. The detail of
+    the picked day is in the panel above the week, so the two have to
+    agree, and the page has to stay the same size when the day changes.
+    """
+
+    def open_the_forecast(self, width=1366, height=768, payload=None):
+        self.driver.execute_cdp_cmd("Emulation.setDeviceMetricsOverride", {
+            "width": width, "height": height,
+            "deviceScaleFactor": 1, "mobile": False,
+        })
+        if payload is not None:
+            self.mock_get.return_value = FakeResponse(payload=payload)
+        self.driver.get(self.base + "/?city=London")
+        self.wait_for("return document.querySelector('.day-pick') !== null;")
+        self.wait_for("return document.fonts.status === 'loaded';")
+
+    def active_panel(self):
+        return self.driver.execute_script(
+            "var panel = document.querySelector('.day-panel.is-active');"
+            "return panel ? panel.innerText.replace(/\\s+/g, ' ') : '';")
+
+    def active_summary(self):
+        """The sentence under the graph of the day that is showing."""
+        return self.driver.execute_script(
+            "var strip = document.querySelector('.day-strip.is-active');"
+            "var line = strip && strip.querySelector('.hourly-summary');"
+            "return line ? line.innerText.trim() : '';")
+
+    def active_values(self):
+        """The numbers written over the bars of the day that is showing."""
+        return self.driver.execute_script(
+            "var strip = document.querySelector('.day-strip.is-active');"
+            "var row = strip && strip.querySelector('.hourly-values');"
+            "return row ? row.innerText.replace(/\\s+/g, ' ') : '';")
+
+    def click_day(self, index):
+        self.driver.execute_script(
+            "document.querySelectorAll('.weather-item .day-pick')"
+            "[arguments[0]].click();", index)
+
+    def test_every_column_is_a_button(self):
+        """The whole column is the target, and it points at the panel it
+        shows."""
+        self.open_the_forecast()
+        panels = self.driver.execute_script("""
+            return Array.prototype.map.call(
+                document.querySelectorAll('.weather-item .day-pick'),
+                function (button) {
+                    var panel = document.getElementById(
+                        button.getAttribute('aria-controls'));
+                    return panel ? panel.id : '';
+                });
+        """)
+        self.assertEqual(len(panels), 7)
+        self.assertEqual(len(set(panels)), 7)
+
+    def test_the_day_chosen_is_the_one_that_shows(self):
+        self.open_the_forecast()
+        before = self.active_panel()
+        self.click_day(2)
+        after = self.active_panel()
+        self.assertNotEqual(before, after)
+        self.assertIn("23.10", after)
+        self.assertIn("40%", after)
+
+    def test_only_one_day_is_marked_as_picked(self):
+        self.open_the_forecast()
+        self.click_day(4)
+        marked = self.driver.execute_script(
+            "return document.querySelectorAll('.weather-item.is-selected')"
+            ".length;")
+        self.assertEqual(marked, 1)
+
+    def test_the_picked_day_is_the_current_one_for_a_screen_reader(self):
+        self.open_the_forecast()
+        self.click_day(3)
+        current = self.driver.execute_script("""
+            return Array.prototype.map.call(
+                document.querySelectorAll('.weather-item .day-pick'),
+                function (button) {
+                    return button.getAttribute('aria-current');
+                });
+        """)
+        self.assertEqual(current.count("true"), 1)
+        self.assertEqual(current[3], "true")
+
+    def test_the_arrow_keys_move_between_the_days(self):
+        self.open_the_forecast()
+        buttons = self.driver.find_elements(
+            By.CSS_SELECTOR, ".weather-item .day-pick")
+        buttons[0].send_keys(Keys.ARROW_RIGHT)
+        self.assertIn("22.10", self.active_panel())
+        buttons[1].send_keys(Keys.ARROW_RIGHT)
+        self.assertIn("23.10", self.active_panel())
+
+    def test_the_page_does_not_grow_when_the_day_changes(self):
+        """The panels sit in one cell, so the week never moves."""
+        self.open_the_forecast()
+        before = self.driver.execute_script(
+            "return document.querySelector('.weather-list')"
+            ".getBoundingClientRect().top;")
+        self.click_day(5)
+        after = self.driver.execute_script(
+            "return document.querySelector('.weather-list')"
+            ".getBoundingClientRect().top;")
+        self.assertEqual(round(before), round(after))
+
+    def test_the_page_still_fits_a_standard_window(self):
+        self.open_the_forecast()
+        overflow = self.driver.execute_script(
+            "return document.documentElement.scrollHeight - "
+            "document.documentElement.clientHeight;")
+        self.assertEqual(overflow, 0)
+
+    def test_the_page_does_not_scroll_sideways(self):
+        self.open_the_forecast(width=400, height=780)
+        sideways = self.driver.execute_script(
+            "return document.documentElement.scrollWidth - "
+            "document.documentElement.clientWidth;")
+        self.assertEqual(sideways, 0)
+
+    def test_the_graph_shows_the_day_that_is_picked(self):
+        """The strip is the graph of the day the reader picked, so it has
+        to show that day's hours and not today's."""
+        self.open_the_forecast(payload=WEEK_HOURLY_PAYLOAD)
+        self.click_day(5)
+        self.assertIn("up to 70%", self.active_summary())
+        self.assertIn("70", self.active_values())
+        self.assertNotIn("20", self.active_values())
+
+    def test_the_title_of_the_graph_names_the_day(self):
+        self.open_the_forecast(payload=WEEK_HOURLY_PAYLOAD)
+        self.click_day(2)
+        title = self.driver.execute_script(
+            "return document.querySelector('.hourly-title').textContent;")
+        self.assertEqual(title, "Friday, hour by hour")
+
+    def test_only_one_graph_shows(self):
+        self.open_the_forecast(payload=WEEK_HOURLY_PAYLOAD)
+        self.click_day(3)
+        showing = self.driver.execute_script(
+            "return document.querySelectorAll('.day-strip.is-active').length;")
+        self.assertEqual(showing, 1)
+
+    def test_the_graph_does_not_move_when_the_day_changes(self):
+        """The strips share one cell of one grid, so the graph stays where
+        it is and the week below it never moves."""
+        self.open_the_forecast(payload=WEEK_HOURLY_PAYLOAD)
+        before = self.driver.execute_script(
+            "return document.querySelector('.day-strip.is-active "
+            ".hourly-values').getBoundingClientRect().top;")
+        self.click_day(5)
+        after = self.driver.execute_script(
+            "return document.querySelector('.day-strip.is-active "
+            ".hourly-values').getBoundingClientRect().top;")
+        self.assertEqual(round(before), round(after))
+
+    def test_the_page_still_fits_a_standard_window_with_a_full_week(self):
+        """A week of graphs is the real page, and it still has to fit."""
+        self.open_the_forecast(payload=WEEK_HOURLY_PAYLOAD)
+        overflow = self.driver.execute_script(
+            "return document.documentElement.scrollHeight - "
+            "document.documentElement.clientHeight;")
+        self.assertEqual(overflow, 0)
+
+    def test_the_narrow_page_still_fits_a_full_week(self):
+        self.open_the_forecast(width=400, height=780,
+                               payload=WEEK_HOURLY_PAYLOAD)
+        sideways = self.driver.execute_script(
+            "return document.documentElement.scrollWidth - "
+            "document.documentElement.clientWidth;")
+        self.assertEqual(sideways, 0)
 
 
 if __name__ == "__main__":

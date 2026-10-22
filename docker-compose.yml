@@ -22,6 +22,10 @@ services:
       NOMINATIM_USER_AGENT: RainAlert_App_v1_2026
       GEOCODER_TIMEOUT: "10"
       WEATHER_TIMEOUT: "10"
+      # The site's own address, for the canonical links, the social card and
+      # the sitemap. It defaults to the real address, so a container and a
+      # local run agree; set SITE_URL in the .env file to change it.
+      SITE_URL: ${SITE_URL:-https://rainalert.live}
       # Optional donation link. Compose fills this in from the shell or from
       # the .env file next to this file; empty (the default) hides the link.
       DONATION_URL: ${DONATION_URL:-}
@@ -42,6 +46,10 @@ services:
   # A one-shot service that runs the test suites in the same image. It shares
   # the build, so the image is built once and the tests exercise exactly what
   # gets deployed.
+  #
+  # The two HTTP suites run here. The browser suite is not in the image: it
+  # drives a real headless Chrome, and the image installs no system packages
+  # on purpose, so it runs on the CI runner instead.
   tests:
     build:
       context: .
@@ -50,5 +58,7 @@ services:
     profiles: ["test"]
     environment:
       NOMINATIM_USER_AGENT: RainAlert_App_v1_2026
+      # SITE_URL is deliberately not set here. The offline suite asserts the
+      # canonical address of the site, so it has to run against the default.
     command: >
       sh -c "python -m unittest test_app -v && python -m unittest test_api -v"

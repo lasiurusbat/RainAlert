@@ -25,14 +25,18 @@ except ImportError:
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 STATIC = os.path.join(REPO, "static")
 
-# The mark: a white droplet on the brand blue, the same shape the favicon
-# uses. The favicon rounds its corners, because a browser tab shows it as a
-# square; an installed icon has to fill its canvas, because the platform
-# crops it to whatever shape it likes.
-DROPLET = (
-    '<path d="M32 12c-7 10-13 17.5-13 25a13 13 0 0 0 26 0c0-7.5-6-15-13-25z" fill="#ffffff"/>'
-    '<path d="M32 22c-4 6-7.5 10.5-7.5 15a7.5 7.5 0 0 0 5 7.1" fill="none" '
-    'stroke="#3498db" stroke-width="2.5" stroke-linecap="round"/>'
+# The mark: the umbrella reduced to one stroke - a canopy arc, a centre
+# shaft and a hooked handle - on the dark plate the site is built on. The
+# favicon rounds its corners, because a browser tab shows it as a square;
+# an installed icon has to fill its canvas, because the platform crops it
+# to whatever shape it likes.
+PLATE = "#0E1418"
+MARK = (
+    '<g fill="none" stroke="#EDF2F4" stroke-width="5" '
+    'stroke-linecap="round" stroke-linejoin="round">'
+    '<path d="M9 33c6-20 40-20 46 0"/>'
+    '<path d="M32 20v24a8 8 0 0 1-8 8"/>'
+    '</g>'
 )
 
 # A maskable icon is cropped to any shape the platform wants, and only the
@@ -42,16 +46,16 @@ def icon_svg(scale=1.0):
     return (
         '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" '
         'width="100%" height="100%">'
-        '<rect width="64" height="64" fill="#3498db"/>'
+        '<rect width="64" height="64" fill="' + PLATE + '"/>'
         '<g transform="translate(32 32) scale(' + str(scale) +
-        ') translate(-32 -32)">' + DROPLET + '</g>'
+        ') translate(-32 -32)">' + MARK + '</g>'
         '</svg>'
     )
 
 
 PAGE = """<!DOCTYPE html>
 <html><head><meta charset="utf-8"><style>
-html, body { margin: 0; padding: 0; overflow: hidden; background: #3498db; }
+html, body { margin: 0; padding: 0; overflow: hidden; background: #0E1418; }
 svg { display: block; width: 100vw; height: 100vh; }
 </style></head><body>""" + "@@SVG@@" + """</body></html>"""
 

@@ -14,7 +14,7 @@
  * is refreshed in the background, so a reader gets the new files on the
  * load after the one that fetched them.
  */
-const CACHE_VERSION = 'v2';
+const CACHE_VERSION = 'v10';
 const CACHE_NAME = 'rainalert-shell-' + CACHE_VERSION;
 
 /* The shell: the files the page needs to look like Rain Alert. The
@@ -23,6 +23,7 @@ const CACHE_NAME = 'rainalert-shell-' + CACHE_VERSION;
 const SHELL = [
     '/static/style.css',
     '/static/app.js',
+    '/static/fonts/archivo-latin.woff2',
     '/static/favicon.svg',
     '/static/favicon-rain.svg',
     '/static/icon-180.png',

@@ -7,6 +7,7 @@ Two free, keyless APIs are used:
 
 import os
 import re
+import unicodedata
 from datetime import date, datetime, timedelta, timezone
 from decimal import ROUND_HALF_UP, Decimal
 from functools import lru_cache
@@ -14,10 +15,12 @@ from urllib.parse import urlsplit
 
 import requests
 from dotenv import load_dotenv
-from flask import (Flask, Response, jsonify, render_template, request,
-                   send_from_directory)
+from flask import (Flask, Response, abort, jsonify, make_response, redirect,
+                   render_template, request, send_from_directory)
 from geopy.exc import GeocoderQueryError, GeocoderServiceError, GeocoderTimedOut
 from geopy.geocoders import Nominatim
+
+from cities import CITY_NAMES, CITY_SLUGS, CURATED_CITIES
 
 # Load environment variables from .env file
 load_dotenv()
@@ -33,7 +36,13 @@ GEOCODER_TIMEOUT = int(os.getenv("GEOCODER_TIMEOUT", "10"))
 WEATHER_TIMEOUT = int(os.getenv("WEATHER_TIMEOUT", "10"))
 
 FORECAST_URL = "https://api.open-meteo.com/v1/forecast"
-DAILY_FIELDS = "precipitation_probability_max,temperature_2m_max,temperature_2m_min"
+
+# The daily fields. The chance is the figure the week is built on, the
+# temperatures are the figures beside it, and the last two say how much rain
+# falls and how long it lasts - the day panel shows them for the day the
+# reader picks.
+DAILY_FIELDS = ("precipitation_probability_max,temperature_2m_max,"
+                "temperature_2m_min,precipitation_sum,precipitation_hours")
 
 # The hourly rain chance for today, and the same field for the current hour.
 # Both come in the same request, so the strip costs no extra request.
@@ -57,6 +66,29 @@ TEMPERATURE_UNITS = ("celsius", "fahrenheit")
 DEFAULT_TEMPERATURE_UNIT = os.getenv("TEMPERATURE_UNIT", "celsius")
 if DEFAULT_TEMPERATURE_UNIT not in TEMPERATURE_UNITS:
     DEFAULT_TEMPERATURE_UNIT = "celsius"
+
+# --- The site's own address --------------------------------------------------
+# The public address of the site. The canonical links, the Open Graph tags
+# and the sitemap all need an absolute URL, and the app cannot know its own
+# address when it sits behind a proxy, so it is configuration.
+SITE_URL = os.getenv("SITE_URL", "https://rainalert.live").rstrip("/")
+
+# The name of the app, for the structured data and the social cards.
+APP_NAME = "Rain Alert"
+
+# Which build this is. The footer carries both, so that a reader — and the
+# person looking after the site — can see which version is answering. A
+# release build is given the number of the release and the commit it was
+# built from; a development run says "dev" and names no commit, because a
+# working tree is not a commit.
+APP_VERSION = os.getenv("APP_VERSION", "dev").strip() or "dev"
+APP_COMMIT = os.getenv("APP_COMMIT", "").strip()
+
+# The image a social card shows. It is 1200 by 630 pixels, which is the
+# size the card formats ask for.
+OG_IMAGE = f"{SITE_URL}/static/og-image.png"
+OG_IMAGE_WIDTH = "1200"
+OG_IMAGE_HEIGHT = "630"
 
 # --- Notifications -----------------------------------------------------------
 # Tier 2 on the browser side: a notification while the tab is open. The page
@@ -122,6 +154,11 @@ geolocator = Nominatim(user_agent=NOMINATIM_USER_AGENT, timeout=GEOCODER_TIMEOUT
 WEEKDAY_NAMES = ("Monday", "Tuesday", "Wednesday", "Thursday",
                  "Friday", "Saturday", "Sunday")
 
+# The same names, shortened. The week is a row of seven narrow columns, and
+# "Wednesday" does not fit in one of them. These are hard-coded for the same
+# reason the long ones are: no locale, no strftime.
+WEEKDAY_SHORT_NAMES = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
+
 
 # --- Errors ------------------------------------------------------------------
 class CityNotFound(Exception):
@@ -164,6 +201,22 @@ def format_date(value):
     return f"{weekday} {parsed.strftime('%d.%m.%Y')}"
 
 
+def format_date_parts(value):
+    """The short forms of a date, for the week that is a row of columns.
+
+    Returns the abbreviated weekday ("Thu") and the day and month
+    ("22.10"). The long form stays in :func:`format_date`, and the page
+    carries it for screen readers, so nothing is lost by shortening what
+    is on the page.
+    """
+    try:
+        parsed = date.fromisoformat(str(value))
+    except (TypeError, ValueError):
+        return "", ""
+    return (WEEKDAY_SHORT_NAMES[parsed.weekday()],
+            parsed.strftime("%d.%m"))
+
+
 def format_rain_chance(value):
     """The rain chance as a short label for a row or a table cell.
 
@@ -182,6 +235,23 @@ def format_rain_chance(value):
         return "unknown"
 
 
+def format_rain_chance_short(value):
+    """The rain chance as a bare number, for the hourly strip.
+
+    The strip has one narrow column per hour of the day, and "100%" does
+    not fit in one of them while "100" does. The unit is stated by the
+    sentence above the strip and by the table below it.
+
+    A value the service did not report is a question mark, not a zero.
+    """
+    if value is None:
+        return "?"
+    try:
+        return f"{round_half_up(float(value))}"
+    except (TypeError, ValueError):
+        return "?"
+
+
 def describe_rain_chance(value):
     """The rain chance as a full phrase, for screen readers and tooltips.
 
@@ -194,6 +264,49 @@ def describe_rain_chance(value):
         return f"{round_half_up(float(value))}% chance of rain"
     except (TypeError, ValueError):
         return "chance of rain unknown"
+
+
+def format_precipitation(value):
+    """The day's rain in millimetres, as a short label.
+
+    The service reports the day's total in millimetres, and the panel shows
+    it with one decimal, because a difference between 4 mm and 5 mm is the
+    difference between a drizzle and a shower.
+
+    A day with nothing in it says nothing at all. The figure is only
+    interesting when there is rain in it, and "0 mm" beside a chance of
+    rain would read as a contradiction: the two come from different parts
+    of the model, and a day can be likely to rain and still come out at
+    nothing measurable.
+    """
+    if value is None:
+        return ""
+    try:
+        millimetres = float(value)
+    except (TypeError, ValueError):
+        return ""
+    if millimetres <= 0:
+        return ""
+    return f"{millimetres:.1f} mm"
+
+
+def format_rain_hours(value):
+    """How long the rain lasts, as a short label.
+
+    The service reports the number of hours with precipitation, and the
+    figure is shown only when there is rain to last. A day the model
+    expects none says nothing here, for the same reason as the
+    millimetres do.
+    """
+    if value is None:
+        return ""
+    try:
+        hours = float(value)
+    except (TypeError, ValueError):
+        return ""
+    if hours <= 0:
+        return ""
+    return f"{round_half_up(hours)} h of rain"
 
 
 def format_temperature(high, low, unit="celsius"):
@@ -327,11 +440,17 @@ def local_now(payload):
     return now.replace(tzinfo=None, minute=0, second=0, microsecond=0)
 
 
-def parse_today_hours(payload):
-    """Today's hourly rain chances, one entry per hour, in local time.
+def parse_hourly_days(payload):
+    """The hourly rain chances, split by the day they belong to.
 
-    An empty list means the response carried no hourly data; the daily list
-    still renders on its own.
+    The service answers with one array of timestamps for the whole range,
+    and the strip draws one day at a time: the reader picks a day out of the
+    week and the graph shows that day. So the hours have to be grouped by
+    the day they fall on, and the groups come back in the order of the
+    daily list.
+
+    Returns a list of ``(date, hours)`` pairs. An empty list means the
+    response carried no hourly data; the daily list still renders on its own.
     """
     daily = payload.get("daily") or {}
     hourly = payload.get("hourly") or {}
@@ -352,19 +471,50 @@ def parse_today_hours(payload):
     # on the date rather than slicing the first 24 keeps the strip aligned
     # with the daily list even if the two disagree by a day. A day with 23 or
     # 25 hours (a clock-change day) is kept whole rather than truncated.
-    #
-    # The current time decides which day is "today" when it is available,
-    # because that is the day the now-marker belongs to. The first daily
-    # entry is the fallback.
     now = local_now(payload)
-    today = now.date().isoformat() if now is not None \
-        else (daily.get("time") or [None])[0]
-    if today:
+    days = []
+    for day in (daily.get("time") or []):
         todays = [entry for entry in entries
-                  if entry[0].date().isoformat() == today]
-        if todays:
-            return _build_hours(todays, now)
-    return _build_hours(entries[:HOURS_PER_DAY], now)
+                  if entry[0].date().isoformat() == day]
+        days.append((day, _build_hours(todays, now)))
+
+    if not days:
+        # There is no daily list to line the hours up with, so the first day
+        # of the hourly array is the day the strip draws.
+        if not entries:
+            return []
+        return [(entries[0][0].date().isoformat(),
+                 _build_hours(entries[:HOURS_PER_DAY], now))]
+
+    if not days[0][1]:
+        # The hourly array does not start on the first day of the daily
+        # list. The strip still needs a day to draw, so it falls back to the
+        # first day of the array, as it always has.
+        days[0] = (days[0][0], _build_hours(entries[:HOURS_PER_DAY], now))
+
+    return days
+
+
+def parse_today_hours(payload):
+    """Today's hourly rain chances, one entry per hour, in local time.
+
+    The current time decides which day is "today" when it is available,
+    because that is the day the now-marker belongs to. The first daily
+    entry is the fallback.
+
+    An empty list means the response carried no hourly data; the daily list
+    still renders on its own.
+    """
+    days = parse_hourly_days(payload)
+    if not days:
+        return []
+    now = local_now(payload)
+    today = now.date().isoformat() if now is not None else None
+    if today:
+        for day, hours in days:
+            if day == today and hours:
+                return hours
+    return days[0][1]
 
 
 def _build_hours(entries, now):
@@ -384,6 +534,9 @@ def _build_hours(entries, now):
             # "Rain chance" column heading, so it can be the bare number.
             "chance_label": describe_rain_chance(chance),
             "chance_cell": format_rain_chance(chance),
+            # The bare number, for the strip's own value row: one narrow
+            # column per hour does not have room for the sign.
+            "chance_short": format_rain_chance_short(chance),
             "severity": band,
             "severity_label": severity_label(band),
             "height": hour_height_step(chance),
@@ -396,12 +549,16 @@ def _build_hours(entries, now):
     return hours
 
 
-def summarise_hours(hours):
+def summarise_hours(hours, when="for the rest of today"):
     """A one-line summary of when rain is likely in the given hours.
 
     The threshold is the umbrella threshold, so the sentence agrees with the
     umbrella icon on the daily list. Only hours that have not happened yet
     count: a window that has already passed is not an alert.
+
+    ``when`` says which day the sentence is about: "for the rest of today"
+    for the day that is running, and "tomorrow" or "on Friday" for a day
+    that is still to come.
 
     Returns an empty string when there is nothing to say.
     """
@@ -423,7 +580,7 @@ def summarise_hours(hours):
         windows.append(window)
 
     if not windows:
-        return "No rain likely for the rest of today."
+        return f"No rain likely {when}."
 
     first = windows[0]
     band = "high" if any(hour["severity"] == "high" for hour in first) \
@@ -490,6 +647,39 @@ def forecast_day_label(iso_date, index):
     except (TypeError, ValueError):
         return f"in {index} days"
     return f"on {WEEKDAY_NAMES[parsed.weekday()]}"
+
+
+def day_panel_name(iso_date, index):
+    """How the day panel names a day: Today, Tomorrow, or the weekday.
+
+    The same rule as :func:`forecast_day_label`, in the capitalised form the
+    panel needs: the first two days have names of their own, and the rest
+    are named by their English weekday.
+    """
+    if index == 0:
+        return "Today"
+    if index == 1:
+        return "Tomorrow"
+    try:
+        parsed = date.fromisoformat(str(iso_date))
+    except (TypeError, ValueError):
+        return ""
+    return WEEKDAY_NAMES[parsed.weekday()]
+
+
+def day_phrases(index, day_name):
+    """How a sentence refers to a day of the week.
+
+    Returns two phrases: the short one, for a caption ("today", "tomorrow",
+    "on Friday"), and the one the hourly summary uses. The summary of the
+    day that is running says "for the rest of today", because only that day
+    has hours left to come; a day that is still to come is named outright.
+    """
+    if index == 0:
+        return "today", "for the rest of today"
+    if index == 1:
+        return "tomorrow", "tomorrow"
+    return f"on {day_name}", f"on {day_name}"
 
 
 def remaining_hour_chance(hours):
@@ -665,9 +855,11 @@ def tab_alert(forecast, remaining_hours=None):
     ``when``
         how the day is named - "today", "tomorrow" or "Thursday";
     ``chance``
-        the rain chance the alert is about;
-    ``title``
-        the tab title, e.g. "Rain tomorrow - Rain Alert".
+        the rain chance the alert is about.
+
+    The title itself is put together by :func:`page_title`, which is the
+    only place that builds one, so that the title a reader sees in the tab
+    and the title a search engine shows in its results are the same title.
 
     The alert fires at ``UMBRELLA_THRESHOLD`` - the same threshold that
     puts the ☔ on a row and makes the banner say "Bring an umbrella." One
@@ -701,9 +893,204 @@ def tab_alert(forecast, remaining_hours=None):
             return {
                 "when": when,
                 "chance": chance,
-                "title": f"{TAB_TITLE_PREFIX} {when} - {TAB_TITLE_SUFFIX}",
             }
     return None
+
+
+# --- The page's address and its metadata --------------------------------------
+# A search engine finds the site by its pages, and it needs three things from
+# each of them: a title that says what the page is about, a description that
+# says the same thing in a sentence, and an address that is the page's own.
+# The app has all three, and they are decided here, in one place, so that
+# the title a reader sees in the tab and the title a search engine shows in
+# its results can never drift apart.
+
+
+def city_slug(value):
+    """A URL-safe slug for a city name: "Sao Paulo" -> "sao-paulo".
+
+    The accents are folded away and everything else that is not a letter or
+    a digit becomes a dash, so the slug is safe in an address bar and in a
+    file name. The name it stands for is looked up separately, because a
+    slug cannot carry the punctuation a real name has.
+    """
+    text = unicodedata.normalize("NFKD", str(value or ""))
+    text = "".join(char for char in text if not unicodedata.combining(char))
+    return re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-")[:60]
+
+
+def city_from_slug(slug):
+    """The city a slug stands for.
+
+    The curated list wins, because a slug cannot carry a city's accents or
+    its punctuation and the geocoder needs the name. Anything else falls
+    back to the slug with its dashes turned back into spaces, which is the
+    name for every city whose name is made of letters and spaces.
+
+    Only the first letter of that fallback name is capitalised: a name is
+    not a sentence, and capitalising every word would turn "St John's" into
+    "St John'S".
+    """
+    key = str(slug or "").strip().lower()
+    if not key:
+        return ""
+    if key in CITY_SLUGS:
+        return CITY_SLUGS[key]
+    name = key.replace("-", " ")
+    return name[:1].upper() + name[1:]
+
+
+def city_path(city_name):
+    """The address of a city's page.
+
+    The address is made of the name the city was asked for, never of the
+    name the geocoder answers with: the geocoder's own name is a full
+    address ("London, United Kingdom"), and an address built from it would
+    not be the same one the reader asked for.
+
+    A city that is in the curated list keeps the slug the list gives it, so
+    that the address in the city index, the address in the sitemap and the
+    address the page claims for itself are the same one. Any other city
+    gets a slug of its own.
+    """
+    name = str(city_name or "").strip()
+    slug = CITY_NAMES.get(name.lower())
+    if not slug:
+        slug = city_slug(name)
+    if not slug:
+        return ""
+    return f"/city/{slug}"
+
+
+def short_city_name(city, display_city=None):
+    """The city's own name, without the state and the country.
+
+    The geocoder answers with a full address - "London, Greater London,
+    England, United Kingdom" - which is more than a title or a heading can
+    carry, and more than a reader scanning the page needs. The first part
+    of it is the city.
+
+    A city that is in the curated list keeps the name the list gives it,
+    because the list has the name written the way it is usually written.
+    """
+    name = str(city or "").strip()
+    if name.lower() in CITY_NAMES:
+        return name
+    if display_city:
+        first = str(display_city).split(",")[0].strip()
+        if first:
+            return first
+    return name
+
+
+def page_title(city, alert=None):
+    """The title of the page.
+
+    The title is the alert: it names the first wet day, and the favicon
+    changes with it. On a city's page the city is in the title as well,
+    because a title that says only "Rain tomorrow" tells a reader - or a
+    search engine - nothing about which city the page is about. The app's
+    name stays a suffix, in the usual "page - site" order, so that a reader
+    with a row of tabs open can still tell which one is Rain Alert.
+    """
+    if alert:
+        when = alert["when"]
+        if city:
+            return f"{TAB_TITLE_PREFIX} {when} in {city} - {TAB_TITLE_SUFFIX}"
+        return f"{TAB_TITLE_PREFIX} {when} - {TAB_TITLE_SUFFIX}"
+    if city:
+        return f"7-day rain chance for {city} - {TAB_TITLE_SUFFIX}"
+    # The start page leads with the name, because there the name is what
+    # the page is: a page for every city, not a page about one.
+    return f"{TAB_TITLE_SUFFIX} - 7-day rain chance for any city"
+
+
+def page_description(city=None, forecast=None, headline=None):
+    """The description of the page: the sentence under the title in a search
+    result.
+
+    On a city's page it is the headline the page already shows, so that the
+    snippet in the search results says the same thing as the page does.
+    """
+    if city and forecast:
+        sentence = (f"The chance of rain in {city} for the next 7 days, "
+                    f"hour by hour for today.")
+        if headline:
+            sentence += " " + headline["text"]
+        return sentence
+    if city:
+        return (f"The 7-day rain chance for {city}: rain unlikely, rain "
+                f"possible or rain likely for every day, and today's "
+                f"forecast hour by hour.")
+    return ("The chance of rain for the next seven days in any city, hour by "
+            "hour for today. Rain unlikely, rain possible or rain likely, "
+            "every day. Free, no signup.")
+
+
+def canonical_url(path):
+    """The absolute address of a page on this site."""
+    return f"{SITE_URL}{path}"
+
+
+def structured_data(city=None, forecast=None):
+    """The page in a machine-readable form.
+
+    Three things are described: the site, the app, and - on a city's page -
+    the week itself, day by day. A search engine reads this to work out
+    what the page is about, and a rich result may be built from it.
+    """
+    graph = [
+        {
+            "@type": "Organization",
+            "@id": f"{SITE_URL}/#organization",
+            "name": APP_NAME,
+            "url": f"{SITE_URL}/",
+            "logo": f"{SITE_URL}/static/icon-512.png",
+        },
+        {
+            "@type": "WebSite",
+            "@id": f"{SITE_URL}/#website",
+            "name": APP_NAME,
+            "url": f"{SITE_URL}/",
+            "description": "The 7-day rain chance for any city.",
+            "inLanguage": "en",
+            "publisher": {"@id": f"{SITE_URL}/#organization"},
+        },
+        {
+            "@type": "WebApplication",
+            "name": APP_NAME,
+            "url": f"{SITE_URL}/",
+            "applicationCategory": "WeatherApplication",
+            "operatingSystem": "Any",
+            "description": page_description(),
+            "offers": {
+                "@type": "Offer",
+                "price": "0",
+                "priceCurrency": "EUR",
+            },
+        },
+    ]
+    if city and forecast:
+        graph.append({
+            "@type": "ItemList",
+            "name": f"7-day rain chance for {city}",
+            "numberOfItems": len(forecast),
+            "itemListOrder": "https://schema.org/ItemListOrderAscending",
+            "itemListElement": [
+                {
+                    "@type": "ListItem",
+                    "position": index + 1,
+                    "item": {
+                        "@type": "Thing",
+                        "name": f"{day['date']}: {day['rain_sr_label']}",
+                        "description": (f"{day['severity_label']}. "
+                                        f"Temperature {day['temp_label']}."),
+                    },
+                }
+                for index, day in enumerate(forecast)
+            ],
+        })
+    return {"@context": "https://schema.org", "@graph": graph}
 
 
 # --- Notifications -----------------------------------------------------------
@@ -1014,6 +1401,7 @@ def calendar_failure(message, status):
     """
     response = Response(message, status=status, mimetype="text/plain")
     response.headers["Cache-Control"] = "no-store"
+    response.headers["X-Robots-Tag"] = "noindex, nofollow"
     return response
 
 
@@ -1105,15 +1493,37 @@ def fetch_weather(latitude, longitude, unit=None):
     chances = daily.get("precipitation_probability_max") or []
     highs = daily.get("temperature_2m_max") or []
     lows = daily.get("temperature_2m_min") or []
+    amounts = daily.get("precipitation_sum") or []
+    hours_of_rain = daily.get("precipitation_hours") or []
+
+    # The hours of every day, split by the day they fall on. The strip draws
+    # the day the reader picks, so the hours have to be grouped before the
+    # days are built.
+    try:
+        hourly_days = parse_hourly_days(payload)
+    except (TypeError, ValueError) as exc:
+        # A missing hourly strip is a missing feature, not a broken forecast.
+        app.logger.warning("Hourly forecast could not be parsed: %s", exc)
+        hourly_days = []
+    hours_by_date = {day: hours for day, hours in hourly_days}
 
     forecast = []
     for index, (day, chance) in enumerate(zip(dates, chances)):
         band = severity_band(chance)
+        weekday_short, date_short = format_date_parts(day)
+        day_name = day_panel_name(day, index)
+        when, when_summary = day_phrases(index, day_name)
+        day_hours = hours_by_date.get(day) or []
         forecast.append({
             "date": format_date(day),
             # The raw date, kept so the headline can name the weekday without
             # having to take the formatted date apart again.
             "iso_date": day,
+            # The short forms, for the week that is a row of seven narrow
+            # columns. The long date is still on the page, for screen
+            # readers.
+            "weekday_short": weekday_short,
+            "date_short": date_short,
             # The visible number, and the full phrase for the screen reader.
             # The column heading above the list says "chance of rain" once.
             "rain_label": format_rain_chance(chance),
@@ -1122,6 +1532,21 @@ def fetch_weather(latitude, longitude, unit=None):
                 highs[index] if index < len(highs) else None,
                 lows[index] if index < len(lows) else None,
             ),
+            # What the day panel says about this day: which day it is, how
+            # much rain falls in it and how long it lasts. The panel is
+            # built from the same chance the column shows, so the two can
+            # never disagree.
+            "day_name": day_name,
+            "day_label": f"{day_name} {date_short}".strip(),
+            "chance_label": (
+                f"{chance_number(chance)}% chance of rain"
+                if chance_number(chance) is not None
+                else ""
+            ),
+            "amount_label": format_precipitation(
+                amounts[index] if index < len(amounts) else None),
+            "hours_label": format_rain_hours(
+                hours_of_rain[index] if index < len(hours_of_rain) else None),
             "chance": chance,
             # The number the row shows, and the number a personal alert
             # threshold in the browser is compared against. The browser
@@ -1130,7 +1555,24 @@ def fetch_weather(latitude, longitude, unit=None):
             "chance_number": chance_number(chance),
             "severity": band,
             "severity_label": severity_label(band),
+            # The panel names the band in words. A day the service did not
+            # report is named as such, and the panel leaves the figures out
+            # altogether: a day with no chance reported is never counted as
+            # a dry one.
+            "band_label": ("Rain not reported" if band == "unknown"
+                           else severity_label(band)),
             "umbrella": needs_umbrella(chance),
+            # The hours of this day, for the strip the reader can pick.
+            # The strip and the panel are the same day, so the two can
+            # never be about different days.
+            "hours": day_hours,
+            # The title the strip carries while this day is the one that
+            # shows, and the sentence under it.
+            "hourly_title": f"{day_name}, hour by hour",
+            "hourly_summary": (summarise_hours(day_hours, when_summary)
+                               if day_hours else ""),
+            # How a caption names this day.
+            "day_when": when,
         })
 
     try:
@@ -1145,13 +1587,18 @@ def fetch_weather(latitude, longitude, unit=None):
 
 # --- Routes ------------------------------------------------------------------
 @app.context_processor
-def inject_donation_url():
-    """Make the donation link available to every template.
+def inject_site_info():
+    """Make the donation link and the build's identity available to every
+    template.
 
-    It is read from the module on each request, not copied at import time,
-    so a test can switch it on and off.
+    They are read from the module on each request, not copied at import
+    time, so a test can switch the donation link on and off.
     """
-    return {"donation_url": DONATION_URL}
+    return {
+        "donation_url": DONATION_URL,
+        "app_version": APP_VERSION,
+        "app_commit": APP_COMMIT,
+    }
 
 
 def temperature_unit_from_request():
@@ -1170,29 +1617,60 @@ def temperature_unit_from_request():
 
 @app.route('/', methods=['GET', 'POST'])
 def index():
-    weather_data = None
-    hourly_data = None
-    hourly_summary = None
-    headline = None
-    error = None
-    display_city = None
-    unit = temperature_unit_from_request()
-    alert = None
+    """The start page, and the result of a search.
 
-    # A POST carries the city in the form; a GET carries it in the query
-    # string, which is how the temperature switch asks for the same city
-    # in the other scale.
+    A POST carries the city in the form; a GET carries it in the query
+    string, which is how the temperature switch and the browser's own
+    remembered city ask for the same forecast. Either way the page is the
+    same page, and the city it is about has an address of its own that the
+    page points at.
+
+    A GET with a city is sent on to that address. A city has one address,
+    and it is the one a reader can share, bookmark and a search engine can
+    index; the query string is only ever the way in. The redirect is
+    permanent, because the city page is the address from now on, and it
+    costs nothing: the address is worked out before the forecast is
+    fetched, so the extra hop asks the server for no more than a header.
+    """
     source = request.form if request.method == 'POST' else request.args
     city = (source.get('city') or '').strip()
-
+    unit = temperature_unit_from_request()
     if request.method == 'POST' and not city:
-        error = "Please enter a city name."
-    elif city:
+        return render_forecast_page(
+            "", unit, error="Please enter a city name.")
+    if request.method == 'GET' and city:
+        target = city_path(city)
+        if target:
+            if unit != DEFAULT_TEMPERATURE_UNIT:
+                target += f"?unit={unit}"
+            return redirect(target, code=301)
+    return render_forecast_page(city, unit)
+
+
+def render_forecast_page(city, unit, city_page=False, error=None, status=200):
+    """The page: the start page, a forecast, or a message.
+
+    Every page of the site is rendered here, whichever address it was asked
+    for, so that the title, the description, the canonical link and the
+    structured data are decided in one place and cannot disagree with each
+    other.
+
+    ``city_page`` says that the page was asked for at a city's own address.
+    That makes the difference between a page that is missing - a city
+    nobody knows, which answers ``404`` - and a search that did not work,
+    which answers ``200`` and says what went wrong.
+    """
+    weather_data = None
+    hourly_data = None
+    headline = None
+    display_city = None
+    alert = None
+
+    if error is None and city:
         try:
             latitude, longitude, display_city = get_coordinates(city)
             weather_data, hourly_data = fetch_weather(
                 latitude, longitude, unit)
-            hourly_summary = summarise_hours(hourly_data or [])
             # The umbrella advice is about the hours ahead, so the
             # headline is told which of today's hours are still to come.
             remaining_hours = [hour for hour in (hourly_data or [])
@@ -1205,14 +1683,26 @@ def index():
             alert = tab_alert(weather_data or [], remaining_hours)
         except CityNotFound:
             error = "City not found. Please try a different name (e.g., 'Paris')."
+            if city_page:
+                # A city's page that names a city nobody knows is a missing
+                # page, and says so with its status code. A page that says
+                # "not found" but answers 200 is a soft 404, and search
+                # engines treat it as one.
+                status = 404
         except GeocodingUnavailable:
             app.logger.warning("Geocoding service unavailable for %r", city)
             error = ("The geocoding service is unavailable right now. "
                      "Please try again in a moment.")
+            if city_page:
+                # The upstream is down, not the page: 503 says "come back
+                # later" and keeps the address out of the index for now.
+                status = 503
         except WeatherUnavailable:
             app.logger.warning("Forecast service unavailable for %r", city)
             error = ("The weather service is unavailable right now. "
                      "Please try again in a moment.")
+            if city_page:
+                status = 503
 
     # The saved city and the personal alert threshold live in the browser's
     # localStorage, so the server has to tell the page what kind of page it
@@ -1220,6 +1710,11 @@ def index():
     # itself; any other page already shows what the reader came for, and
     # reloading it would throw their forecast away.
     autoload = not city and error is None
+
+    # The strip draws the day the reader picks, so it needs at least one day
+    # that has hours in it. A forecast without any hourly data has no graph
+    # at all, and says nothing about one.
+    has_hourly = any(day.get("hours") for day in (weather_data or []))
 
     # How many days the app's own threshold would put into a calendar. The
     # browser uses it to decide whether the export link is worth offering:
@@ -1237,23 +1732,190 @@ def index():
     else:
         search_status = "none"
 
-    return render_template(
+    # The address this page claims for itself. A forecast has an address of
+    # its own, so that a city is one page and not many; the start page is
+    # the site itself.
+    canonical_path = city_path(city) if city else "/"
+
+    # The name the page calls the city by: the city on its own, without the
+    # state and the country the geocoder adds.
+    page_city = short_city_name(city, display_city)
+
+    title = page_title(page_city, alert)
+    description = page_description(page_city, weather_data, headline)
+    # A page with an error on it is not worth indexing: there is no
+    # forecast on it, and indexing it would fill the results with pages
+    # that say nothing.
+    robots = ("noindex, follow" if error
+              else "index, follow, max-image-preview:large")
+
+    # The temperature switch asks for the same page in the other scale, so
+    # the links point at the page's own address and keep the unit.
+    unit_links = {option: f"{canonical_path}?unit={option}"
+                  for option in TEMPERATURE_UNITS}
+
+    response = make_response(render_template(
         'index.html',
         weather_data=weather_data,
-        hourly_data=hourly_data,
-        hourly_summary=hourly_summary,
+        has_hourly=has_hourly,
         headline=headline,
         error=error,
         city=city,
         display_city=display_city or city,
+        page_city=page_city,
         unit=unit,
         temperature_units=TEMPERATURE_UNITS,
-        page_title=(alert["title"] if alert else DEFAULT_TAB_TITLE),
+        unit_links=unit_links,
+        page_title=title,
+        page_description=description,
+        canonical_url=canonical_url(canonical_path),
+        robots=robots,
+        og_image_url=OG_IMAGE,
+        og_image_width=OG_IMAGE_WIDTH,
+        og_image_height=OG_IMAGE_HEIGHT,
+        structured_data=structured_data(page_city, weather_data),
         favicon=(FAVICON_RAIN if alert else FAVICON_DEFAULT),
         autoload=autoload,
         search_status=search_status,
         calendar_days=calendar_days_count,
+    ))
+    response.status_code = status
+    return response
+
+
+@app.route('/city/<path:city_slug>')
+def city_page(city_slug):
+    """The forecast for one city, at the city's own address.
+
+    Every city has one address, and that address is the canonical one: the
+    page says so with a canonical link, so a search engine indexes the
+    city's page rather than the many ways of asking for the same forecast.
+    An address that is not the canonical one is sent there for good, so
+    that "/city/London" and "/city/london" are one page and not two.
+
+    A city that the geocoder does not know is a ``404`` and not a page with
+    a message on it, because a page that says "not found" but answers
+    ``200`` is a soft 404 and search engines treat it as one.
+    """
+    city = city_from_slug(city_slug)
+    if not city:
+        abort(404)
+    canonical = city_path(city)
+    if request.path != canonical:
+        return redirect(canonical, code=301)
+    return render_forecast_page(city, temperature_unit_from_request(),
+                                 city_page=True)
+
+
+@app.route('/cities')
+def cities_index():
+    """The index of the cities the site has a page for.
+
+    It is the front door of the crawlable part of the site: every city on
+    it has a page of its own, and the links on it are how a crawler finds
+    them. The list is short on purpose - the geocoder is rate-limited, and
+    every address here is a forecast the app has to fetch.
+    """
+    return render_template(
+        'cities.html',
+        page_title="Rain forecasts by city - Rain Alert",
+        page_description=("The 7-day rain chance for a city: rain unlikely, "
+                          "rain possible or rain likely for every day, and "
+                          "today's forecast hour by hour."),
+        canonical_url=canonical_url("/cities"),
+        og_image_url=OG_IMAGE,
+        og_image_width=OG_IMAGE_WIDTH,
+        og_image_height=OG_IMAGE_HEIGHT,
+        structured_data=structured_data(),
+        cities=[{"slug": slug, "name": name} for slug, name in CURATED_CITIES],
     )
+
+
+@app.route('/robots.txt')
+def robots():
+    """Where the crawlers may go.
+
+    The alert poll and the calendar export are not pages, and fetching them
+    costs two upstream requests each, so they are kept out of the crawl. The
+    sitemap says where the pages are.
+    """
+    lines = [
+        "User-agent: *",
+        "Allow: /",
+        "Disallow: /api/",
+        "Disallow: /calendar.ics",
+        "",
+        f"Sitemap: {canonical_url('/sitemap.xml')}",
+        "",
+    ]
+    return Response("\n".join(lines), mimetype="text/plain")
+
+
+@app.route('/sitemap.xml')
+def sitemap():
+    """The pages of the site, for the crawlers.
+
+    The home page and the city index are here, and so is every city that
+    has a page of its own. The dates are today's, because the forecast on
+    every one of these pages changes.
+    """
+    today = date.today().isoformat()
+    urls = [
+        ("/", "1.0", "daily"),
+        ("/cities", "0.8", "weekly"),
+    ]
+    for slug, _name in CURATED_CITIES:
+        urls.append((f"/city/{slug}", "0.7", "daily"))
+
+    body = ['<?xml version="1.0" encoding="UTF-8"?>',
+            '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">']
+    for path, priority, changefreq in urls:
+        body.extend([
+            "  <url>",
+            f"    <loc>{canonical_url(path)}</loc>",
+            f"    <lastmod>{today}</lastmod>",
+            f"    <changefreq>{changefreq}</changefreq>",
+            f"    <priority>{priority}</priority>",
+            "  </url>",
+        ])
+    body.append("</urlset>")
+    return Response("\n".join(body) + "\n", mimetype="application/xml")
+
+
+@app.errorhandler(404)
+def page_not_found(error):
+    """The page for an address that is not on this site.
+
+    A real ``404`` with a search form on it, rather than Flask's bare
+    error page: a crawler that lands on a missing address should be told
+    so clearly, and a reader who mistyped one should be able to search
+    from there.
+    """
+    response = make_response(render_template(
+        '404.html',
+        page_title="Page not found - Rain Alert",
+        page_description=("The 7-day rain chance for any city: rain "
+                          "unlikely, rain possible or rain likely for every "
+                          "day, and today's forecast hour by hour."),
+        canonical_url=canonical_url("/"),
+        og_image_url=OG_IMAGE,
+        og_image_width=OG_IMAGE_WIDTH,
+        og_image_height=OG_IMAGE_HEIGHT,
+        structured_data=structured_data(),
+    ), 404)
+    return response
+
+
+def noindex(response):
+    """Keep a response out of the search results.
+
+    The alert poll and the calendar export are not pages: they are an
+    endpoint the page uses and a file the page hands over. Indexing either
+    of them would put a JSON blob or a download in the results, and
+    crawling them costs two upstream requests each.
+    """
+    response.headers["X-Robots-Tag"] = "noindex, nofollow"
+    return response
 
 
 @app.route('/api/alert')
@@ -1271,28 +1933,29 @@ def api_alert():
     """
     city = (request.args.get('city') or '').strip()
     if not city:
-        return jsonify({"error": "Please enter a city name."}), 400
+        return noindex(jsonify(
+            {"error": "Please enter a city name."})), 400
 
     threshold, personal = alert_threshold(request.args.get('threshold'))
     try:
         latitude, longitude, display_city = get_coordinates(city)
         _, hours = fetch_weather(latitude, longitude)
     except CityNotFound:
-        return jsonify({
+        return noindex(jsonify({
             "error": "City not found. Please try a different name "
-                     "(e.g., 'Paris')."}), 404
+                     "(e.g., 'Paris')."})), 404
     except GeocodingUnavailable:
         app.logger.warning("Geocoding service unavailable for %r", city)
-        return jsonify({
-            "error": "The geocoding service is unavailable right now."}), 503
+        return noindex(jsonify({
+            "error": "The geocoding service is unavailable right now."})), 503
     except WeatherUnavailable:
         app.logger.warning("Forecast service unavailable for %r", city)
-        return jsonify({
-            "error": "The weather service is unavailable right now."}), 503
+        return noindex(jsonify({
+            "error": "The weather service is unavailable right now."})), 503
 
     remaining = [hour for hour in (hours or []) if not hour.get("past")]
     now = remaining[0].get("time_label") if remaining else None
-    return jsonify({
+    return noindex(jsonify({
         "city": display_city,
         "now": now,
         "threshold": threshold,
@@ -1300,7 +1963,7 @@ def api_alert():
         "lead_hours": NOTIFICATION_LEAD_HOURS,
         "poll_minutes": NOTIFICATION_POLL_MINUTES,
         "event": notification_event(hours, threshold, display_city, personal),
-    })
+    }))
 
 
 @app.route('/calendar.ics')
@@ -1342,6 +2005,8 @@ def calendar_export():
         f'attachment; filename="rain-alert-{calendar_slug(display_city)}.ics"')
     # The file holds a forecast, so it is never a copy of an old one.
     response.headers['Cache-Control'] = 'no-store'
+    # It is a download, not a page: it has no business in the results.
+    response.headers['X-Robots-Tag'] = 'noindex, nofollow'
     return response
 
 

@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <!-- Rain Alert mark: the umbrella reduced to one stroke.
+       A canopy arc, a centre shaft and a hooked handle.
+       The two states are separate files on purpose - a browser caches a
+       favicon by its URL, so a single recoloured file would keep showing
+       the old icon until the cache was cleared. -->
+  <rect width="64" height="64" rx="14" fill="#0E1418"/>
+  <g fill="none" stroke="#EDF2F4" stroke-width="5" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M9 33c6-20 40-20 46 0"/>
+    <path d="M32 20v24a8 8 0 0 1-8 8"/>
+  </g>
+</svg>

@@ -3,9 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="theme-color" content="#3498db">
+    <meta name="theme-color" content="#0d1216">
     <title>Offline - Rain Alert</title>
     <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+    <!-- The type is in the shell, so the preload is answered from the
+         cache when the page is opened without a network. -->
+    <link rel="preload" as="font" type="font/woff2" crossorigin
+          href="/static/fonts/archivo-latin.woff2">
     <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
@@ -14,9 +18,25 @@
          with no server at all. -->
     <div class="page">
         <div class="container offline">
-            <h1>Rain Alert 🌧️</h1>
-            <p class="offline-lead">You are offline, so the forecast cannot be fetched right now.</p>
-            <p class="offline-note">The last forecast is not shown either. A stale rain chance is worse than none.</p>
+            <div class="topbar">
+                <span class="brand">
+                    <svg class="brand-mark" viewBox="0 0 64 64" width="24" height="24"
+                         aria-hidden="true" focusable="false">
+                        <rect width="64" height="64" rx="14" fill="#182027"/>
+                        <g fill="none" stroke="#E9EFF2" stroke-width="5"
+                           stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M9 33c6-20 40-20 46 0"/>
+                            <path d="M32 20v24a8 8 0 0 1-8 8"/>
+                        </g>
+                    </svg>
+                    <span class="brand-name">Rain Alert</span>
+                </span>
+            </div>
+            <div class="intro">
+                <h1 class="page-title notfound-title">You are offline.</h1>
+                <p class="offline-lead">The forecast cannot be fetched right now.</p>
+                <p class="offline-note">The last forecast is not shown either. A stale rain chance is worse than none.</p>
+            </div>
             <a class="offline-retry" href="/">Try again</a>
         </div>
 

@@ -4,33 +4,292 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{ page_title }}</title>
-    <meta name="theme-color" content="#3498db">
+    <!-- The description is the sentence a search engine shows under the
+         title, so it says the same thing the page does. -->
+    <meta name="description" content="{{ page_description }}">
+    <!-- The page's own address. Every city has one, so a search engine
+         indexes the city's page and not the many ways of asking for the
+         same forecast. -->
+    <link rel="canonical" href="{{ canonical_url }}">
+    <meta name="robots" content="{{ robots }}">
+    <meta name="theme-color" content="#0d1216">
+    <!-- The social card: what the page looks like when it is shared. -->
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="Rain Alert">
+    <meta property="og:title" content="{{ page_title }}">
+    <meta property="og:description" content="{{ page_description }}">
+    <meta property="og:url" content="{{ canonical_url }}">
+    <meta property="og:image" content="{{ og_image_url }}">
+    <meta property="og:image:width" content="{{ og_image_width }}">
+    <meta property="og:image:height" content="{{ og_image_height }}">
+    <meta property="og:image:alt" content="Rain Alert - the 7-day rain chance for any city">
+    <meta property="og:locale" content="en">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="{{ page_title }}">
+    <meta name="twitter:description" content="{{ page_description }}">
+    <meta name="twitter:image" content="{{ og_image_url }}">
     <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename=favicon) }}">
+    <!-- The background photo is the largest thing on the page, so it is
+         fetched before the stylesheet has finished loading. -->
+    <link rel="preload" as="image" href="{{ url_for('static', filename='image/rain-alert-bg.jpg') }}">
+    <!-- The type is self-hosted, so the page asks for no third party. It is
+         preloaded because the city name is set in it and nothing may be
+         shown in a fallback first. -->
+    <link rel="preload" as="font" type="font/woff2" crossorigin
+          href="{{ url_for('static', filename='fonts/archivo-latin.woff2') }}">
     <!-- The installable app: the manifest names the icons and the colours,
          and the service worker makes the app open without a network. -->
     <link rel="manifest" href="{{ url_for('manifest') }}">
     <link rel="apple-touch-icon" href="{{ url_for('static', filename='icon-180.png') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
     <script src="{{ url_for('static', filename='app.js') }}" defer></script>
+    <!-- What the page is, in a machine-readable form: the site, the app,
+         and on a city's page the week itself, day by day. -->
+    <script type="application/ld+json">{{ structured_data | tojson }}</script>
 </head>
 <body data-autoload="{{ '1' if autoload else '0' }}" data-search="{{ search_status }}" data-city="{{ city }}" data-unit="{{ unit }}">
+    {% macro search_form(city_value, unit_value, variant) -%}
+    <form class="search search-{{ variant }}" method="GET" action="{{ url_for('index') }}">
+        <label class="sr-only" for="city-input">City</label>
+        <input id="city-input" type="text" name="city" placeholder="City, e.g. London"
+               value="{{ city_value or '' }}" required>
+        <input type="hidden" name="unit" value="{{ unit_value }}">
+        <button type="submit">Search</button>
+    </form>
+    {%- endmacro %}
+    {% macro donate_line(url) -%}
+    {% if url %}
+    <p class="donate">
+        Saved you from getting wet?
+        <a href="{{ url }}" target="_blank" rel="noopener noreferrer">Buy me a coffee<span class="sr-only"> (donation, opens in a new tab)</span></a>
+        and help keep Rain Alert free.
+    </p>
+    {% endif %}
+    {%- endmacro %}
     <div class="page">
         <div class="container">
-            <h1>Rain Alert 🌧️</h1>
-            <form method="POST" action="">
-                <div class="form-group">
-                    <input type="text" name="city" placeholder="Enter city name (e.g., London)" value="{{ city or '' }}" required>
-                </div>
-                <input type="hidden" name="unit" value="{{ unit }}">
-                <button type="submit">Check Rain Chance</button>
-            </form>
+            <!-- The top bar: the mark, the name, and - on a page that
+                 already has a forecast - the search as one compact field.
+                 A start page has nothing to search for yet, so its field
+                 gets the room under the name instead. -->
+            <div class="topbar">
+                <a class="brand" href="{{ url_for('index') }}">
+                    <svg class="brand-mark" viewBox="0 0 64 64" width="24" height="24"
+                         aria-hidden="true" focusable="false">
+                        <rect width="64" height="64" rx="14" fill="#182027"/>
+                        <g fill="none" stroke="#E9EFF2" stroke-width="5"
+                           stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M9 33c6-20 40-20 46 0"/>
+                            <path d="M32 20v24a8 8 0 0 1-8 8"/>
+                        </g>
+                    </svg>
+                    <span class="brand-name">Rain Alert</span>
+                </a>
+                {% if weather_data %}{{ search_form(city, unit, "compact") }}{% endif %}
+            </div>
 
-            {% if donation_url %}
-            <p class="donate">
-                Saved you from getting wet?
-                <a href="{{ donation_url }}" target="_blank" rel="noopener noreferrer">Buy me a coffee<span class="sr-only"> (donation, opens in a new tab)</span></a>
-                and help keep Rain Alert free.
-            </p>
+            {% if weather_data %}
+                <!-- The donation line sits under the search, not under the
+                     forecast: it is a site-wide link, not part of the
+                     answer. -->
+                {{ donate_line(donation_url) }}
+                <div class="result">
+                    <!-- The heading row. The export link sits on the line of
+                         the caption under the city's name, so the answer at
+                         the top of the page is not pushed down by it and the
+                         two read as one line. -->
+                    <div class="result-head">
+                        <div class="result-titles">
+                            <h1 class="city-name">{{ page_city }}</h1>
+                            <div class="result-subline">
+                                <p class="result-caption">7-day rain chance</p>
+                                <a class="calendar-export" id="calendar-export"
+                                   data-app-days="{{ calendar_days }}"
+                                   href="{{ url_for('calendar_export', city=city) }}"
+                                   {% if not calendar_days %}hidden{% endif %}
+                                   title="Put the days that reach your threshold into your own calendar.">
+                                    <svg class="calendar-icon" viewBox="0 0 16 16"
+                                         width="10" height="10" aria-hidden="true" focusable="false">
+                                        <g fill="none" stroke="currentColor" stroke-width="1.3"
+                                           stroke-linecap="round" stroke-linejoin="round">
+                                            <rect x="1.6" y="3.2" width="12.8" height="11.2" rx="2"/>
+                                            <path d="M1.6 6.4h12.8"/>
+                                            <path d="M4.8 1.8v2.8M11.2 1.8v2.8"/>
+                                        </g>
+                                    </svg>
+                                    <span class="calendar-text">Add rainy days to my calendar</span>
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                    {% if headline %}
+                    <p class="headline severity-{{ headline.severity }}">{{ headline.text }}</p>
+                    {% endif %}
+                    {% if has_hourly %}
+                    <div class="hourly">
+                        <div class="hourly-head">
+                            <h2 class="hourly-title">{{ weather_data[0].hourly_title }}</h2>
+                            <!-- The notification control. It asks the browser
+                                 for permission and then polls the forecast
+                                 while the tab is open. It stays hidden until
+                                 the script has run and the browser can show a
+                                 notification, so it is never a dead button. -->
+                            <button type="button" id="notify-toggle" class="notify-toggle" hidden
+                                    title="Get a browser notification when rain is about to start. This tab has to stay open.">
+                                <svg class="notify-icon" viewBox="0 0 16 16"
+                                     width="12" height="12" aria-hidden="true" focusable="false">
+                                    <g fill="none" stroke="currentColor" stroke-width="1.3"
+                                       stroke-linecap="round" stroke-linejoin="round">
+                                        <path d="M4 6.6a4 4 0 0 1 8 0v2.9l1.3 1.7H2.7L4 9.5z"/>
+                                        <path d="M6.6 13.2a1.7 1.7 0 0 0 2.8 0"/>
+                                        <!-- The strike, shown only when the
+                                             browser has blocked
+                                             notifications. -->
+                                        <path class="bell-slash" d="M2.4 13.6 13.6 2.4"/>
+                                    </g>
+                                </svg>
+                                <span class="notify-text">Notify me</span>
+                            </button>
+                        </div>
+                        <!-- One strip per day. The reader picks a day out of
+                             the week below, and the graph shows that day -
+                             the same day the panel above the week is about,
+                             so the two can never be about different days.
+                             Every day has its own strip, and the one for
+                             today is the one that shows until a day is
+                             picked, so the page says something useful
+                             without any script at all. -->
+                        <div class="hourly-days" id="hourly-days">
+                            {%- for day in weather_data %}
+                            <div class="day-strip{% if loop.first %} is-active{% endif %}"
+                                 id="day-strip-{{ loop.index0 }}"
+                                 data-day="{{ loop.index0 }}"
+                                 data-title="{{ day.hourly_title }}">
+                                <p class="hourly-summary">{% if day.hours %}{{ day.hourly_summary }}{% else %}Hourly detail is not available for this day.{% endif %}</p>
+                                {%- if day.hours %}
+                                <!-- The value row. Every hour's chance is
+                                     written over its own bar, so a number
+                                     never needs a hover to be read - and a
+                                     touch screen never shows one. The sign
+                                     is left off: a narrow column does not
+                                     have room for it, and the sentence above
+                                     says what the numbers are. -->
+                                <div class="hourly-values" aria-hidden="true">
+                                    {%- for hour in day.hours %}
+                                    <span class="hour-value">{{ hour.chance_short }}{% if hour.now %}<span class="now-label">now {{ hour.time_label }}</span>{% endif %}</span>
+                                    {%- endfor %}
+                                </div>
+                                <div class="hourly-strip" role="list">
+                                    {%- for hour in day.hours %}
+                                    <div class="hour severity-{{ hour.severity }}{% if hour.now %} hour-now{% endif %}{% if hour.past %} hour-past{% endif %}" role="listitem" data-tip="{{ hour.time_label }} · {{ hour.chance_label }} · {{ hour.severity_label }}"><span class="hour-bar height-{{ hour.height }}{% if hour.unknown %} hour-bar-unknown{% endif %}" aria-hidden="true"></span><span class="sr-only">{% if hour.now %}Now: {% endif %}{{ hour.time_label }}, {{ hour.chance_label }}. {{ hour.severity_label }}.</span></div>
+                                    {%- endfor %}
+                                </div>
+                                <div class="hourly-axis" aria-hidden="true">
+                                    {%- for hour in day.hours %}
+                                    <span class="hour-axis-cell">{%- if hour.hour in (0, 6, 12, 18) or loop.last -%}<span class="hour-axis-label{% if hour.now %} hour-now{% endif %}">{{ hour.hour_label }}</span>{%- endif -%}</span>
+                                    {%- endfor %}
+                                </div>
+                                <details class="hourly-table">
+                                    <summary>Hourly values</summary>
+                                    <table>
+                                        <caption class="sr-only">Rain chance for each hour {{ day.day_when }}</caption>
+                                        <thead>
+                                            <tr><th scope="col">Hour</th><th scope="col">Rain chance</th></tr>
+                                        </thead>
+                                        <tbody>
+                                            {%- for hour in day.hours %}
+                                            <tr{% if hour.now %} class="is-now"{% endif %}><th scope="row">{{ hour.time_label }}{% if hour.now %} (now){% endif %}</th><td>{{ hour.chance_cell }}</td></tr>
+                                            {%- endfor %}
+                                        </tbody>
+                                    </table>
+                                </details>
+                                {%- endif %}
+                            </div>
+                            {%- endfor %}
+                        </div>
+                    </div>
+                    {% endif %}
+                    <!-- The day panel. It sits above the week and says
+                         what the day the reader has picked is about: the
+                         day itself, the band it is in, the chance, how
+                         much rain falls in it and how long it lasts.
+                         Every day has its own panel, and the one for
+                         today is the one that shows until a day is
+                         picked - so the page says something useful
+                         without any script at all. -->
+                    <div class="day-detail" id="day-detail" aria-live="polite">
+                        {% for day in weather_data %}
+                        <div class="day-panel severity-{{ day.severity }}{% if loop.first %} is-active{% endif %}"
+                             id="day-panel-{{ loop.index0 }}" data-day="{{ loop.index0 }}">
+                            <span class="day-panel-when">{{ day.day_label }}</span>
+                            <span class="day-panel-band"><span class="severity-dot" aria-hidden="true"></span>{{ day.band_label }}</span>
+                            {% if day.chance_number is not none %}
+                            <span class="day-panel-chance">{{ day.chance_label }}</span>
+                            {% if day.amount_label %}<span class="day-panel-amount">{{ day.amount_label }}</span>{% endif %}
+                            {% if day.hours_label %}<span class="day-panel-hours">{{ day.hours_label }}</span>{% endif %}
+                            {% endif %}
+                            {% if day.umbrella %}<span class="day-panel-advice">Take an umbrella</span>{% endif %}
+                        </div>
+                        {% endfor %}
+                    </div>
+                    <div class="severity-legend">
+                        <span class="column-head">Rain chance</span>
+                        <span class="legend-bands">
+                            <span class="legend-item severity-low"><span class="severity-dot" aria-hidden="true"></span>Rain unlikely</span>
+                            <span class="legend-item severity-moderate"><span class="severity-dot" aria-hidden="true"></span>Rain possible</span>
+                            <span class="legend-item severity-high"><span class="severity-dot" aria-hidden="true"></span>Rain likely</span>
+                        </span>
+                        <span class="unit-switch" role="group" aria-label="Temperature unit">
+                            {% for option in temperature_units %}
+                            <a class="unit-option{% if unit == option %} is-active{% endif %}"
+                               href="{{ unit_links[option] }}"
+                               {% if unit == option %}aria-current="true"{% endif %}>
+                                {{ "°C" if option == "celsius" else "°F" }}
+                            </a>
+                            {% endfor %}
+                        </span>
+                    </div>
+                    <!-- The week, as seven columns of figures. The list is
+                         still a list in the markup: it is a list of days,
+                         and the order is the order of the days. -->
+                    <ol class="weather-list">
+                        {% for day in weather_data %}
+                        <li class="weather-item severity-{{ day.severity }}{% if loop.first %} is-today{% endif %}"
+                            {% if day.chance_number is not none %} data-chance="{{ day.chance_number }}"{% endif %}>
+                            <span class="date">
+                                <span class="day-name" aria-hidden="true">{{ day.weekday_short }}</span>
+                                <span class="day-num" aria-hidden="true">{{ day.date_short }}</span>
+                                <span class="sr-only">{{ day.date }}. {{ day.severity_label }}.</span>
+                            </span>
+                            <span class="rain-chance">
+                                <span class="chance" aria-hidden="true">{{ day.rain_label }}</span>
+                                <span class="sr-only">{{ day.rain_sr_label }}</span>
+                            </span>
+                            <span class="temp">{{ day.temp_label }}</span>
+                            <span class="umbrella-slot">
+                                {% if day.umbrella %}
+                                <span class="umbrella" title="Take an umbrella">☔&#xFE0E;</span>
+                                <span class="sr-only">Take an umbrella.</span>
+                                {% endif %}
+                            </span>
+                        </li>
+                        {% endfor %}
+                    </ol>
+                </div>
+            {% else %}
+                <div class="intro">
+                    <h1 class="page-title">{% if city %}{{ page_city }}{% else %}Rain chance for any city{% endif %}</h1>
+                    {% if not error %}
+                    <p class="lead">Seven days of rain chance, and today's forecast hour by hour.</p>
+                    {% endif %}
+                </div>
+                {{ search_form(city, unit, "wide") }}
+                {% if error %}
+                <p class="error" role="alert">{{ error }}</p>
+                {% elif city %}
+                <p class="error" role="alert">No forecast data available for "{{ display_city }}". Try a more specific name like 'London, UK'.</p>
+                {% endif %}
+                {{ donate_line(donation_url) }}
             {% endif %}
 
             <!-- The browser-side preferences. Both are kept in the browser's
@@ -52,126 +311,6 @@
                 </label>
                 <span class="pref-status" id="alert-status" role="status"></span>
             </div>
-
-            {% if error %}
-                <p class="error" role="alert">{{ error }}</p>
-            {% endif %}
-
-            {% if weather_data %}
-                <div class="result">
-                    <!-- The heading row. The export link sits on it, on the
-                         line the heading already takes, because the card has
-                         no vertical room for another line. -->
-                    <div class="result-head">
-                        <h3>Forecast for {{ display_city }}:</h3>
-                        <a class="calendar-export" id="calendar-export"
-                           data-app-days="{{ calendar_days }}"
-                           href="{{ url_for('calendar_export', city=city) }}"
-                           {% if not calendar_days %}hidden{% endif %}
-                           title="Put the days that reach your threshold into your own calendar.">
-                            <span class="calendar-icon" aria-hidden="true">📅</span>
-                            <span class="calendar-text">Add rainy days to my calendar</span>
-                        </a>
-                    </div>
-                    {% if headline %}
-                    <p class="headline severity-{{ headline.severity }}">{{ headline.text }}</p>
-                    {% endif %}
-                    {% if hourly_data %}
-                    <div class="hourly">
-                        <div class="hourly-head">
-                            <h4 class="hourly-title">Today, hour by hour</h4>
-                            <!-- The notification control. It asks the browser
-                                 for permission and then polls the forecast
-                                 while the tab is open. It stays hidden until
-                                 the script has run and the browser can show a
-                                 notification, so it is never a dead button. -->
-                            <button type="button" id="notify-toggle" class="notify-toggle" hidden
-                                    title="Get a browser notification when rain is about to start. This tab has to stay open.">
-                                <span class="notify-icon" aria-hidden="true">🔔</span>
-                                <span class="notify-text">Notify me</span>
-                            </button>
-                        </div>
-                        {% if hourly_summary %}
-                        <p class="hourly-summary">{{ hourly_summary }}</p>
-                        {% endif %}
-                        <div class="hourly-strip" role="list">
-                            {% for hour in hourly_data %}
-                            <div class="hour severity-{{ hour.severity }}{% if hour.now %} hour-now{% endif %}"
-                                 role="listitem"
-                                 data-tip="{{ hour.time_label }} · {{ hour.chance_label }} · {{ hour.severity_label }}">
-                                <span class="hour-bar height-{{ hour.height }}{% if hour.unknown %} hour-bar-unknown{% endif %}" aria-hidden="true"></span>
-                                <span class="sr-only">{% if hour.now %}Now: {% endif %}{{ hour.time_label }}, {{ hour.chance_label }}. {{ hour.severity_label }}.</span>
-                            </div>
-                            {% endfor %}
-                        </div>
-                        <div class="hourly-axis" aria-hidden="true">
-                            {% for hour in hourly_data %}
-                            <span class="hour-axis-cell">
-                                {%- if hour.hour in (0, 6, 12, 18) or loop.last -%}
-                                <span class="hour-axis-label{% if hour.now %} hour-now{% endif %}">{{ hour.hour_label }}</span>
-                                {%- endif -%}
-                            </span>
-                            {% endfor %}
-                        </div>
-                        <details class="hourly-table">
-                            <summary>Hourly values</summary>
-                            <table>
-                                <caption class="sr-only">Rain chance for each hour today</caption>
-                                <thead>
-                                    <tr><th scope="col">Hour</th><th scope="col">Rain chance</th></tr>
-                                </thead>
-                                <tbody>
-                                    {% for hour in hourly_data %}
-                                    <tr{% if hour.now %} class="is-now"{% endif %}>
-                                        <th scope="row">{{ hour.time_label }}{% if hour.now %} (now){% endif %}</th>
-                                        <td>{{ hour.chance_cell }}</td>
-                                    </tr>
-                                    {% endfor %}
-                                </tbody>
-                            </table>
-                        </details>
-                    </div>
-                    {% endif %}
-                    <div class="severity-legend">
-                        <span class="legend-bands">
-                            <span class="legend-item severity-low"><span class="severity-dot" aria-hidden="true"></span>Rain unlikely</span>
-                            <span class="legend-item severity-moderate"><span class="severity-dot" aria-hidden="true"></span>Rain possible</span>
-                            <span class="legend-item severity-high"><span class="severity-dot" aria-hidden="true"></span>Rain likely</span>
-                        </span>
-                        <span class="column-head">Rain chance</span>
-                        <span class="unit-switch" role="group" aria-label="Temperature unit">
-                            {% for option in temperature_units %}
-                            <a class="unit-option{% if unit == option %} is-active{% endif %}"
-                               href="{{ url_for('index', city=city, unit=option) }}"
-                               {% if unit == option %}aria-current="true"{% endif %}>
-                                {{ "°C" if option == "celsius" else "°F" }}
-                            </a>
-                            {% endfor %}
-                        </span>
-                    </div>
-                    <div class="weather-list">
-                        {% for day in weather_data %}
-                        <div class="weather-item severity-{{ day.severity }}"{% if day.chance_number is not none %} data-chance="{{ day.chance_number }}"{% endif %}>
-                            <span class="date">
-                                <span class="severity-dot" aria-hidden="true"></span>
-                                {{ day.date }}
-                                <span class="sr-only">{{ day.severity_label }}.</span>
-                            </span>
-                            <span class="rain-chance">
-                                {% if day.umbrella %}<span class="umbrella" title="Take an umbrella">☔</span>{% endif %}
-                                <span aria-hidden="true">{{ day.rain_label }}</span>
-                                <span class="sr-only">{{ day.rain_sr_label }}{% if day.umbrella %} Take an umbrella.{% endif %}</span>
-                            </span>
-                            <span class="temp">{{ day.temp_label }}</span>
-                        </div>
-                        {% endfor %}
-                    </div>
-                </div>
-            {% elif city and not error %}
-                <div class="result result-empty">
-                    <p>No forecast data available for "{{ display_city }}". Try a more specific name like 'London, UK'.</p>
-                </div>
-            {% endif %}
         </div>
 
         <footer class="copyright">
@@ -183,6 +322,11 @@
                 Weather data by <a href="https://open-meteo.com/" target="_blank" rel="noopener noreferrer">Open-Meteo.com</a>
                 (<a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener noreferrer">CC BY 4.0</a>)
                 · Place names © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a> contributors
+            </span>
+            <!-- Which build this is. It sits under the credits, so the
+                 answer to "which version is this?" is on the page. -->
+            <span class="build-info">
+                Version {{ app_version }}{% if app_commit %} · build {{ app_commit }}{% endif %}
             </span>
         </footer>
     </div>

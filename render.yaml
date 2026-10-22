@@ -1,8 +1,12 @@
 # Render Blueprint for RainAlert (free web service, prebuilt Docker Hub image).
 # Nothing deploys until this repo is connected to Render and the Blueprint is
 # created there. Render does not rebuild anything: it pulls the image below.
-# To release a new version, push a new tag to Docker Hub, change the tag here,
-# and redeploy.
+#
+# A release is a git tag, not a change to this file. The workflow builds the
+# image, tags it with the number of the release, pushes it, and calls the
+# deploy hook with that same tag. The tag below is only the fallback for a
+# manual deploy, so do not bump it as part of an ordinary change; DEPLOY.md
+# says when it has to move.
 #
 # If the Docker Hub repository is private, add a registry credential in Render
 # (Workspace Settings) and add under `image:`
@@ -16,7 +20,21 @@ services:
     plan: free
     image:
       url: docker.io/lasiurusbat/rainalert:0.8
+    # The image is deployed by the hook, which names the tag it wants. Left
+    # on, auto-deploy would redeploy the service with the image stored above
+    # - the fallback tag - as soon as any image was pushed, which is how an
+    # old version comes back.
+    autoDeploy: false
+    # The app has no separate health endpoint: its home page is the app's own
+    # page, and a 200 from it means the server is up and serving.
+    healthCheckPath: /
     envVars:
+      # The site's own address. The canonical links, the social card, the
+      # sitemap and the structured data are all built from it, and a
+      # canonical link pointing somewhere other than where the site lives is
+      # worse than none at all.
+      - key: SITE_URL
+        value: "https://rainalert.live"
       - key: NOMINATIM_USER_AGENT
         value: "RainAlert/1.0 (https://rainalert.live)"
       - key: GEOCODER_TIMEOUT

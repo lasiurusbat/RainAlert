@@ -170,8 +170,11 @@
     }
 
     function markRow(row, threshold) {
-        var date = row.querySelector(".date");
-        if (!date) { return; }
+        /* The marker belongs to the number, not to the date: the week is a
+         * row of columns now, and the marker has to sit with the figure it
+         * marks. */
+        var cell = row.querySelector(".rain-chance");
+        if (!cell) { return; }
 
         var words = "Above your " + threshold + "% alert threshold.";
         var marker = document.createElement("span");
@@ -184,15 +187,16 @@
         spoken.className = "sr-only alert-marker-text";
         spoken.textContent = words;
 
-        /* The marker goes after the date and before the row's screen-reader
-         * text, so a reader hears the date, the marker and then the band. */
-        var hidden = date.querySelector(".sr-only");
+        /* The marker goes after the figure and before the column's
+         * screen-reader text, so a reader hears the chance, the band and
+         * then what the marker means. */
+        var hidden = cell.querySelector(".sr-only");
         if (hidden) {
-            date.insertBefore(marker, hidden);
-            date.insertBefore(spoken, hidden);
+            cell.insertBefore(marker, hidden);
+            cell.insertBefore(spoken, hidden);
         } else {
-            date.appendChild(marker);
-            date.appendChild(spoken);
+            cell.appendChild(marker);
+            cell.appendChild(spoken);
         }
     }
 
@@ -359,8 +363,6 @@
     var notifyTimer = null;
 
     var notifyButton = document.getElementById("notify-toggle");
-    var notifyIcon = notifyButton
-        ? notifyButton.querySelector(".notify-icon") : null;
     var notifyText = notifyButton
         ? notifyButton.querySelector(".notify-text") : null;
 
@@ -409,8 +411,10 @@
         return savedCity();
     }
 
-    function setNotifyLabel(icon, text) {
-        if (notifyIcon) { notifyIcon.textContent = icon; }
+    function setNotifyLabel(text) {
+        /* Only the words change. The bell is drawn in the markup and
+         * stays drawn: a colour emoji would arrive as a little coloured
+         * picture in the middle of a night. */
         if (notifyText) { notifyText.textContent = text; }
     }
 
@@ -430,14 +434,19 @@
              * it from here. Say so instead of offering a button that
              * cannot work. */
             notifyButton.disabled = true;
-            setNotifyLabel("🔕", "Notifications blocked");
+            notifyButton.classList.add("is-blocked");
+            notifyButton.classList.remove("is-on");
+            setNotifyLabel("Notifications blocked");
             return;
         }
         notifyButton.disabled = false;
+        notifyButton.classList.remove("is-blocked");
         if (permission === "granted" && notifyEnabled()) {
-            setNotifyLabel("🔔", "Notifications on");
+            notifyButton.classList.add("is-on");
+            setNotifyLabel("Notifications on");
         } else {
-            setNotifyLabel("🔔", "Notify me");
+            notifyButton.classList.remove("is-on");
+            setNotifyLabel("Notify me");
         }
     }
 
@@ -555,6 +564,108 @@
         }
     }
 
+    /* --- Picking a day --------------------------------------------------------
+     * The week is a row of seven columns, and a column can be picked. The
+     * detail of the picked day is in the panel above the week, and the
+     * graph above the panel shows that same day's hours. The server has
+     * already rendered a panel and a strip for every day - the script only
+     * decides which ones are showing, so the panel and the graph can never
+     * be about different days.
+     *
+     * The button is built here rather than in the markup, so a reader
+     * without a script is never handed a button that cannot work: the
+     * columns stay a list of figures, and the panel and the graph show
+     * today.
+     */
+    function setupDayPicker() {
+        var list = document.querySelector(".weather-list");
+        if (!list) { return; }
+        var items = list.querySelectorAll(".weather-item");
+        var panels = document.querySelectorAll(".day-panel");
+        var strips = document.querySelectorAll(".day-strip");
+        var title = document.querySelector(".hourly-title");
+        if (!items.length || items.length !== panels.length) { return; }
+        /* The graph only follows the day when there is a strip for every
+         * day. A page with no hourly data has no graph, and then there is
+         * nothing to keep in step. */
+        var withStrips = strips.length === items.length;
+
+        var buttons = [];
+        var index;
+        for (index = 0; index < items.length; index += 1) {
+            buttons.push(makeDayButton(items[index], panels[index], index));
+        }
+        selectDay(0);
+
+        function makeDayButton(item, panel, position) {
+            var button = document.createElement("button");
+            button.type = "button";
+            button.className = "day-pick";
+            button.setAttribute("aria-controls", panel.id);
+
+            /* The whole column becomes the target, and the figures in it
+             * become the button's own words: a reader who cannot see the
+             * column still hears what it says. */
+            while (item.firstChild) {
+                button.appendChild(item.firstChild);
+            }
+            item.appendChild(button);
+
+            button.addEventListener("click", function () {
+                selectDay(position);
+            });
+            button.addEventListener("keydown", function (event) {
+                onDayKey(event, position);
+            });
+            return button;
+        }
+
+        function onDayKey(event, position) {
+            var step = 0;
+            if (event.key === "ArrowRight") {
+                step = 1;
+            } else if (event.key === "ArrowLeft") {
+                step = -1;
+            } else {
+                return;
+            }
+            event.preventDefault();
+            var next = (position + step + buttons.length) % buttons.length;
+            buttons[next].focus();
+            selectDay(next);
+        }
+
+        function selectDay(position) {
+            var current;
+            for (current = 0; current < panels.length; current += 1) {
+                var active = current === position;
+                panels[current].classList.toggle("is-active", active);
+                items[current].classList.toggle("is-selected", active);
+                buttons[current].setAttribute("aria-current",
+                    active ? "true" : "false");
+                if (withStrips) {
+                    strips[current].classList.toggle("is-active", active);
+                    /* A table left open on a day the reader has left
+                     * would keep its height in the shared cell and leave a
+                     * gap under the graph, so it is closed. */
+                    if (!active) {
+                        closeTable(strips[current]);
+                    }
+                }
+            }
+            if (withStrips && title) {
+                title.textContent = strips[position].getAttribute("data-title");
+            }
+        }
+
+        function closeTable(strip) {
+            var table = strip.querySelector("details");
+            if (table) {
+                table.open = false;
+            }
+        }
+    }
+
     /* --- The service worker --------------------------------------------------
      * The app can be installed on a phone, and it opens without a network.
      * Registering the worker is best-effort: a browser that refuses it, or
@@ -584,6 +695,8 @@
         registerServiceWorker();
 
         promotePendingCity();
+
+        setupDayPicker();
 
         var city = savedCity();
         if (rememberBox) {

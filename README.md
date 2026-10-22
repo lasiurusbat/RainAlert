@@ -26,25 +26,41 @@ user accounts, and nothing to configure before running it.
 
 - **Seven-day forecast** for any city the geocoder recognises, with the daily
   maximum rain probability and the high/low temperature.
-- **A one-line headline** above the list says what the week looks like: "Rain
-  likely tomorrow (80%). Bring an umbrella." or "No rain likely for the next
-  7 days." It names the first day worth mentioning, and today's figure comes
-  from the hours that are left rather than from a day maximum that includes
-  the morning.
+- **A night street.** The forecast is a dark panel laid over the photograph,
+  in the colours of the picture: asphalt, haze, mist, paper, and the amber
+  of a street lamp. Amber is the only accent, so a colour on the page
+  always means something about the rain. The type is Archivo, self-hosted —
+  the page asks no third party for anything, and still works with no
+  network.
+- **A one-line headline** under the city's name says what the week looks like:
+  "Rain likely tomorrow (80%). Bring an umbrella." or "No rain likely for the
+  next 7 days." It names the first day worth mentioning, and today's figure
+  comes from the hours that are left rather than from a day maximum that
+  includes the morning.
 - **The tab itself is the alert.** When rain is coming, the browser tab
   renames itself to "Rain tomorrow - Rain Alert" and swaps to a rain
   favicon. A tab left open in the background tells you at a glance that the
   weather changed while you were away — you do not have to switch to the tab
   and read it.
 - **Hour-by-hour strip for today.** One bar per hour of the city's local day,
-  coloured on the same scale as the daily list, with a pulsing dot on the
-  current hour. A one-line summary says when the rain is expected — "Rain
-  likely from about 15:00 to 16:00, up to 83%. Bring an umbrella." — so you
-  can tell whether to leave now or in an hour, which a daily maximum cannot.
+  coloured on the same scale as the week, with every hour's chance written
+  over its own bar — so a number never needs a hover to be read, and a
+  touch screen never shows one. The current hour is a labelled rule. A
+  one-line summary says when the rain is expected — "Rain likely from about
+  15:00 to 16:00, up to 83%. Bring an umbrella." — so you can tell whether
+  to leave now or in an hour, which a daily maximum cannot.
 - **Visual rain severity.** Each day is colour-coded on a three-band scale —
   grey for *rain unlikely*, blue for *rain possible*, amber for *rain likely* —
-  with a matching dot, tinted row, and left border. A ☔ icon marks the days
-  worth carrying an umbrella.
+  and the week is seven columns of figures: the weekday, the chance, the
+  temperature, and a ☔ on the days worth carrying an umbrella. The band
+  names sit in a key above the week, so the colour never carries the
+  meaning on its own.
+- **Pick a day, read its rain.** Click any of the seven columns and the
+  panel above the week tells you about that day: which day it is, the band
+  it is in, the chance, how many millimetres fall in it and how long the
+  rain lasts. The days are buttons, so they work with a keyboard as well as
+  with a finger, and the page shows today's panel even with JavaScript
+  turned off.
 - **Celsius or Fahrenheit.** A small switch at the right end of the colour key
   switches the temperatures. The forecast service does the conversion, so the
   numbers are the service's own and the choice sticks when you search for
@@ -68,10 +84,16 @@ user accounts, and nothing to configure before running it.
   its own icon, no browser chrome, and an offline page that says plainly that
   the forecast cannot be fetched. The forecast itself is never cached: a stale
   rain chance is worse than none.
-- **The rainy days in your own calendar.** A "📅 Add rainy days to my
+- **The rainy days in your own calendar.** An "Add rainy days to my
   calendar" link downloads a standard `.ics` file with one all-day event for
   every day that reaches the threshold. Your calendar app then does the
   alerting — no account here, no server, no phone app to install.
+- **One address per city.** Every city has a page of its own at
+  `/city/london`, and that is the only address a search engine indexes or a
+  reader bookmarks. A search for a city is sent there for good, and the
+  page says which address it is, so the same forecast is never indexed
+  twice. `/cities` is the index of them, and `/sitemap.xml` and
+  `/robots.txt` tell the crawlers where everything is.
 - **Honest error handling.** A city that does not exist and a geocoder that is
   temporarily down produce different messages — a network blip never tells a
   user their valid city is missing.
@@ -107,8 +129,8 @@ Python 3.14.5.
 ## Running the tests
 
 ```bash
-python -m unittest test_app    # 278 offline tests, no network required
-python -m unittest test_browser  # 50 browser tests, needs Chrome
+python -m unittest test_app    # 348 offline tests, no network required
+python -m unittest test_browser  # 75 browser tests, needs Chrome
 python -m unittest test_api     # 7 live integration tests, hits both APIs
 ```
 
@@ -161,6 +183,16 @@ The Compose file builds the image once and shares it between two services:
 ```bash
 docker build -t rainalert .
 docker run --rm -p 8000:8000 rainalert
+```
+
+To stamp the build with the version and the commit it came from — which is
+what the footer of every page then shows — pass them as build arguments:
+
+```bash
+docker build \
+  --build-arg APP_VERSION=0.8 \
+  --build-arg APP_COMMIT=$(git rev-parse --short HEAD) \
+  -t rainalert .
 ```
 
 ### Configuration
@@ -226,6 +258,9 @@ in a `.env` file (the app loads one via `python-dotenv`).
 | `DONATION_URL` | empty | An `https://` link to a donation page. When set, a short "Buy me a coffee" line appears under the search button and in the footer. When empty, nothing renders. Anything that is not an absolute `https://` URL is ignored. See [Donations and data credits](#donations-and-data-credits) |
 | `NOTIFICATION_POLL_MINUTES` | `30` | How often the open tab re-checks the forecast for a browser notification |
 | `NOTIFICATION_LEAD_HOURS` | `2` | How far ahead a notification may announce rain that is starting |
+| `SITE_URL` | `https://rainalert.live` | The site's own address, used for the canonical link, the Open Graph tags, the sitemap and the structured data. Set it to the address the site is actually served from, without a trailing slash |
+| `APP_VERSION` | `dev` | The version of the build, shown in the footer of every page. A release build passes the number of the release |
+| `APP_COMMIT` | empty | The short commit the build came from, shown next to the version. A development run has none, because a working tree is not a commit |
 
 Example `.env`:
 
@@ -254,17 +289,17 @@ mentioning, and what to do about it.
 
 Three details are deliberate:
 
-- **The band in the sentence is the day's own band**, the same one its row
-  in the list carries, so the banner and the list never disagree about how
-  wet a day is. The colour follows the band, and the band name is in the
-  text, so the meaning never rests on the colour alone.
+- **The band in the sentence is the day's own band**, the same one its
+  column in the week carries, so the banner and the week never disagree
+  about how wet a day is. The colour follows the band, and the band name is
+  in the text, so the meaning never rests on the colour alone.
 - **Today is judged on the hours that are left.** The daily maximum covers
   the whole day, so at 18:00 it still counts the morning's downpour while
   the reader can only walk into the evening. Today's figure in the banner
   comes from the hours ahead and says so — "Rain likely for the rest of
-  today (80%)" — while its row in the list keeps the daily maximum. The two
-  are different quantities, and each is labelled with which one it is. When
-  the day is over it drops out of the banner entirely.
+  today (80%)" — while its column in the week keeps the daily maximum. The
+  two are different quantities, and each is labelled with which one it is.
+  When the day is over it drops out of the banner entirely.
 - **A missing value is never counted as dry.** A week where one day was not
   reported is "most of", not "all of".
 
@@ -277,22 +312,23 @@ the page.
 
 | Situation | The tab says | The favicon |
 |---|---|---|
-| A day at or above the umbrella threshold | "Rain tomorrow - Rain Alert" | the amber rain icon |
-| A quiet week | "Rain Alert" | the blue cloud |
-| An error page or an empty search | "Rain Alert" | the blue cloud |
+| A day at or above the umbrella threshold | "Rain tomorrow - Rain Alert", or "Rain tomorrow in London - Rain Alert" on a city's page | the lit umbrella |
+| A quiet week | "Rain Alert" | the quiet umbrella |
+| An error page or an empty search | "Rain Alert" | the quiet umbrella |
 
 Three details are deliberate:
 
 - **It is the same alert as the banner.** The tab fires at the same
-  `UMBRELLA_THRESHOLD` that puts the ☔ on a row and makes the banner say
+  `UMBRELLA_THRESHOLD` that puts the ☔ on a column and makes the banner say
   "Bring an umbrella." One threshold for all three means the tab, the banner
-  and the row can never disagree about whether rain is worth noticing.
+  and the column can never disagree about whether rain is worth noticing.
 - **Today is judged on the hours that are left**, exactly as the banner
   judges it. At 18:00 the title does not still say "Rain today" because the
   morning's downpour has already been and gone. A day that is over drops out
   and the title names the next wet day instead.
-- **The favicon changes shape, not just colour.** The rain icon is an amber
-  square with white streaks, where the default one is a blue cloud, so the
+- **The favicon changes shape, not just colour.** The rain icon is the
+  umbrella on the sodium-lamp amber plate with two strokes of rain falling
+  from it, where the default one is the same mark on a dark plate, so the
   two are told apart at 16 pixels in a crowded tab bar by the shape as well
   as the hue.
 
@@ -324,43 +360,44 @@ Two details are deliberate:
 - **A missing value is not zero.** When the API reports no probability, the
   day is banded *unknown* rather than being silently treated as dry.
 
-The colour key is rendered once above the list, and every row also carries its
-band name in a screen-reader-only span, so severity is never communicated by
-colour alone.
+The colour key is rendered once above the week, and every column also
+carries its band name in a screen-reader-only span, so severity is never
+communicated by colour alone.
 
 ---
 
-## The daily list
+## The week
 
 ```
-● Rain unlikely  ● Rain possible  ● Rain likely    Rain chance    [°C][°F]
+Rain chance    ● Rain unlikely  ● Rain possible  ● Rain likely    [°C][°F]
 
-● Wednesday 21.10.2026                       ☔ 100%    12° / 9°
-● Thursday 22.10.2026                            86%    14° / 8°
-● Friday 23.10.2026                             37%    11° / 7°
+  Wed 21.10      Thu 22.10      Fri 23.10      Sat 24.10    Sun 25.10    Mon 26.10    Tue 27.10
+     100%           86%           37%            15%            5%          60%           —
+      ☔               ☔
+   12° / 9°      14° / 8°      11° / 7°      12° / 7°      10° / 6°      9° / 6°      8° / 4°
 ```
 
-The row says each thing once:
+The week is seven columns of figures, and each column says each thing once:
 
-- **"Chance of rain" appears once, in the column heading.** Repeating the
-  phrase on all seven rows said nothing after the first one and made the
-  list hard to scan, so the rows carry the number alone. The heading sits in
-  the colour-key row above the list, which costs no extra height — the card
-  is already at its vertical limit.
-- **The temperature is its own column**, without the parentheses it used to
-  wear, and the °C/°F switch doubles as that column's heading.
-- **The ☔ icon sits inside the chance column**, so the digits' right edge is
-  the same on every row and the column reads as a column.
+- **"Rain chance" appears once, in the column heading.** Repeating the
+  phrase on all seven columns said nothing after the first one and made the
+  week hard to scan, so the columns carry the number alone. The heading sits
+  in the colour-key row above the week, which costs no extra height.
+- **The temperature is under the chance**, without the parentheses it used
+  to wear, and the °C/°F switch sits at the right of the key row.
+- **The ☔ sits at the foot of its column**, so the numbers above it stay in
+  their columns and the week reads as a week rather than as seven rows of
+  nearly identical text.
 
-The two columns are fixed-width and the date takes the slack, so the numbers
-line up down the list. Screen readers still get the full wording — the
-visible number is hidden from them, and a screen-reader-only span beside it
-says "100% chance of rain. Take an umbrella."
+The list is still a list in the markup — a `<ol>` of `<li>`s, in the order
+of the days — and the grid is only the way it is drawn. Screen readers still
+get the full wording: the visible number is hidden from them, and a
+screen-reader-only span beside it says "100% chance of rain. Take an
+umbrella."
 
-Below 560px the three of them no longer fit on one line, so the date takes
-a line of its own and the two columns share the line below it, both
-right-aligned. The headings do the same, so they still sit over their
-columns.
+Below 560px the seven columns get narrow enough for the numbers to touch, so
+the type in them is cut down and the date number goes. The full date is
+still on the page, for screen readers.
 
 The hourly table underneath has a real column heading, so its cells are bare
 numbers too. Its tooltips keep the full phrase, because a tooltip stands on
@@ -368,11 +405,48 @@ its own.
 
 ---
 
+## Picking a day
+
+Each of the seven columns is a button. Click one and the panel above the
+week answers for that day:
+
+```
+│ Tomorrow 23.10  ● Rain likely  100% chance of rain  9.2 mm  12 h of rain  Take an umbrella
+```
+
+- **The panel is rendered by the server for every day**, and the script only
+  decides which of the seven is showing. That is why the page says something
+  useful with JavaScript turned off — today's panel, because the week starts
+  on today.
+- **The chance in the panel is the chance in the column**, and the umbrella
+  in it is the app's own advice at the same threshold as everywhere else.
+- **The millimetres and the hours are only shown when there is rain in
+  them.** A day the model expects no rain in says nothing more than that:
+  "0 mm" next to a chance of rain would read as a contradiction, because the
+  two come from different parts of the model.
+- **A day the service did not report is named as such** — "Rain not
+  reported" — and carries no figures at all. An unreported day is never
+  counted as a dry one.
+- **The picked day is marked with a rule** under its column, in the paper's
+  own colour rather than the band's: the band colour already means the rain.
+- **The graph follows the pick.** The strip above the week draws the hours
+  of the day that is selected, and its title and its sentence name that day:
+  "Friday, hour by hour", "No rain likely on Friday." The banner and the
+  tab title still judge today — the app's own alert does not change because
+  the reader is looking at a different day.
+
+The columns are buttons with the figures in them, so a screen reader reads
+the same words the column shows. The left and right arrow keys move between
+the days.
+
+---
+
 ## The hourly strip
 
-The strip above the daily list shows one bar per hour of the city's local
-day, with the bar height giving the rain chance and the bar colour giving
-the same severity band the daily list uses.
+The strip between the banner and the week shows one bar per hour of the
+city's local day, with the bar height giving the rain chance and the bar
+colour giving the same severity band the week uses. Picking a day in the
+week redraws it for that day.
 
 Four things about it are deliberate:
 
@@ -380,31 +454,38 @@ Four things about it are deliberate:
   `timezone=auto`, so the API dates the hours in the queried location's local
   time — a forecast for Tokyo is timed in Tokyo's hours. They are never
   converted to the viewer's timezone, exactly like the daily dates.
-- **The current hour is marked with a pulsing dot**, taken from the `current`
-  block the API returns in the same local time. Without that block the app
-  falls back to the UTC offset, and without that too it simply omits the
-  marker. The pulse is dropped for anyone who has asked for less motion;
-  the dot stays.
+- **The current hour is a rule through the strip, and it is labelled.** It
+  comes from the `current` block the API returns in the same local time.
+  Without that block the app falls back to the UTC offset, and without that
+  too it simply omits the marker. The words "now 11:00" are written over
+  the rule, so the hour is named rather than inferred.
 - **The bar height is bucketed into 5% steps** so that it can live in the
   stylesheet as a class. The exact percentage is in the tooltip and in the
   table view underneath, so the rounding never hides a value.
-- **Every value is reachable without hovering.** The "Hourly values" table
-  lists the rain chance for every hour; the tooltip only makes it easier to
-  read.
+- **Every value is written over its own bar**, so a number never needs a
+  hover to be read and a touch screen never shows one. The "Hourly values"
+  table underneath lists the same figures for the same reason.
+
+The value row carries the **bare number**: twenty-four columns of three
+digits do not fit across the panel with a percent sign on each, and the
+sentence above, the tooltip and the table all say what the numbers are.
 
 The summary sentence above the strip uses the umbrella threshold, so it
-agrees with the ☔ icon on the daily list, and it only looks at hours that
-have not happened yet — a window that has already passed is not an alert.
+agrees with the ☔ icon on the week, and for today it only looks at hours
+that have not happened yet — a window that has already passed is not an
+alert. For a day further out it reads "No rain likely on Friday." and
+names the day it is talking about.
 
 ---
 
 ## Saved city and personal threshold
 
-Two preferences live in the browser, under the search form: **"Remember this
-city"** and **"Alert me above"** a percentage you choose. Both are stored in
-`localStorage`, which means the server never sees either one. There is no
-account, no database, and no cookie — the site is exactly as stateless as it
-was before, and clearing your browser data forgets everything.
+Two preferences live in the browser, in a row at the foot of the panel:
+**"Remember this city"** and **"Alert me above"** a percentage you choose.
+Both are stored in `localStorage`, which means the server never sees either
+one. There is no account, no database, and no cookie — the site is exactly
+as stateless as it was before, and clearing your browser data forgets
+everything.
 
 **Remembering a city is not the same as remembering the last search.** A city
 is only saved once a search for it has actually worked. The submitted name
@@ -419,10 +500,10 @@ throw away the forecast you came for.
 **Your threshold is a second answer, not a second umbrella.** The ☔ icon, the
 headline banner and the tab title are the app's advice: they all fire at the
 same threshold, so they can never disagree with each other. Your own limit
-answers a different question, so it is marked differently — a ▲ after the
-date, with a count of how many days qualify ("3 days above 60%"). The
+answers a different question, so it is marked differently — a ▲ in the
+column, with a count of how many days qualify ("3 days above 60%"). The
 marker is not carried by colour alone, and the percentage it compares
-against is the same number the row shows, so the two can never disagree
+against is the same number the column shows, so the two can never disagree
 either. A day the forecast service did not report is never counted as a dry
 day.
 
@@ -434,7 +515,7 @@ addition, not a requirement.
 
 ## Notifications while the tab is open
 
-Next to the title of the hourly strip there is a small **🔔 Notify me**
+Next to the title of the hourly strip there is a small **Notify me**
 button. Turn it on and the page checks the forecast every half hour and
 raises a browser notification when there is something worth saying:
 
@@ -470,11 +551,11 @@ cannot work.
 
 ## The calendar export
 
-Next to the forecast's heading there is a quiet **📅 Add rainy days to my
-calendar** link. Click it and the browser downloads a standard `.ics` file
-with one all-day event for every day of the week that reaches the threshold.
-Import it into Google Calendar, Outlook, Apple Calendar or anything else that
-reads `.ics`, and the rainy days are in there.
+Next to "7-day rain chance", on the same line, there is a quiet **Add rainy
+days to my calendar** link. Click it and the browser downloads a standard
+`.ics` file with one all-day event for every day of the week that reaches
+the threshold. Import it into Google Calendar, Outlook, Apple Calendar or
+anything else that reads `.ics`, and the rainy days are in there.
 
 **Your own threshold is used, if you have set one.** The days that go into the
 file are the days the page marks with a ▲, and the event says which answer it
@@ -534,12 +615,60 @@ a tab is open.
 
 ---
 
+## Being findable
+
+A rain forecast is only useful to the person who is standing in the rain, and
+a person standing in the rain does not know the name of the app. So the site
+has to be findable, and it is built to be:
+
+| Route | What it is |
+|---|---|
+| `/` | The start page: the search form, and the site's own name in the title |
+| `/city/london` | The forecast for one city, at that city's address |
+| `/cities` | The index of the cities that have a page, with a link to each |
+| `/robots.txt` | Where the crawlers may go, and where the sitemap is |
+| `/sitemap.xml` | Every page of the site, for the crawlers |
+
+Five things make it work:
+
+- **Every city has one address.** A search for a city is answered with a
+  permanent redirect to `/city/<slug>`, and the page carries a canonical link
+  to the same address. The many ways of asking for a forecast — a search
+  form, a bookmark, a link someone sent — all end at the same page, so a
+  search engine indexes the city rather than the query string. An address
+  that is not the canonical one (`/city/London`) is sent to it for good.
+- **The pages say what they are.** Every page has a title that names the
+  city, a description that says the same thing in one sentence, and
+  JSON-LD structured data describing the site, the app and — on a city's
+  page — the week itself, day by day. The title is still the alert: on a
+  city's page it reads "Rain tomorrow in London - Rain Alert", which is the
+  same threshold as the ☔ icon and the banner.
+- **A missing page says so with its status code.** A city the geocoder does
+  not know answers `404`, and an upstream that is down answers `503`. A page
+  that says "not found" but answers `200` is a soft 404, and search engines
+  treat it as one.
+- **The social card is a real image.** `static/og-image.png` is a 1200×630
+  picture of the app, with the Open Graph and Twitter card tags pointing at
+  it, so a link to a city's forecast looks like something rather than like
+  a bare URL.
+- **The non-pages stay out of the way.** `/api/alert` and `/calendar.ics`
+  are endpoints the page uses, not pages, so they carry
+  `X-Robots-Tag: noindex` and are kept out of `robots.txt`. Crawling them
+  would cost two upstream requests each and put a JSON blob in the results.
+
+The list of cities on `/cities` is curated and short — 92 of them, in
+`cities.py`. The geocoder is rate-limited and every address in the list is a
+forecast the app has to fetch, so a short list of the cities people actually
+look up is better than an endless index.
+
+---
+
 ## Donations and data credits
 
 **Donation link.** Set `DONATION_URL` to your donation page — for this site
 that is <https://buymeacoffee.com/rainalert>, which exists but is not yet
 linked from a live site. The page then shows one quiet line just under the
-"Check Rain Chance" button, plus a link in the footer. It is a plain
+search, plus a link in the footer. It is a plain
 text link, not an embedded widget, so no third-party script is loaded and no
 consent notice is needed. It opens in a new tab. It is a site-wide link, so it
 appears on every page, including the error pages. With the variable empty, the
@@ -555,6 +684,15 @@ features or promotions, you need one of Open-Meteo's paid plans first.
 (data under CC BY 4.0) and OpenStreetMap (place names come from Nominatim).
 Do not remove them: the Open-Meteo licence requires attribution.
 
+**Which build is answering is on the page too.** Under the credits, the
+footer says `Version 0.8 · build 1a2b3c4` on a release build, and
+`Version dev` on a development run — a working tree is not a commit, so it
+names none. The version and the commit come from `APP_VERSION` and
+`APP_COMMIT`, which the Docker build takes as arguments and the CI workflow
+fills in from the release tag. It is not decoration: the deployment smoke
+test greps the live page for the version, so it can tell "the site is up"
+from "the new build is up".
+
 ---
 
 ## Project layout
@@ -562,8 +700,11 @@ Do not remove them: the Open-Meteo licence requires attribution.
 ```
 RainAlert/
 ├── app.py                       # the whole app: routes, geocoding, forecast, formatting
+├── cities.py                    # the curated list of cities that have a page
 ├── templates/
-│   └── index.html               # the single page
+│   ├── index.html               # the start page and the forecast
+│   ├── cities.html              # the index of cities
+│   └── 404.html                 # the page for an address that is not on this site
 ├── static/
 │   ├── style.css                # all styling
 │   ├── app.js                   # saved city, personal alert threshold, notifications
@@ -572,10 +713,13 @@ RainAlert/
 │   ├── manifest.json            # the web app manifest (installability)
 │   ├── service-worker.js        # the service worker (offline shell)
 │   ├── offline.html             # the page shown when the server cannot be reached
+│   ├── og-image.png             # the social card (1200×630)
 │   ├── icon-180.png             # iOS home screen icon
 │   ├── icon-192.png             # install icon
 │   ├── icon-512.png             # install icon
 │   ├── icon-maskable-512.png    # install icon, maskable (Android)
+│   ├── fonts/
+│   │   └── archivo-latin.woff2  # the self-hosted type (Latin subset)
 │   └── image/
 │       └── rain-alert-bg.jpg    # background photo (privately owned, see License)
 ├── docs/
@@ -586,13 +730,19 @@ RainAlert/
 ├── requirements.txt             # pinned runtime dependencies
 ├── requirements-dev.txt         # development-only dependencies (selenium)
 ├── tools/
-│   └── make_icons.py            # regenerates the install icons from the brand mark
+│   ├── make_icons.py            # regenerates the install icons from the brand mark
+│   ├── make_og_image.py         # regenerates the social card
+│   ├── shoot.py                 # screenshots a page of the running app
+│   ├── measure.py               # measures the page in a real browser
+│   └── crop.py                  # screenshots one element, for a detail
 ├── Dockerfile                   # multi-stage container image
 ├── docker-compose.yml           # local container setup, app + test services
 ├── .dockerignore                # keeps the build context small
 ├── .gitignore                   # keeps local artefacts out of version control
 ├── render.yaml                  # Render deployment blueprint
 ├── .github/                     # CI workflow and Dependabot config
+├── API.md                       # the HTTP API reference
+├── openapi.yaml                 # the HTTP API as an OpenAPI 3.1 spec
 ├── DEPLOY.md                    # the deployment runbook
 ├── CLAUDE.md                    # notes for AI assistants working in this repo
 ├── implementation-plan.md       # what is built, what is next, what is deferred
@@ -600,12 +750,13 @@ RainAlert/
 ```
 
 `app.py` holds the entire application — routes, geocoding, forecast fetching
-and formatting — in about 1,100 lines. There is no package structure to
+and formatting — in about 1,800 lines. There is no package structure to
 navigate; a single module is the right size for an app this small.
 
-The install icons are generated, not drawn by hand: `tools/make_icons.py`
-renders the brand mark in headless Chrome and writes the four PNGs. The PNGs
-are committed, so neither the build nor CI ever has to run it.
+The install icons and the social card are generated, not drawn by hand:
+`tools/make_icons.py` and `tools/make_og_image.py` render the brand mark in
+headless Chrome and write the PNGs. The PNGs are committed, so neither the
+build nor CI ever has to run them.
 
 ---
 
@@ -640,13 +791,37 @@ template variables: `page_title` and `favicon`.
 The title names the day rather than the date — "Rain tomorrow - Rain
 Alert", "Rain today - Rain Alert", or the weekday beyond that — because a
 tab title is read at a glance, and "tomorrow" is what a reader is asking
-about. A dry week, an unreported week, an empty search and an error page
-all keep the plain "Rain Alert" title and the default icon.
+about. On a city's page the city is in the title as well — "Rain tomorrow in
+London - Rain Alert" — because a title that says only "Rain tomorrow" tells
+a reader, or a search engine, nothing about which city the page is about. A
+dry week, an unreported week, an empty search and an error page all keep the
+plain "Rain Alert" title and the default icon.
 
 The favicon is a second file, `static/favicon-rain.svg`, rather than the
 default `static/favicon.svg` with different contents. Browsers cache a
 favicon by its URL, so changing the contents of one file changes nothing
 until the cache is cleared; two files with two URLs swap immediately.
+
+### The per-city pages
+
+`city_path()` works out the address of a city's page from the name the city
+was asked for, never from the name the geocoder answers with: the geocoder's
+own name is a full address ("London, Greater London, England, United
+Kingdom"), and an address built from it would not be the one the reader asked
+for. A city that is in the curated list keeps the slug the list gives it, so
+the address in the city index, the address in the sitemap and the address the
+page claims for itself are the same one.
+
+`/` with a city in the query string is answered with a `301` to that
+address, and `/city/<slug>` with a slug that is not the canonical one is
+answered with a `301` too. A `POST` — the search form — renders the page
+where it is, and the page's canonical link points at the address, so there
+is still only one page per city.
+
+The canonical link, the title, the description, the Open Graph tags and the
+JSON-LD are all decided in one place, `render_forecast_page()`, so that every
+page of the site — the start page, a city's page, an error page — carries
+the same set and they cannot disagree with each other.
 
 ### The browser half
 
@@ -661,8 +836,8 @@ the page what kind of page it is through three attributes on `<body>`:
 | `data-search` | `ok` / `error` / `none` | Was the last search worth remembering? |
 | `data-city` | the city | The city the forecast is for, for the label. |
 
-The threshold is compared against the `data-chance` attribute on each row,
-which is the same whole number the row displays — so the marker and the
+The threshold is compared against the `data-chance` attribute on each column,
+which is the same whole number the column displays — so the marker and the
 percentage on the page can never disagree.
 
 Every `localStorage` access goes through a try/except. A browser in private
@@ -696,6 +871,10 @@ reader for:
 browser remembers, so the same event is not shown twice. The endpoint takes
 the city as a query parameter, because the page already knows it, and the
 reader's threshold as an optional second one.
+
+`API.md` is the full reference for this endpoint and every other route, with
+the parameters, the status codes and the upstream services; `openapi.yaml` is
+the same thing as a machine-readable OpenAPI 3.1 spec.
 
 ### The calendar export
 
@@ -743,8 +922,9 @@ and needs the safe zone kept clear.
   replayed.
 - **The shell is cached**, so the app opens without a network and shows the
   offline page rather than the browser's error screen. The shell is the
-  stylesheet, the script, the icons and the background photo — the files that
-  make the page *look* like Rain Alert, and nothing that carries data.
+  stylesheet, the script, the icons, the font and the background photo — the
+  files that make the page *look* like Rain Alert, and nothing that carries
+  data.
 
 The shell list is versioned. Changing a cached file without bumping
 `CACHE_VERSION` in `static/service-worker.js` leaves readers on the old copy,
@@ -791,14 +971,14 @@ exception text is always logged, never rendered on the page.
 **Nothing is deployed yet.** The app runs locally, from `python app.py` or
 `docker compose up`. The pieces below are written and committed, but the
 one-time setup that would put it online has not been done — checked on
-2026-10-21:
+2026-10-22:
 
 - No release tag has ever been cut (`git tag -l` is empty), so the
   push-and-deploy half of the CI workflow has never fired.
 - The Docker Hub repository `lasiurusbat/rainalert` exists but has **zero
   tags**, so the image `render.yaml` names cannot be pulled.
 - A Render service answers at <https://rainalert.onrender.com>, but it
-  serves a JSON stub (`{"message": "Rain Alert API is running", "status":
+  serves a JSON stub (`{"message": "Rain Alert API is running 🌂", "status":
   "ok"}`), not this app — this app's `/` renders the HTML page.
 - `rainalert.live` is registered at Namecheap with URL forwarding, and
   nothing is hosted behind it.
@@ -865,6 +1045,13 @@ same command.
   different icon, add a second file — do not rewrite the contents of
   `static/favicon.svg`, or the browser keeps showing the old one until the
   cache is cleared.
+- **A city has one address.** `/city/<slug>` is the canonical address, and
+  everything else that asks for the same city is sent there. Do not add a
+  second way of rendering a forecast, and do not change the shape of the
+  slug: the address is what people bookmark and what search engines index.
+- **A missing page answers `404`, and a broken upstream answers `503`.** A
+  page that says "not found" but answers `200` is a soft 404, and search
+  engines treat it as one.
 - **The service worker caches the shell, never the forecast.** If you change
   a file in the shell list, bump `CACHE_VERSION` in
   `static/service-worker.js`, or readers stay on the old copy. Never add the

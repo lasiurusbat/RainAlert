@@ -54,9 +54,15 @@ jobs:
               exit 1
             fi
             echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+            # The number of the release, for the footer of every page.
+            echo "app_version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
           else
             echo "version=sha-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+            # A build that is not a release says so on the page.
+            echo "app_version=dev" >> "$GITHUB_OUTPUT"
           fi
+          # The commit the image was built from, for the same footer.
+          echo "commit=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
 
       - uses: docker/setup-buildx-action@v3
 
@@ -71,6 +77,11 @@ jobs:
           load: true
           push: false
           tags: ${{ env.IMAGE }}:${{ steps.version.outputs.version }}
+          # The version and the commit are baked into the image, so the
+          # footer of every page says which build is answering.
+          build-args: |
+            APP_VERSION=${{ steps.version.outputs.app_version }}
+            APP_COMMIT=${{ steps.version.outputs.commit }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -129,8 +140,23 @@ jobs:
           echo "Deploy requested for ${img}"
 
       # Render needs a while to pull the image, and a free service may be asleep.
+      # The page carries the version of the build that answered, so the test
+      # can tell "the site is up" from "the new build is up" - and the retry
+      # covers the wait for Render to swap the container over.
       - name: Smoke test the live site
+        env:
+          VERSION: ${{ needs.build-test-push.outputs.version }}
         run: |
-          curl --fail --silent --show-error --output /dev/null \
-            --retry 12 --retry-delay 15 --retry-all-errors --max-time 90 \
-            https://rainalert.live/
+          for attempt in $(seq 1 12); do
+            if curl --fail --silent --show-error --output live.html \
+                 --retry 3 --retry-delay 5 --retry-all-errors --max-time 90 \
+                 https://rainalert.live/ \
+               && grep -q "Version ${VERSION}" live.html; then
+              echo "The site is serving version ${VERSION}."
+              exit 0
+            fi
+            echo "Attempt ${attempt}: not serving version ${VERSION} yet."
+            sleep 15
+          done
+          echo "The site answered, but not with version ${VERSION}." >&2
+          exit 1

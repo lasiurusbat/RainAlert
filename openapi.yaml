@@ -1,0 +1,594 @@
+openapi: 3.1.0
+
+info:
+  title: RainAlert API
+  version: "0.8"
+  summary: The 7-day rain chance for any city.
+  description: |
+    RainAlert is a small Flask app that shows the 7-day rain chance for any
+    city. It geocodes the city with Nominatim, fetches the forecast from
+    Open-Meteo, and serves a handful of HTML pages plus two machine-readable
+    endpoints.
+
+    Every city has an address of its own, `/city/{city_slug}`, and that is
+    the address the page claims as its canonical one. The query string is
+    only ever the way in.
+
+    There is no authentication, no account and no database. The server is
+    stateless: the saved city and the personal alert threshold live in the
+    browser's `localStorage` and are never sent to the server except as the
+    `threshold` query parameter.
+
+    The app is not deployed yet, so the server URL below is the local one.
+    See `DEPLOY.md` for the deployment runbook.
+  license:
+    name: MIT
+  contact:
+    name: RainAlert
+    url: https://github.com/lasiurusbat/RainAlert
+
+servers:
+  - url: http://127.0.0.1:5000
+    description: Local development server
+  - url: "{scheme}://{host}"
+    description: Production (not live yet)
+    variables:
+      scheme:
+        default: https
+        enum: [https]
+      host:
+        default: rainalert.live
+
+tags:
+  - name: Forecast
+    description: The page itself and the data it is built from.
+  - name: Discovery
+    description: The files a crawler asks for: the robots file and the sitemap.
+  - name: Alerts
+    description: The notification endpoint the page polls while it is open.
+  - name: Install
+    description: The files that make the app installable.
+
+paths:
+  /:
+    get:
+      tags: [Forecast]
+      summary: The start page.
+      description: |
+        Renders the start page: the search form, the saved city and the
+        reader's own threshold.
+
+        A `GET` that carries a city is not a page but a way in: the reader is
+        sent on to that city's own address with a `301`, and the unit travels
+        with them. The redirect is worked out before the forecast is fetched,
+        so the extra hop asks the server for no more than a header.
+      parameters:
+        - $ref: "#/components/parameters/City"
+        - $ref: "#/components/parameters/Unit"
+      responses:
+        "200":
+          description: The start page.
+          content:
+            text/html:
+              schema:
+                type: string
+                description: The rendered HTML page.
+          headers:
+            Content-Type:
+              schema:
+                type: string
+                const: text/html; charset=utf-8
+        "301":
+          description: The city has an address of its own, and the reader is sent there.
+          headers:
+            Location:
+              description: The city's own address.
+              schema:
+                type: string
+                example: /city/london
+
+    post:
+      tags: [Forecast]
+      summary: The page, with the city taken from the form.
+      description: |
+        Renders the forecast for the city in the form body, with `city` and
+        `unit` read from the form instead of the query string.
+
+        A POST answers `200` even when the city cannot be found: the message
+        is rendered into the page rather than turned into an HTTP error, so
+        the page never has to be parsed for its error state. The page still
+        names the city's own address as its canonical one, so there is only
+        ever one page for a city whichever way it was asked for.
+      requestBody:
+        required: false
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              properties:
+                city:
+                  type: string
+                  description: The city to look up.
+                unit:
+                  $ref: "#/components/parameters/Unit/schema"
+      responses:
+        "200":
+          description: The page — the forecast, or an error message.
+          content:
+            text/html:
+              schema:
+                type: string
+
+  /city/{city_slug}:
+    get:
+      tags: [Forecast]
+      summary: One city's forecast, at that city's own address.
+      description: |
+        The page a search engine indexes, and the one a reader can bookmark
+        and share. The slug is the city's name with the accents folded away
+        and everything that is not a letter or a digit turned into a dash.
+
+        An address that is not the canonical one is a `301` to the canonical
+        one. A city the geocoder does not know is a `404` — a page that says
+        "not found" but answers `200` is a soft 404, and search engines treat
+        it as one. An upstream that is down is a `503`: the page is fine, the
+        moment is not.
+
+        The page carries a `<title>`, a `<meta name="description">` and a
+        `<link rel="canonical">`, so the tab, the search result and the
+        address all say the same thing. Each forecast row carries
+        `data-chance`, the same whole number the row displays; a day the
+        service did not report has no `data-chance` at all.
+      parameters:
+        - name: city_slug
+          in: path
+          required: true
+          description: The city's slug — "london", "new-york", "sao-paulo".
+          schema:
+            type: string
+          example: london
+        - $ref: "#/components/parameters/Unit"
+      responses:
+        "200":
+          description: The forecast.
+          content:
+            text/html:
+              schema:
+                type: string
+        "301":
+          description: The address is not the canonical one.
+          headers:
+            Location:
+              description: The canonical address of the city's page.
+              schema:
+                type: string
+                example: /city/london
+        "404":
+          description: The geocoder answered normally and had no match.
+          content:
+            text/html:
+              schema:
+                type: string
+        "503":
+          description: An upstream service is unreachable or is broken.
+          content:
+            text/html:
+              schema:
+                type: string
+
+  /cities:
+    get:
+      tags: [Forecast]
+      summary: The index of the cities that have a page of their own.
+      description: |
+        The list of the cities the site has a permanent page for, and the
+        front door of the crawlable part of the site.
+
+        The list is short on purpose: the geocoder is rate-limited and every
+        address on it is a forecast the app has to fetch. The start page's
+        search form covers every other city.
+      responses:
+        "200":
+          description: The city index.
+          content:
+            text/html:
+              schema:
+                type: string
+
+  /robots.txt:
+    get:
+      tags: [Discovery]
+      summary: Where the crawlers may go.
+      description: |
+        The alert poll and the calendar export are not pages, and fetching
+        either one costs two upstream requests, so they are kept out of the
+        crawl. The sitemap says where the pages are.
+      responses:
+        "200":
+          description: The robots file.
+          content:
+            text/plain:
+              schema:
+                type: string
+
+  /sitemap.xml:
+    get:
+      tags: [Discovery]
+      summary: The pages of the site, for the crawlers.
+      description: |
+        The start page, the city index and every city's page, with today's
+        date as the last modification — the forecast on every one of those
+        pages changes every day.
+      responses:
+        "200":
+          description: The sitemap.
+          content:
+            application/xml:
+              schema:
+                type: string
+
+  /api/alert:
+    get:
+      tags: [Alerts]
+      summary: The one thing worth interrupting the reader for.
+      description: |
+        Returns at most one event: rain in the current hour, or rain starting
+        within `NOTIFICATION_LEAD_HOURS` (default 2 hours). `event` is `null`
+        when there is nothing to say.
+
+        The decision is made on the server, so the rule lives in one piece of
+        code with offline tests behind it rather than inside a string in the
+        browser script. The browser only asks, shows and remembers.
+
+        The `key` of an event is its identity. The browser keeps the keys it
+        has already shown, so the same rain is never announced twice, and two
+        open tabs do not say it twice. The key is the day for the "right now"
+        event and the hour for the one that is coming.
+
+        The endpoint always fetches a fresh forecast. It is never cached, and
+        the service worker never intercepts it.
+      parameters:
+        - $ref: "#/components/parameters/City"
+        - $ref: "#/components/parameters/Threshold"
+      responses:
+        "200":
+          description: The current state, and an event if there is one.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AlertResponse"
+              examples:
+                noEvent:
+                  summary: Nothing worth saying right now
+                  value:
+                    city: Greater London
+                    now: "08:00"
+                    threshold: 50
+                    personal_threshold: false
+                    lead_hours: 2
+                    poll_minutes: 30
+                    event: null
+                rainComing:
+                  summary: Rain about to start
+                  value:
+                    city: Greater London
+                    now: "08:00"
+                    threshold: 50
+                    personal_threshold: false
+                    lead_hours: 2
+                    poll_minutes: 30
+                    event:
+                      key: "hour:2026-10-21T10:00"
+                      title: Rain likely from 10:00
+                      body: 80% chance of rain in London at 10:00. Bring an umbrella.
+        "400":
+          description: No city was given.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                error: Please enter a city name.
+        "404":
+          description: The geocoder answered normally and had no match.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                error: "City not found. Please try a different name (e.g., 'Paris')."
+        "503":
+          description: An upstream service is unreachable or is broken.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              examples:
+                geocoder:
+                  summary: The geocoder is down
+                  value:
+                    error: The geocoding service is unavailable right now.
+                weather:
+                  summary: The forecast service is down
+                  value:
+                    error: The weather service is unavailable right now.
+
+  /calendar.ics:
+    get:
+      tags: [Alerts]
+      summary: The rainy days as an importable calendar file.
+      description: |
+        An RFC 5545 iCalendar file with one all-day event for every day that
+        reaches the threshold. The events are all-day events because the
+        forecast is a daily maximum: the file says which days are wet, and
+        the reader's own calendar app decides when to remind them about it.
+
+        The event `UID` is derived from the city and the date, so importing
+        the file again updates the same events instead of adding a second
+        copy of every one of them. A day the service did not report is never
+        in the file — an unknown chance is not a chance of anything.
+
+        The file is built on the server, so the rule that decides which days
+        go into it is behind the offline test suite. The browser's part is to
+        say which threshold the reader is using.
+      parameters:
+        - $ref: "#/components/parameters/City"
+        - $ref: "#/components/parameters/Threshold"
+      responses:
+        "200":
+          description: The calendar file.
+          content:
+            text/calendar:
+              schema:
+                type: string
+                description: An iCalendar (RFC 5545) file.
+          headers:
+            Content-Disposition:
+              description: Sends the file as a download.
+              schema:
+                type: string
+                example: 'attachment; filename="rain-alert-london.ics"'
+            Cache-Control:
+              description: The file holds a forecast, so a copy of an old one would be a lie.
+              schema:
+                type: string
+                const: no-store
+        "400":
+          description: No city was given. A plain-text sentence, because there is no page to render.
+          content:
+            text/plain:
+              schema:
+                type: string
+              example: Please enter a city name.
+        "404":
+          description: The geocoder had no match for the city.
+          content:
+            text/plain:
+              schema:
+                type: string
+              example: "City not found. Please try a different name (e.g., 'Paris')."
+        "503":
+          description: An upstream service is unreachable or is broken.
+          content:
+            text/plain:
+              schema:
+                type: string
+              examples:
+                geocoder:
+                  value: The geocoding service is unavailable right now.
+                weather:
+                  value: The weather service is unavailable right now.
+
+  /manifest.json:
+    get:
+      tags: [Install]
+      summary: The web app manifest.
+      description: |
+        Served from the root so that the manifest's scope is the whole site
+        rather than `/static/`. It names the app, points `start_url` and
+        `scope` at `/`, and carries the three icons a browser needs to offer
+        the install: 192 and 512 pixels, plus a maskable 512 for Android.
+      responses:
+        "200":
+          description: The manifest.
+          content:
+            application/manifest+json:
+              schema:
+                type: object
+                properties:
+                  name:
+                    type: string
+                  short_name:
+                    type: string
+                  description:
+                    type: string
+                  lang:
+                    type: string
+                  dir:
+                    type: string
+                  id:
+                    type: string
+                  start_url:
+                    type: string
+                  scope:
+                    type: string
+                  display:
+                    type: string
+                  background_color:
+                    type: string
+                  theme_color:
+                    type: string
+                  categories:
+                    type: array
+                    items:
+                      type: string
+                  icons:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        src:
+                          type: string
+                        sizes:
+                          type: string
+                        type:
+                          type: string
+                        purpose:
+                          type: string
+          headers:
+            Cache-Control:
+              description: A changed manifest has to reach the phone straight away.
+              schema:
+                type: string
+                const: no-cache
+
+  /service-worker.js:
+    get:
+      tags: [Install]
+      summary: The service worker.
+      description: |
+        Served from the root so that it covers the whole site. A worker
+        served from `/static/` would only control `/static/`, and the page at
+        `/` would never be under its control.
+
+        The forecast is never cached: a navigation is network-first and
+        bypasses the browser's own cache, `/api/` is never intercepted,
+        `/calendar.ics` is skipped, and `/` is deliberately absent from the
+        cached shell. The shell is cached, so an installed app opens without a
+        network and shows the offline page instead of the browser's error
+        screen.
+      responses:
+        "200":
+          description: The service worker script.
+          content:
+            application/javascript:
+              schema:
+                type: string
+          headers:
+            Service-Worker-Allowed:
+              description: Widens the worker's scope to the whole site.
+              schema:
+                type: string
+                const: /
+            Cache-Control:
+              description: A worker that is cached is a worker that never updates.
+              schema:
+                type: string
+                const: no-cache
+
+components:
+  parameters:
+    City:
+      name: city
+      in: query
+      required: false
+      description: |
+        The name of the place to look up, resolved to coordinates by
+        Nominatim. Required on `/api/alert` and `/calendar.ics`; on `/` it
+        makes the page a forecast page rather than the start page.
+
+        Leading and trailing whitespace is stripped. The response shows the
+        geocoder's own label for the place, not the string that was sent.
+      schema:
+        type: string
+      example: London
+
+    Threshold:
+      name: threshold
+      in: query
+      required: false
+      description: |
+        The rain chance, in percent, at which the reader wants to be told.
+
+        When absent, empty or not a number, the app's own umbrella threshold
+        (`UMBRELLA_THRESHOLD`, default 50) is used and the response says so
+        with `personal_threshold: false`. Values outside 0-100 are clamped
+        into the range.
+
+        This is the reader's own limit, and it never replaces the app's
+        advice: the ☔ icon, the headline banner and the tab title always use
+        the app's threshold.
+      schema:
+        type: integer
+        minimum: 0
+        maximum: 100
+      example: 40
+
+    Unit:
+      name: unit
+      in: query
+      required: false
+      description: |
+        The temperature scale. The forecast service does the conversion, so
+        the numbers are the service's own. Anything unrecognised falls back to
+        the default rather than failing the page.
+      schema:
+        type: string
+        enum: [celsius, fahrenheit]
+        default: celsius
+
+  schemas:
+    AlertResponse:
+      type: object
+      required: [city, now, threshold, personal_threshold, lead_hours, poll_minutes, event]
+      properties:
+        city:
+          type: string
+          description: The geocoder's label for the place.
+        now:
+          type: [string, "null"]
+          description: The city's local current hour, `HH:00`, or null when the day has no hours left.
+          examples: ["08:00"]
+        threshold:
+          type: integer
+          description: The chance, in percent, that was used to decide the event.
+          minimum: 0
+          maximum: 100
+        personal_threshold:
+          type: boolean
+          description: True when `threshold` is the reader's own, false when it is the app's advice.
+        lead_hours:
+          type: integer
+          description: How far ahead a rain warning is worth sending.
+        poll_minutes:
+          type: integer
+          description: How often the browser should poll.
+        event:
+          oneOf:
+            - $ref: "#/components/schemas/AlertEvent"
+            - type: "null"
+
+    AlertEvent:
+      type: object
+      required: [key, title, body]
+      properties:
+        key:
+          type: string
+          description: |
+            The event's identity. The browser keeps the keys of the events it
+            has already shown, so the same news is never announced twice, and
+            two open tabs do not say it twice.
+
+            `now:<YYYY-MM-DD>` for rain in the current hour,
+            `hour:<YYYY-MM-DD>T<HH>:00` for rain that is coming.
+          examples: ["hour:2026-10-21T10:00"]
+        title:
+          type: string
+          description: The band and the time.
+          examples: ["Rain likely from 10:00"]
+        body:
+          type: string
+          description: |
+            The sentence under the title, naming the chance, the city and the
+            threshold. With the reader's own threshold it ends "Above your
+            40% threshold."; with the app's advice it ends "Bring an
+            umbrella."
+          examples: ["80% chance of rain in London at 10:00. Bring an umbrella."]
+
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+          description: A plain English sentence.

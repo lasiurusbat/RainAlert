@@ -73,3 +73,9 @@ Desktop.ini
 
 # --- Documentation build output ------------------------------------------------
 _site/
+
+# --- Design screenshots --------------------------------------------------------
+# The helpers in tools/ write these into the working directory. The one
+# screenshot that is committed lives in docs/screenshot.png.
+shot-*.png
+crop-*.png

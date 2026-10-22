@@ -6,22 +6,25 @@ renders with English weekday names. The CI workflow itself has run and is
 green on every push to `main`, but the **tag-gated half has never fired** —
 no release has been pushed and no deploy has been requested.
 
-State of the world, checked on 2026-10-21:
+State of the world, checked on 2026-10-22:
 
 - **No release tag exists** (`git tag -l` is empty), so the image has never
   been pushed.
 - **The Docker Hub repository `lasiurusbat/rainalert` exists and is
-  public, but it has zero tags.** `render.yaml` points at
+  public, but it has zero tags** (the API answers
+  `{"count":0,...}`). `render.yaml` points at
   `lasiurusbat/rainalert:0.8`, which does not exist.
 - **A Render service named `rainalert` answers at
   <https://rainalert.onrender.com>, but it is not this app.** Its `/`
-  returns the JSON `{"message": "Rain Alert API is running", "status":
+  returns the JSON `{"message": "Rain Alert API is running 🌂", "status":
   "ok"}`; this app's `/` renders the HTML page. It looks like a minimal
   service that happens to share the name, and it has to be replaced or
   repointed at the real image.
 - **`rainalert.live` is on Namecheap URL forwarding and answers nothing.**
-  The forwarding 302s to `www.rainalert.live`, whose A record is
-  `0.0.0.0`. No Render address is in the DNS.
+  `http://rainalert.live/` answers `302` with `X-Served-By: Namecheap
+  URL Forward` and points at `http://www.rainalert.live/`, whose A record
+  is `0.0.0.0` — so the second hop answers nothing, and `https://` on the
+  root does not answer at all. No Render address is in the DNS.
 
 The order matters: the image has to exist on Docker Hub before Render can
 pull it, and the domain has to be attached before the workflow's smoke test
@@ -34,7 +37,9 @@ pipeline in section 5 is set up, releases are done by pushing a git tag instead
 and these commands are only a fallback.
 
 ```bash
-docker build --platform linux/amd64 -t lasiurusbat/rainalert:0.8 .
+docker build --platform linux/amd64 \
+  --build-arg APP_VERSION=0.8 --build-arg APP_COMMIT=$(git rev-parse --short HEAD) \
+  -t lasiurusbat/rainalert:0.8 .
 docker login
 docker push lasiurusbat/rainalert:0.8
 ```
@@ -44,6 +49,14 @@ rather than `latest`, so it is clear which version is live. If the Docker Hub
 repository is private, add a registry credential in Render (Workspace
 Settings) and reference it under `image:` in `render.yaml` (see the comment
 there).
+
+**The two build args stamp the image.** `APP_VERSION` is the number of the
+release and `APP_COMMIT` is the short commit it was built from; both end
+up in the footer of every page, under the data credits, so the site says
+which build is answering. The CI workflow passes them automatically, and
+the smoke test in section 5 reads the version back off the live page. A
+build with neither says "Version dev", which is the honest answer for a
+working tree.
 
 ## 2. Create the service
 
@@ -63,6 +76,22 @@ removing it needs a redeploy of the service but no new image, because the
 image reads it at start-up. Remove the line, or leave it empty, to hide the
 donation link.
 
+`SITE_URL` (the site's own address, used for the canonical link, the social
+card, the sitemap and the structured data) defaults to
+`https://rainalert.live`. Set it explicitly in `render.yaml` if the service
+is ever served from a different address — a canonical link pointing
+somewhere other than where the site lives is worse than none at all.
+
+Two settings in `render.yaml` are worth knowing about:
+
+- **`autoDeploy: false`.** The service is deployed by the hook, which
+  names the tag it wants. Left on, auto-deploy would redeploy the service
+  with the *stored* image — the fallback tag in the file — as soon as any
+  image was pushed to Docker Hub, which is how an old version comes back.
+- **`healthCheckPath: /`.** The app has no separate health endpoint: its
+  home page is the app's own page, and a `200` from it means the server is
+  up and serving.
+
 ## 3. Attach the domain
 
 1. Service → **Settings → Custom Domains → + Add Custom Domain** →
@@ -72,6 +101,29 @@ donation link.
 3. Click **Verify**. Wait and retry if DNS has not propagated yet.
 4. Render issues the HTTPS certificate automatically and redirects HTTP to HTTPS.
    A brief 502 right after verifying usually means routing is still updating.
+
+### After the domain works
+
+The site is built to be found by search engines, and the pieces of it that
+need the live domain are the absolute addresses in the page head and in
+`sitemap.xml`. Once `https://rainalert.live` answers with the app's own
+page:
+
+- Check `https://rainalert.live/robots.txt` and
+  `https://rainalert.live/sitemap.xml` in a browser. The sitemap should
+  list the start page, `/cities` and one `/city/<slug>` for each of the 92
+  curated cities.
+- Open `https://rainalert.live/city/london` and look at the page source: the
+  canonical link, the Open Graph image and the JSON-LD should all point at
+  `https://rainalert.live`. If they point at a different host, `SITE_URL` is
+  wrong and needs a redeploy.
+- Submit `https://rainalert.live/sitemap.xml` in
+  [Google Search Console](https://search.google.com/search-console) and in
+  [Bing Webmaster Tools](https://www.bing.com/webmasters). Both are free
+  and both want the sitemap, not a verification tag in the markup.
+- Confirm that `https://rainalert.live/city/atlantis` answers `404` and not
+  `200`. A page that says "not found" but answers `200` is a soft 404, and
+  search engines treat it as one.
 
 ## 4. Optional
 
@@ -83,7 +135,9 @@ donation link.
 
 ## 5. CI/CD pipeline (GitHub Actions)
 
-The workflow is `.github/workflows/ci-cd.yml`. It has not been run yet.
+The workflow is `.github/workflows/ci-cd.yml`. The build-and-test half runs
+on every push to `main` and is green; only the tag-gated half — the push and
+the deploy — has never fired.
 
 ```
 pull request / push to main          push of a tag such as v0.9
@@ -96,7 +150,8 @@ pull request / push to main          push of a tag such as v0.9
                                                 |
                                         Render deploy hook with that tag
                                                 |
-                                        smoke test https://rainalert.live/
+                                        smoke test: does the live page
+                                        carry "Version 0.9"?
 ```
 
 ### Design decisions
@@ -120,6 +175,10 @@ pull request / push to main          push of a tag such as v0.9
   deploy hook with an `imgURL` parameter, which Render's docs describe for
   choosing a tag. Everything except the tag must match the service's default
   image URL (`docker.io/lasiurusbat/rainalert`).
+- **The build is stamped with its version and commit.** The workflow passes
+  `APP_VERSION` and `APP_COMMIT` as build args, and the footer of every
+  page carries them. The smoke test then reads the version back off the
+  live page, so it can tell "the site is up" from "the new build is up".
 - **Pull requests never push or deploy.** Secrets are only used on tag runs.
 
 ### One-time setup
@@ -175,12 +234,14 @@ setup is `v0.8`, to match `render.yaml`, which pins `0.8`.
   stored default image, so after a release also update the tag in
   `render.yaml` and the service settings so a later manual redeploy or
   restart does not bring back an older version.
-- **The smoke test is shallow.** It confirms `https://rainalert.live/`
-  answers, not that the new version is the one answering, because the app
-  does not expose its version. If that matters, add a `/healthz` route that
-  returns the version.
+- **The smoke test reads the version, not just the page.** The footer of
+  every page carries the version of the build that answered it, so the
+  smoke test greps for `Version <tag>` and can tell "the site is up" from
+  "the new build is up". It is still a check of one page from outside —
+  it does not exercise a forecast, and it cannot see which upstream data
+  the page was rendered from.
 - **The test counts drift.** The count appears in **four** documents —
   `CLAUDE.md`, `README.md`, `DEPLOY.md` and `implementation-plan.md` — and
   they are updated together, but a test added without updating all four
-  leaves them disagreeing. The suite has 278 offline tests, 50 browser
+  leaves them disagreeing. The suite has 348 offline tests, 75 browser
   tests and 7 live integration tests.

@@ -5,6 +5,7 @@ never touches Nominatim or Open-Meteo.
 """
 
 import json
+import os
 import re
 import unittest
 from datetime import date
@@ -128,7 +129,7 @@ class TestHappyPath(AppTestCase):
         """
         for header in ("de-DE,de;q=0.9,en;q=0.8", "nl-NL,nl;q=0.9", "fr-FR"):
             response = self.client.get(
-                "/?city=London", headers={"Accept-Language": header})
+                "/city/london", headers={"Accept-Language": header})
             body = response.get_data(as_text=True)
             self.assertIn("Wednesday 21.10.2026", body)
             self.assertNotIn("Mittwoch", body)
@@ -393,7 +394,7 @@ class TestRainChanceLabel(AppTestCase):
     def _rows(self, body):
         """The visible chance of each row, in order."""
         return re.findall(
-            r'<span aria-hidden="true">([^<]*)</span>', body)
+            r'<span class="chance" aria-hidden="true">([^<]*)</span>', body)
 
     def test_the_phrase_is_said_once(self):
         """The column heading carries the wording, not the rows."""
@@ -438,8 +439,8 @@ class TestRainChanceLabel(AppTestCase):
     def test_an_unknown_chance_is_not_shown_as_zero(self):
         """A missing value must never read as a dry day."""
         body = self._body_for([None])
-        self.assertIn('<span aria-hidden="true">unknown</span>', body)
-        self.assertNotIn('<span aria-hidden="true">0%</span>', body)
+        self.assertIn('<span class="chance" aria-hidden="true">unknown</span>', body)
+        self.assertNotIn('<span class="chance" aria-hidden="true">0%</span>', body)
 
     def test_the_hourly_table_cell_is_the_number_alone(self):
         """The table has a real column heading, so the cell can be short."""
@@ -482,8 +483,8 @@ class TestHourlyStrip(AppTestCase):
 
     def test_the_strip_does_not_break_the_daily_values(self):
         body = self._body_for([0] * 24)
-        self.assertIn('<span aria-hidden="true">100%</span>', body)
-        self.assertIn('<span aria-hidden="true">86%</span>', body)
+        self.assertIn('<span class="chance" aria-hidden="true">100%</span>', body)
+        self.assertIn('<span class="chance" aria-hidden="true">86%</span>', body)
 
     def test_the_current_hour_is_marked(self):
         body = self._body_for([0] * 24, now="2026-10-21T09:00")
@@ -551,7 +552,7 @@ class TestHourlyStrip(AppTestCase):
         body = self.client.post("/", data={"city": "London"}).get_data(as_text=True)
         self.assertNotIn("hourly-strip", body)
         self.assertIn("Wednesday 21.10.2026", body)
-        self.assertIn('<span aria-hidden="true">100%</span>', body)
+        self.assertIn('<span class="chance" aria-hidden="true">100%</span>', body)
 
     def test_a_null_hour_is_not_treated_as_zero(self):
         """A missing value gets its own marker, not an empty bar."""
@@ -827,7 +828,7 @@ class TestForecastHeadline(AppTestCase):
         # current time is 09:00 with a dry day ahead, so the banner names
         # tomorrow - the same 86% the row for tomorrow carries.
         self.assertIn("Rain likely tomorrow (86%)", body)
-        self.assertIn('<span aria-hidden="true">86%</span>', body)
+        self.assertIn('<span class="chance" aria-hidden="true">86%</span>', body)
 
     def test_the_band_is_in_the_sentence_not_only_in_the_colour(self):
         """Severity never rests on the colour alone."""
@@ -884,7 +885,15 @@ class TestTabAlert(AppTestCase):
 
     def test_the_title_names_the_day(self):
         alert = self._alert([0, 80, 0, 0, 0, 0, 0])
-        self.assertEqual(alert["title"], "Rain tomorrow - Rain Alert")
+        self.assertEqual(rainalert.page_title(None, alert),
+                         "Rain tomorrow - Rain Alert")
+
+    def test_the_title_names_the_city_as_well(self):
+        """A title that says only "Rain tomorrow" says nothing about which
+        city the page is about."""
+        alert = self._alert([0, 80, 0, 0, 0, 0, 0])
+        self.assertEqual(rainalert.page_title("London", alert),
+                         "Rain tomorrow in London - Rain Alert")
 
     def test_a_dry_week_does_not_alert(self):
         self.assertIsNone(self._alert([0, 5, 10, 0, 0, 0, 0]))
@@ -939,7 +948,7 @@ class TestTabAlert(AppTestCase):
 
     def test_the_title_carries_the_alert(self):
         body = self._body_with(FORECAST_PAYLOAD)
-        self.assertIn("<title>Rain tomorrow - Rain Alert</title>", body)
+        self.assertIn("<title>Rain tomorrow in London - Rain Alert</title>", body)
 
     def test_the_favicon_carries_the_alert(self):
         body = self._body_with(FORECAST_PAYLOAD)
@@ -961,25 +970,25 @@ class TestTabAlert(AppTestCase):
             "utc_offset_seconds": 3600,
         }
         body = self._body_with(payload)
-        self.assertIn("<title>Rain Alert</title>", body)
+        self.assertIn("<title>7-day rain chance for London - Rain Alert</title>", body)
         self.assertIn("favicon.svg", body)
         self.assertNotIn("favicon-rain.svg", body)
 
     def test_an_empty_page_keeps_the_plain_title(self):
         body = self.client.get("/").get_data(as_text=True)
-        self.assertIn("<title>Rain Alert</title>", body)
+        self.assertIn("<title>Rain Alert - 7-day rain chance for any city</title>", body)
 
     def test_an_error_page_keeps_the_plain_title(self):
         self.mock_geocode.return_value = None
         body = self.client.post("/", data={"city": "Nowhereville"}).get_data(as_text=True)
         self.assertIn('class="error"', body)
-        self.assertIn("<title>Rain Alert</title>", body)
+        self.assertIn("<title>7-day rain chance for Nowhereville - Rain Alert</title>", body)
         self.assertNotIn("favicon-rain.svg", body)
 
     def test_the_title_agrees_with_the_banner(self):
         """The tab and the banner are the same alert, so they cannot disagree."""
         body = self._body_with(FORECAST_PAYLOAD)
-        self.assertIn("<title>Rain tomorrow - Rain Alert</title>", body)
+        self.assertIn("<title>Rain tomorrow in London - Rain Alert</title>", body)
         self.assertIn("Rain likely tomorrow (86%)", body)
 
 
@@ -1164,13 +1173,15 @@ class TestTemperatureUnit(AppTestCase):
         self.assertIn("city=London", body)
 
     def test_a_get_with_a_city_and_a_unit_returns_that_forecast(self):
-        body = self.client.get("/?city=London&unit=fahrenheit").get_data(as_text=True)
+        body = self.client.get("/?city=London&unit=fahrenheit",
+                                follow_redirects=True).get_data(as_text=True)
         _, kwargs = self.mock_get.call_args
         self.assertEqual(kwargs["params"]["temperature_unit"], "fahrenheit")
-        self.assertIn("Forecast for London", body)
+        self.assertIn("7-day rain chance for London", body)
 
     def test_the_active_unit_is_marked(self):
-        body = self.client.get("/?city=London&unit=fahrenheit").get_data(as_text=True)
+        body = self.client.get("/?city=London&unit=fahrenheit",
+                                follow_redirects=True).get_data(as_text=True)
         # The Fahrenheit link is the active one, and the Celsius one is not.
         switch = body[body.index("unit-switch"):body.index("weather-list")]
         anchors = [part.split(">", 1)[0] for part in switch.split("<a ")[1:]]
@@ -1181,12 +1192,13 @@ class TestTemperatureUnit(AppTestCase):
         self.assertNotIn("is-active", by_unit["celsius"])
 
     def test_the_active_unit_is_marked_for_screen_readers(self):
-        body = self.client.get("/?city=London&unit=fahrenheit").get_data(as_text=True)
+        body = self.client.get("/?city=London&unit=fahrenheit",
+                                follow_redirects=True).get_data(as_text=True)
         self.assertIn('aria-current="true"', body)
 
     def test_an_unknown_unit_falls_back_to_the_default(self):
         """A stray query parameter must not break the page."""
-        self.client.get("/?city=London&unit=kelvin")
+        self.client.get("/?city=London&unit=kelvin", follow_redirects=True)
         _, kwargs = self.mock_get.call_args
         self.assertEqual(kwargs["params"]["temperature_unit"], "celsius")
 
@@ -1208,7 +1220,8 @@ class TestTemperatureUnit(AppTestCase):
 
     def test_the_unit_survives_a_new_search(self):
         """Searching another city keeps the scale the reader chose."""
-        body = self.client.get("/?city=London&unit=fahrenheit").get_data(as_text=True)
+        body = self.client.get("/?city=London&unit=fahrenheit",
+                                follow_redirects=True).get_data(as_text=True)
         self.assertIn('name="unit" value="fahrenheit"', body)
 
 
@@ -1275,7 +1288,7 @@ class TestDonationLink(AppTestCase):
         self.assertIn("help keep Rain Alert free", body)
         # The line sits between the button and the forecast, and before the
         # footer link.
-        self.assertLess(body.index("Check Rain Chance"), body.index('class="donate"'))
+        self.assertLess(body.index(">Search</button>"), body.index('class="donate"'))
         self.assertLess(body.index('class="donate"'), body.index("weather-list"))
         self.assertLess(body.index('class="donate"'), body.index("<footer"))
 
@@ -1316,6 +1329,63 @@ class TestDonationLink(AppTestCase):
         self.assertEqual(rainalert.clean_donation_url("javascript:alert(1)"), "")
         with mock.patch.object(rainalert, "DONATION_URL", ""):
             self.assertNotIn("javascript:", self.post())
+
+
+class TestBuildInfo(AppTestCase):
+    """Which build is answering, said in the footer.
+
+    The version and the commit come from the environment, and the release
+    build sets them. A development run says "dev" and names no commit,
+    because a working tree is not a commit.
+    """
+
+    def footer(self, body):
+        """The footer's own text, without the rest of the page."""
+        start = body.index("<footer")
+        return body[start:body.index("</footer>")]
+
+    def test_the_version_is_in_the_footer(self):
+        with mock.patch.object(rainalert, "APP_VERSION", "0.8"):
+            body = self.client.get("/").get_data(as_text=True)
+        self.assertIn("Version 0.8", self.footer(body))
+
+    def test_the_commit_is_in_the_footer_when_there_is_one(self):
+        with mock.patch.object(rainalert, "APP_VERSION", "0.8"), \
+                mock.patch.object(rainalert, "APP_COMMIT", "1a2b3c4"):
+            body = self.client.get("/").get_data(as_text=True)
+        self.assertIn("Version 0.8 · build 1a2b3c4", self.footer(body))
+
+    def test_no_commit_means_no_build_note(self):
+        with mock.patch.object(rainalert, "APP_VERSION", "0.8"), \
+                mock.patch.object(rainalert, "APP_COMMIT", ""):
+            body = self.client.get("/").get_data(as_text=True)
+        self.assertIn("Version 0.8", self.footer(body))
+        # The word "build" is only in the markup's class name, so it is the
+        # separator that marks the build note that has to be absent.
+        self.assertNotIn("· build", self.footer(body))
+
+    def test_a_development_build_says_so(self):
+        with mock.patch.object(rainalert, "APP_VERSION", "dev"), \
+                mock.patch.object(rainalert, "APP_COMMIT", ""):
+            body = self.client.get("/").get_data(as_text=True)
+        self.assertIn("Version dev", self.footer(body))
+
+    def test_the_version_is_on_every_page(self):
+        """The forecast page, the city index and the 404 all carry it."""
+        with mock.patch.object(rainalert, "APP_VERSION", "0.8"), \
+                mock.patch.object(rainalert, "APP_COMMIT", "1a2b3c4"):
+            forecast = self.client.post(
+                "/", data={"city": "London"}).get_data(as_text=True)
+            cities = self.client.get("/cities").get_data(as_text=True)
+            missing = self.client.get("/city/nowhereville").get_data(as_text=True)
+        for body in (forecast, cities, missing):
+            self.assertIn("Version 0.8 · build 1a2b3c4", self.footer(body))
+
+    def test_the_version_is_below_the_credits(self):
+        """It sits under the data credits, where the eye goes last."""
+        with mock.patch.object(rainalert, "APP_VERSION", "0.8"):
+            body = self.client.get("/").get_data(as_text=True)
+        self.assertLess(body.index("OpenStreetMap"), body.index("Version 0.8"))
 
 
 class TestBrowserPreferences(AppTestCase):
@@ -1883,7 +1953,7 @@ class TestCalendarExport(AppTestCase):
         """
         chances = [100, 86, 40, 15]
         self.mock_get.return_value = FakeResponse(payload=self.payload(chances))
-        page = self.client.get("/?city=London").get_data(as_text=True)
+        page = self.client.get("/city/london").get_data(as_text=True)
         text = self.readable(chances=chances)
 
         # The app's own threshold is 50, so the first two days are the wet
@@ -1981,6 +2051,14 @@ class TestCalendarLink(AppTestCase):
         body = self.body_with_forecast()
         head = body[body.index("result-head"):body.index("severity-legend")]
         self.assertIn('id="calendar-export"', head)
+
+    def test_the_link_is_on_the_same_line_as_the_caption(self):
+        """The link and "7-day rain chance" are one line, not two rows."""
+        body = self.body_with_forecast()
+        subline = body[body.index("result-subline"):]
+        subline = subline[:subline.index("</div>")]
+        self.assertIn("7-day rain chance", subline)
+        self.assertIn('id="calendar-export"', subline)
 
     def test_the_link_is_hidden_when_nothing_would_be_exported(self):
         """A link that would download an empty calendar is not an offer."""
@@ -2208,6 +2286,649 @@ class TestInstallableApp(AppTestCase):
     def test_the_manifest_is_on_an_error_page_too(self):
         body = self.client.post("/", data={"city": ""}).get_data(as_text=True)
         self.assertIn('rel="manifest" href="/manifest.json"', body)
+
+
+class TestSearchEngineOptimisation(AppTestCase):
+    """The parts of the site a search engine reads.
+
+    A search engine finds a page by its address, reads the title and the
+    description off it, and follows the canonical link when the same page
+    answers to more than one address. Every one of those is decided in one
+    place in ``app.py``, so they cannot drift apart, and the tests here
+    are what holds them to it.
+    """
+
+    def body(self, path):
+        return self.client.get(path).get_data(as_text=True)
+
+    # -- the address of a page -------------------------------------------------
+
+    def test_a_city_has_an_address_of_its_own(self):
+        """The query string is the way in, not the address."""
+        response = self.client.get("/?city=London")
+        self.assertEqual(response.status_code, 301)
+        self.assertEqual(response.headers["Location"], "/city/london")
+
+    def test_the_redirect_keeps_the_unit(self):
+        response = self.client.get("/?city=London&unit=fahrenheit")
+        self.assertEqual(response.status_code, 301)
+        self.assertEqual(response.headers["Location"],
+                         "/city/london?unit=fahrenheit")
+
+    def test_an_address_that_is_not_the_canonical_one_is_redirected(self):
+        """"/city/London" and "/city/london" are one page, not two."""
+        response = self.client.get("/city/London")
+        self.assertEqual(response.status_code, 301)
+        self.assertEqual(response.headers["Location"], "/city/london")
+
+    def test_the_page_claims_its_own_address(self):
+        body = self.body("/city/london")
+        self.assertIn(
+            '<link rel="canonical" href="https://rainalert.live/city/london">',
+            body)
+
+    def test_the_start_page_claims_the_start_page(self):
+        body = self.body("/")
+        self.assertIn(
+            '<link rel="canonical" href="https://rainalert.live/">', body)
+
+    # -- a page that is not there says so --------------------------------------
+
+    def test_an_unknown_city_is_a_404(self):
+        """A page that says "not found" but answers 200 is a soft 404, and
+        search engines treat it as one."""
+        self.mock_geocode.return_value = None
+        response = self.client.get("/city/nowhereville")
+        self.assertEqual(response.status_code, 404)
+        self.assertIn("City not found", response.get_data(as_text=True))
+
+    def test_an_upstream_that_is_down_is_a_503(self):
+        """The page is fine, the moment is not."""
+        self.mock_get.side_effect = requests.ConnectionError("down")
+        response = self.client.get("/city/london")
+        self.assertEqual(response.status_code, 503)
+
+    def test_an_unknown_address_is_a_404_page(self):
+        response = self.client.get("/no-such-page")
+        self.assertEqual(response.status_code, 404)
+        body = response.get_data(as_text=True)
+        self.assertIn("There is no page at this address.", body)
+        self.assertIn('<meta name="robots" content="noindex, follow">', body)
+
+    def test_a_page_with_an_error_is_not_to_be_indexed(self):
+        self.mock_geocode.return_value = None
+        body = self.body("/city/nowhereville")
+        self.assertIn('<meta name="robots" content="noindex, follow">', body)
+
+    # -- the files a crawler asks for ------------------------------------------
+
+    def test_the_robots_file_points_at_the_sitemap(self):
+        response = self.client.get("/robots.txt")
+        self.assertEqual(response.status_code, 200)
+        body = response.get_data(as_text=True)
+        self.assertIn("Sitemap: https://rainalert.live/sitemap.xml", body)
+        # The alert poll and the calendar export are not pages.
+        self.assertIn("Disallow: /api/", body)
+        self.assertIn("Disallow: /calendar.ics", body)
+
+    def test_the_sitemap_names_the_pages(self):
+        response = self.client.get("/sitemap.xml")
+        self.assertEqual(response.status_code, 200)
+        body = response.get_data(as_text=True)
+        self.assertIn("<loc>https://rainalert.live/</loc>", body)
+        self.assertIn("<loc>https://rainalert.live/cities</loc>", body)
+        self.assertIn("<loc>https://rainalert.live/city/london</loc>", body)
+
+    def test_the_sitemap_names_every_curated_city(self):
+        body = self.body("/sitemap.xml")
+        for slug, _name in rainalert.CURATED_CITIES:
+            self.assertIn(f"<loc>https://rainalert.live/city/{slug}</loc>",
+                          body)
+
+    def test_the_endpoints_that_are_not_pages_are_kept_out_of_the_results(self):
+        for path in ("/api/alert?city=London", "/calendar.ics?city=London"):
+            response = self.client.get(path)
+            self.assertIn("noindex", response.headers.get("X-Robots-Tag", ""),
+                          path)
+
+    # -- what a search result shows -------------------------------------------
+
+    def test_every_page_says_what_it_is(self):
+        """A title, a description and a social card on every page."""
+        for path in ("/", "/cities", "/city/london"):
+            body = self.body(path)
+            self.assertIn('<meta name="description" content="', body, path)
+            self.assertIn('<link rel="canonical" href="https://rainalert.live',
+                          body, path)
+            self.assertIn('<meta property="og:title" content="', body, path)
+            self.assertIn('<meta property="og:image" content="https://'
+                          'rainalert.live/static/og-image.png">', body, path)
+            self.assertIn('<meta name="twitter:card" content="summary_large_image">',
+                          body, path)
+
+    def test_the_title_names_the_city(self):
+        body = self.body("/city/london")
+        title = re.search(r"<title>(.*?)</title>", body).group(1)
+        self.assertIn("London", title)
+        self.assertTrue(title.endswith("- Rain Alert"), title)
+
+    def test_the_description_says_the_same_thing_as_the_page(self):
+        body = self.body("/city/london")
+        description = re.search(
+            r'<meta name="description" content="([^"]*)"', body).group(1)
+        self.assertIn("chance of rain in London", description)
+
+    def test_the_page_describes_itself_in_machine_readable_form(self):
+        """The structured data has to be JSON, and it has to be about this
+        site."""
+        body = self.body("/city/london")
+        raw = re.search(
+            r'<script type="application/ld\+json">(.*?)</script>',
+            body, re.S).group(1)
+        data = json.loads(raw)
+        self.assertEqual(data["@context"], "https://schema.org")
+        types = [node["@type"] for node in data["@graph"]]
+        self.assertIn("WebSite", types)
+        self.assertIn("WebApplication", types)
+        # On a city's page the week itself is described, day by day.
+        self.assertIn("ItemList", types)
+
+    # -- the shape of the page -------------------------------------------------
+
+    def test_the_headings_are_in_order(self):
+        """A page that skips a level is harder to read, and a screen reader
+        uses the levels to build a table of contents."""
+        body = self.body("/city/london")
+        levels = [int(level) for level in
+                  re.findall(r"<h([1-6])[ >]", body)]
+        self.assertTrue(levels)
+        self.assertEqual(levels[0], 1)
+        for before, after in zip(levels, levels[1:]):
+            self.assertLessEqual(after, before + 1,
+                                 f"h{before} is followed by h{after}")
+
+    def test_the_days_are_a_list(self):
+        """The week, in order, marked up as a list."""
+        body = self.body("/city/london")
+        self.assertIn('<ol class="weather-list">', body)
+        self.assertEqual(body.count('<li class="weather-item'),
+                         len(FORECAST_PAYLOAD["daily"]["time"]))
+
+
+class TestApiDocumentation(unittest.TestCase):
+    """The API reference has to describe the app that is actually there.
+
+    ``API.md`` and ``openapi.yaml`` are written by hand, so they drift the
+    moment a route, a parameter or a threshold changes. These tests are what
+    stops them from drifting silently: a new route that nobody documented
+    fails the suite, and so does a documented route that no longer exists.
+    """
+
+    # The routes the documentation talks about. The static route is left out
+    # on purpose: it is Flask's own handler, and it is described in the
+    # reference as a path rather than as a route of its own.
+    DOCUMENTED_ROUTES = ("/", "/api/alert", "/calendar.ics",
+                         "/manifest.json", "/service-worker.js")
+
+    def read(self, name):
+        path = os.path.join(os.path.dirname(os.path.abspath(__file__)), name)
+        with open(path, encoding="utf-8") as handle:
+            return handle.read()
+
+    def app_routes(self):
+        """The routes the app actually serves.
+
+        They are written the way the documents write them, so that a
+        Flask rule and a spec path can be compared: ``/city/<path:slug>``
+        is ``/city/{slug}`` in both.
+        """
+        routes = set()
+        for rule in rainalert.app.url_map.iter_rules():
+            if rule.rule.startswith("/static/"):
+                continue
+            routes.add(re.sub(r"<(?:[^:<>]+:)?([^<>]+)>", r"{\1}", rule.rule))
+        return routes
+
+    def spec_paths(self):
+        """The paths the OpenAPI spec documents.
+
+        The spec is read as text rather than parsed, because the runtime
+        has five dependencies and a YAML parser is not one of them. The
+        path keys are the only lines in the ``paths`` block that sit two
+        spaces in and end in a colon.
+        """
+        text = self.read("openapi.yaml")
+        start = text.index("\npaths:\n")
+        end = text.index("\ncomponents:\n", start)
+        block = text[start:end]
+        return set(re.findall(r"^  (/\S*):$", block, re.MULTILINE))
+
+    def test_every_route_is_in_the_reference(self):
+        """A route nobody documented is a route nobody can use."""
+        reference = self.read("API.md")
+        for route in self.app_routes():
+            self.assertIn(route, reference, route)
+
+    def test_every_route_is_in_the_spec(self):
+        """The spec is what a tool reads, so it has to cover the routes."""
+        paths = self.spec_paths()
+        for route in self.app_routes():
+            self.assertIn(route, paths, route)
+
+    def test_the_spec_documents_no_route_that_is_gone(self):
+        """A route in the spec that the app does not serve is a lie."""
+        routes = self.app_routes()
+        for path in self.spec_paths():
+            self.assertIn(path, routes, path)
+
+    def test_the_spec_says_it_is_openapi(self):
+        """A spec that is not OpenAPI cannot be loaded by a tool."""
+        self.assertIn("openapi: 3.1.0", self.read("openapi.yaml"))
+
+    def test_the_documented_defaults_are_the_real_ones(self):
+        """The reference quotes the defaults, so they have to be the ones
+        the app actually uses."""
+        reference = self.read("API.md")
+        self.assertIn(f"`UMBRELLA_THRESHOLD` | `{rainalert.UMBRELLA_THRESHOLD}`",
+                      reference)
+        self.assertIn(f"`NOTIFICATION_POLL_MINUTES` | "
+                      f"`{rainalert.NOTIFICATION_POLL_MINUTES}`", reference)
+        self.assertIn(f"`NOTIFICATION_LEAD_HOURS` | "
+                      f"`{rainalert.NOTIFICATION_LEAD_HOURS}`", reference)
+        self.assertIn(f"`SEVERITY_LOW_MAX` | `{rainalert.SEVERITY_LOW_MAX}`",
+                      reference)
+        self.assertIn(f"`SEVERITY_MODERATE_MAX` | "
+                      f"`{rainalert.SEVERITY_MODERATE_MAX}`", reference)
+
+    def test_the_documented_thresholds_are_the_real_ones(self):
+        """The reference states the bands in words, and so does the app.
+
+        The reference is read with its line breaks flattened, because the
+        numbers are wrapped onto the next line in the Markdown and a test
+        that depended on where the wrap fell would be a nuisance.
+        """
+        reference = " ".join(self.read("API.md").split())
+        self.assertIn(f"default **{rainalert.UMBRELLA_THRESHOLD}**", reference)
+        self.assertIn(f"default **{rainalert.NOTIFICATION_POLL_MINUTES}**",
+                      reference)
+        self.assertIn(f"default **{rainalert.NOTIFICATION_LEAD_HOURS}**",
+                      reference)
+
+
+class TestNightStreetDesign(AppTestCase):
+    """The night street layout: what the markup has to carry.
+
+    The design moved the answer to the top, the week to seven columns of
+    figures, and the type to a self-hosted face. These are the things the
+    page has to keep doing, whatever the styling looks like.
+    """
+
+    def forecast_page(self):
+        return self.client.post("/", data={"city": "London"}).get_data(as_text=True)
+
+    def test_the_top_bar_carries_the_mark_and_the_name(self):
+        body = self.forecast_page()
+        self.assertIn('class="brand"', body)
+        self.assertIn('class="brand-mark"', body)
+        self.assertIn('class="brand-name"', body)
+        self.assertLess(body.index('class="topbar"'),
+                        body.index('class="result"'))
+
+    def test_there_is_exactly_one_search_form(self):
+        """The search sits in the top bar on a forecast page and under
+        the name on the start page, but never both."""
+        for body in (self.forecast_page(),
+                     self.client.get("/").get_data(as_text=True)):
+            self.assertEqual(body.count("<form"), 1, body.count("<form"))
+
+    def test_the_search_is_in_the_top_bar_on_a_forecast_page(self):
+        body = self.forecast_page()
+        self.assertIn('class="search search-compact"', body)
+        topbar = body[body.index('class="topbar"'):body.index('class="result"')]
+        self.assertIn('class="search search-compact"', topbar)
+
+    def test_the_start_page_search_is_under_the_name(self):
+        body = self.client.get("/").get_data(as_text=True)
+        self.assertIn('class="search search-wide"', body)
+        self.assertLess(body.index('class="intro"'),
+                        body.index('class="search search-wide"'))
+
+    def test_the_heading_is_the_city_name(self):
+        """The answer is at the top of the page, so the city is the
+        heading."""
+        body = self.forecast_page()
+        self.assertIn('<h1 class="city-name">London</h1>', body)
+
+    def test_the_caption_says_what_the_page_is(self):
+        body = self.forecast_page()
+        self.assertIn("7-day rain chance", body)
+
+    def test_the_week_is_a_list_of_days(self):
+        """Seven columns of figures, but still a list in the markup."""
+        body = self.forecast_page()
+        self.assertIn('<ol class="weather-list">', body)
+        self.assertEqual(body.count('<li class="weather-item'), 3)
+
+    def test_the_value_row_carries_the_bare_numbers(self):
+        """Twenty-four numbers have to fit across the panel, so the
+        percent sign is left off them."""
+        body = self.forecast_page()
+        self.assertEqual(body.count('<span class="hour-value">'), 24)
+        values = re.findall(r'<span class="hour-value">([^<]*)', body)
+        self.assertEqual(len(values), 24)
+        for value in values:
+            self.assertTrue(value.isdigit() or value == "?", value)
+
+    def test_the_value_row_has_no_percent_sign(self):
+        body = self.forecast_page()
+        row = body[body.index('class="hourly-values"'):]
+        row = row[:row.index("</div>")]
+        self.assertNotIn("%", row)
+
+    def test_the_now_label_sits_in_the_value_row(self):
+        """It labels the rule, so it belongs with the column it is over."""
+        body = self.forecast_page()
+        self.assertIn('<span class="now-label">now 09:00</span>', body)
+        row = body[body.index('class="hourly-values"'):]
+        row = row[:row.index("</div>")]
+        self.assertIn('class="now-label"', row)
+
+    def test_the_calendar_icon_is_drawn_not_borrowed(self):
+        """A blue calendar in a night panel reads as a rain colour."""
+        body = self.forecast_page()
+        self.assertIn('class="calendar-icon"', body)
+        self.assertNotIn("\U0001F4C5", body)
+
+    def test_the_bell_is_drawn_not_borrowed(self):
+        body = self.forecast_page()
+        self.assertIn('class="notify-icon"', body)
+        self.assertNotIn("\U0001F514", body)
+
+    def test_the_umbrella_is_the_text_glyph(self):
+        """The pictograph, not the colour emoji."""
+        body = self.forecast_page()
+        self.assertIn("☔&#xFE0E;", body)
+        self.assertIn('class="umbrella"', body)
+
+    def test_the_page_is_a_night(self):
+        body = self.forecast_page()
+        self.assertIn('<meta name="theme-color" content="#0d1216">', body)
+
+    def test_the_type_is_self_hosted(self):
+        """No third party is asked for a font."""
+        body = self.forecast_page()
+        self.assertIn("fonts/archivo-latin.woff2", body)
+        self.assertNotIn("fonts.googleapis.com", body)
+        self.assertNotIn("fonts.gstatic.com", body)
+
+    def test_the_legend_still_names_the_bands(self):
+        """The band name is in the legend, so the colour never carries
+        the meaning on its own."""
+        body = self.forecast_page()
+        legend = body[body.index('class="severity-legend"'):]
+        legend = legend[:legend.index("</div>")]
+        for name in ("Rain unlikely", "Rain possible", "Rain likely"):
+            self.assertIn(name, legend)
+
+    def test_the_legend_still_heads_the_chance_column(self):
+        body = self.forecast_page()
+        legend = body[body.index('class="severity-legend"'):]
+        legend = legend[:legend.index("</div>")]
+        self.assertIn('<span class="column-head">Rain chance</span>', legend)
+
+    def test_the_hourly_title_is_a_second_level_heading(self):
+        """h1 is the city, so the strip's title is an h2."""
+        body = self.forecast_page()
+        self.assertIn('<h2 class="hourly-title">', body)
+        self.assertLess(body.index('<h1 class="city-name"'),
+                        body.index('<h2 class="hourly-title"'))
+
+
+class TestDayPanel(AppTestCase):
+    """The panel above the week: the detail of the day that is picked.
+
+    The week is seven columns and a column can be picked, so the panel
+    above it has to say what that day is about: the day, the band it is
+    in, the chance, and how much rain falls in it and for how long. The
+    chance in the panel is the chance in the column, so the two can never
+    disagree.
+    """
+
+    def page_for(self, chances, amounts=None, hours=None):
+        payload = {
+            "daily": {
+                "time": [f"2026-10-{21 + i:02d}" for i in range(len(chances))],
+                "precipitation_probability_max": chances,
+                "temperature_2m_max": [14.0] * len(chances),
+                "temperature_2m_min": [8.0] * len(chances),
+            },
+            "hourly": {
+                "time": [f"2026-10-21T{hour:02d}:00" for hour in range(24)],
+                "precipitation_probability": [0] * 24,
+            },
+            "current": {"time": "2026-10-21T09:00"},
+            "utc_offset_seconds": 3600,
+        }
+        if amounts is not None:
+            payload["daily"]["precipitation_sum"] = amounts
+        if hours is not None:
+            payload["daily"]["precipitation_hours"] = hours
+        self.mock_get.return_value = FakeResponse(payload)
+        return self.client.post("/", data={"city": "London"}).get_data(as_text=True)
+
+    def panels(self, body):
+        """The markup of every day panel, in the order they appear."""
+        return re.findall(r'<div class="day-panel.*?</div>', body, re.S)
+
+    def test_the_panel_sits_above_the_week(self):
+        body = self.page_for([100, 86, 40])
+        self.assertLess(body.index('class="day-detail"'),
+                        body.index('<ol class="weather-list">'))
+
+    def test_every_day_has_a_panel(self):
+        body = self.page_for([100, 86, 40])
+        self.assertEqual(len(self.panels(body)), 3)
+
+    def test_todays_panel_is_the_one_that_shows(self):
+        """The week starts on today, so today is the day that is picked
+        until the reader picks another one."""
+        body = self.page_for([100, 86, 40])
+        panels = self.panels(body)
+        self.assertIn("is-active", panels[0])
+        self.assertNotIn("is-active", panels[1])
+        self.assertNotIn("is-active", panels[2])
+
+    def test_the_panel_names_the_day(self):
+        body = self.page_for([100, 86, 40])
+        panels = self.panels(body)
+        self.assertIn("Today 21.10", panels[0])
+        self.assertIn("Tomorrow 22.10", panels[1])
+        self.assertIn("Friday 23.10", panels[2])
+
+    def test_the_panel_carries_the_chance(self):
+        body = self.page_for([100, 86, 40])
+        panels = self.panels(body)
+        self.assertIn("100% chance of rain", panels[0])
+        self.assertIn("86% chance of rain", panels[1])
+
+    def test_the_panel_names_the_band(self):
+        """The band is named in words, so the colour never carries the
+        meaning on its own."""
+        body = self.page_for([100, 45, 10])
+        panels = self.panels(body)
+        self.assertIn("Rain likely", panels[0])
+        self.assertIn("Rain possible", panels[1])
+        self.assertIn("Rain unlikely", panels[2])
+
+    def test_the_panel_carries_the_rain_figures(self):
+        body = self.page_for([100, 86, 40], amounts=[7.3, 0.0, 0.0],
+                              hours=[6.0, 0.0, 0.0])
+        panel = self.panels(body)[0]
+        self.assertIn("7.3 mm", panel)
+        self.assertIn("6 h of rain", panel)
+
+    def test_a_day_with_no_rain_carries_no_figures(self):
+        """Nothing to say about a day the model expects no rain in."""
+        body = self.page_for([100, 86, 40], amounts=[7.3, 0.0, 0.0],
+                              hours=[6.0, 0.0, 0.0])
+        panel = self.panels(body)[1]
+        self.assertNotIn("mm", panel)
+        self.assertNotIn("h of rain", panel)
+
+    def test_a_day_the_service_did_not_report_says_so(self):
+        """An unreported day is named as such, and carries no figures: it
+        is never counted as a dry one."""
+        body = self.page_for([None, 86, 40])
+        panel = self.panels(body)[0]
+        self.assertIn("Rain not reported", panel)
+        self.assertNotIn("chance of rain", panel)
+        self.assertNotIn("mm", panel)
+        self.assertNotIn("h of rain", panel)
+
+    def test_the_advice_is_the_apps_own(self):
+        """The umbrella in the panel is the app's advice, at the same
+        threshold as the umbrella in the column."""
+        body = self.page_for([10, 50, 80])
+        panels = self.panels(body)
+        self.assertNotIn("Take an umbrella", panels[0])
+        self.assertIn("Take an umbrella", panels[1])
+        self.assertIn("Take an umbrella", panels[2])
+
+    def test_the_start_page_has_no_panel(self):
+        """There is no day to pick without a forecast."""
+        body = self.client.get("/").get_data(as_text=True)
+        self.assertNotIn('class="day-detail"', body)
+
+
+class TestDayStrip(AppTestCase):
+    """The graph follows the day that is picked.
+
+    The strip is the hour-by-hour graph, and the reader picks a day out of
+    the week, so the strip has to show that day and not always today. The
+    server renders a strip for every day and the script decides which one
+    shows, so the page still says something useful without a script.
+    """
+
+    def page_for(self, chances, hourly=None):
+        """A forecast with an hour for every day of the week.
+
+        ``hourly`` is the chance for each hour of each day, day by day. It
+        defaults to a dry week, so a test can say what it wants.
+        """
+        days = [f"2026-10-{21 + i:02d}" for i in range(len(chances))]
+        if hourly is None:
+            hourly = [[0] * 24 for _ in days]
+        payload = {
+            "daily": {
+                "time": days,
+                "precipitation_probability_max": chances,
+                "temperature_2m_max": [14.0] * len(days),
+                "temperature_2m_min": [8.0] * len(days),
+            },
+            "hourly": {
+                "time": [f"{day}T{hour:02d}:00"
+                         for day in days for hour in range(24)],
+                "precipitation_probability": [value
+                                              for day in hourly for value in day],
+            },
+            "current": {"time": "2026-10-21T09:00"},
+            "utc_offset_seconds": 3600,
+        }
+        self.mock_get.return_value = FakeResponse(payload)
+        return self.client.post("/", data={"city": "London"}).get_data(as_text=True)
+
+    def strips(self, body):
+        """The markup of every day's strip, in the order they appear."""
+        parts = body.split('<div class="day-strip')[1:]
+        strips = []
+        for part in parts:
+            # The last strip runs on into the rest of the page, so it is
+            # cut off at the panels that follow it.
+            end = part.find('<div class="day-panel')
+            strips.append('<div class="day-strip'
+                          + (part[:end] if end > 0 else part))
+        return strips
+
+    def test_every_day_has_a_strip(self):
+        body = self.page_for([100, 86, 40, 15, 5, 60, 30])
+        self.assertEqual(len(self.strips(body)), 7)
+
+    def test_todays_strip_is_the_one_that_shows(self):
+        """The week starts on today, so today's strip shows until the
+        reader picks another day."""
+        body = self.page_for([100, 86, 40, 15, 5, 60, 30])
+        strips = self.strips(body)
+        self.assertIn("is-active", strips[0])
+        for strip in strips[1:]:
+            self.assertNotIn("is-active", strip)
+
+    def test_a_strip_carries_the_hours_of_its_own_day(self):
+        """Each day is drawn with its own hours, not with today's."""
+        hourly = [[(index + 1) * 10] * 24 for index in range(7)]
+        body = self.page_for([100, 86, 40, 15, 5, 60, 30], hourly)
+        strips = self.strips(body)
+        self.assertIn("08:00, 30% chance of rain", strips[2])
+        self.assertNotIn("08:00, 70% chance of rain", strips[2])
+        self.assertIn("08:00, 70% chance of rain", strips[6])
+
+    def test_the_strip_names_the_day_it_draws(self):
+        """The title of the strip follows the day, so the graph is never
+        about a day the reader did not pick."""
+        body = self.page_for([100, 86, 40, 15, 5, 60, 30])
+        titles = re.findall(r'data-title="([^"]*)"', body)
+        self.assertEqual(titles[:3], ["Today, hour by hour",
+                                      "Tomorrow, hour by hour",
+                                      "Friday, hour by hour"])
+
+    def test_the_page_names_todays_strip(self):
+        """Without a script the strip that shows is today's, and the title
+        says so."""
+        body = self.page_for([100, 86, 40, 15, 5, 60, 30])
+        self.assertIn('<h2 class="hourly-title">Today, hour by hour</h2>', body)
+
+    def test_the_summary_names_the_day(self):
+        """A dry day says which dry day it is."""
+        body = self.page_for([100, 86, 40, 15, 5, 60, 30])
+        summaries = re.findall(r'<p class="hourly-summary">(.*?)</p>', body)
+        self.assertIn("No rain likely for the rest of today.", summaries[0])
+        self.assertIn("No rain likely tomorrow.", summaries[1])
+        self.assertIn("No rain likely on Friday.", summaries[2])
+
+    def test_a_day_with_no_hours_says_so(self):
+        """A day the service gave no hours for has no graph, and the page
+        says that rather than drawing an empty one."""
+        payload = {
+            "daily": {
+                "time": ["2026-10-21", "2026-10-22"],
+                "precipitation_probability_max": [100, 86],
+                "temperature_2m_max": [14.0, 14.0],
+                "temperature_2m_min": [8.0, 8.0],
+            },
+            "hourly": {
+                "time": [f"2026-10-21T{hour:02d}:00" for hour in range(24)],
+                "precipitation_probability": [0] * 24,
+            },
+            "current": {"time": "2026-10-21T09:00"},
+            "utc_offset_seconds": 3600,
+        }
+        self.mock_get.return_value = FakeResponse(payload)
+        body = self.client.post("/", data={"city": "London"}).get_data(as_text=True)
+        strips = self.strips(body)
+        self.assertIn("Hourly detail is not available for this day.", strips[1])
+        self.assertNotIn("hourly-strip", strips[1])
+
+    def test_the_alert_is_still_about_today(self):
+        """Picking a day is browsing. The banner and the tab title are the
+        app's own alert, and they name the first day worth mentioning, not
+        the day the reader happens to be looking at."""
+        hourly = [[0] * 24, [80] * 24]
+        body = self.page_for([10, 80], hourly)
+        self.assertIn("Rain likely tomorrow (80%)", body)
+        self.assertIn("<title>Rain tomorrow in London - Rain Alert</title>",
+                      body)
+        # Today's own strip still says what today is about.
+        self.assertIn("No rain likely for the rest of today.",
+                      self.strips(body)[0])
 
 
 if __name__ == "__main__":

@@ -25,8 +25,8 @@ Serves on <http://127.0.0.1:5000>. `FLASK_DEBUG=1` enables the reloader and
 debugger.
 
 ```bash
-python -m unittest test_app    # offline suite, 278 tests, no network
-python -m unittest test_browser  # browser suite, 50 tests, needs Chrome
+python -m unittest test_app    # offline suite, 348 tests, no network
+python -m unittest test_browser  # browser suite, 75 tests, needs Chrome
 python -m unittest test_api     # live integration tests, hits both APIs
 ```
 
@@ -51,7 +51,7 @@ the built image before any release is pushed.
 
 ## Deployment status
 
-**The app is not live.** Checked on 2026-10-21, and every one of these is
+**The app is not live.** Checked on 2026-10-22, and every one of these is
 still true:
 
 - **No release tag exists.** `git tag -l` is empty. The workflow only pushes
@@ -62,13 +62,15 @@ still true:
   be pulled.
 - **The Render service is not serving this app.** A service named
   `rainalert` answers at <https://rainalert.onrender.com>, but its `/`
-  returns the JSON `{"message": "Rain Alert API is running", "status":
+  returns the JSON `{"message": "Rain Alert API is running 🌂", "status":
   "ok"}` behind gunicorn. This app's `/` renders the HTML page. It is a
   different, minimal service that happens to share the name.
 - **`rainalert.live` points nowhere useful.** The domain is at Namecheap
-  with URL forwarding: `rainalert.live` is an A record to a Namecheap
-  forwarder that 302s to `www.rainalert.live`, whose own A record is
-  `0.0.0.0`. No Render address appears in the DNS at all.
+  with URL forwarding: `http://rainalert.live/` answers `302` from the
+  Namecheap forwarder and points at `http://www.rainalert.live/`, whose
+  own A record is `0.0.0.0` — so the second hop answers nothing, and
+  `https://` on the root does not answer at all. No Render address appears
+  in the DNS at all.
 - **CI itself has run, and is green.** The workflow builds the image, runs
   the offline suite inside it and the browser suite on the runner. Only the
   tag-gated half — the push and the deploy — has never fired.
@@ -87,28 +89,37 @@ nothing else.
       Render gives, and verify HTTPS.
 - [ ] Replace the `0.8` fallback in `render.yaml` if the first release is
       not `0.8`.
-- [ ] Re-check the smoke test in the workflow: it only proves
-      `https://rainalert.live/` answers, not that it answers with the new
-      version. **It will fail on the first tag run** as long as the domain
-      is still on Namecheap forwarding, so the first release ends red even
-      when the deploy itself worked.
+- [ ] Re-check the smoke test in the workflow: it greps the live page for
+      `Version <tag>`, so it proves the new build is the one answering and
+      not an old one. **It will fail on the first tag run** as long as the
+      domain is still on Namecheap forwarding, so the first release ends
+      red even when the deploy itself worked.
 
 ## Layout
 
 | Path | Purpose |
 |---|---|
 | `app.py` | The whole app: routes, geocoding, forecast fetching, formatting |
+| `cities.py` | The curated list of cities that have a page of their own |
 | `templates/index.html` | Single page; inline styles are out, classes live in `style.css` |
+| `templates/cities.html` | The index of the cities, with a link to each |
+| `templates/404.html` | The page for an address that is not on this site |
 | `static/style.css` | All styling |
+| `static/fonts/` | The self-hosted Archivo variable face (Latin subset) |
 | `static/app.js` | The browser half: saved city, personal alert threshold, notifications |
 | `static/manifest.json` | The web app manifest: the app's name, icons and install metadata |
 | `static/service-worker.js` | The service worker: caches the shell, never the forecast |
 | `static/offline.html` | The page shown when the server cannot be reached |
+| `static/og-image.png` | The social card: 1200x630, the picture a shared link shows |
 | `static/icon-*.png` | The install icons: 180, 192, 512 and a maskable 512 |
 | `static/favicon.svg` | Tab icon |
 | `static/favicon-rain.svg` | Tab icon when rain is coming |
 | `static/image/` | Background photo |
 | `tools/make_icons.py` | Regenerates the install icons from the brand mark (not run by CI) |
+| `tools/make_og_image.py` | Regenerates the social card (not run by CI) |
+| `tools/shoot.py` | Screenshots a page of the running app, for looking at the design |
+| `tools/measure.py` | Measures the page in a real browser: the vertical budget and the boxes |
+| `tools/crop.py` | Screenshots one element, for looking at a detail |
 | `test_app.py` | Offline unit tests, HTTP fully mocked |
 | `test_browser.py` | Browser tests, real headless Chrome, no network |
 | `test_api.py` | Live integration tests |
@@ -116,6 +127,8 @@ nothing else.
 | `Dockerfile` | Two-stage container image |
 | `docker-compose.yml` | Local container setup: the app and a test service |
 | `render.yaml` | Render Blueprint; runs a prebuilt image, not a build (not deployed yet) |
+| `API.md` | The HTTP API reference: every route, the parameters, the status codes, the upstream services |
+| `openapi.yaml` | The same API as an OpenAPI 3.1 spec, for tools that read one |
 | `DEPLOY.md` | Deployment runbook: Render setup, domain, CI/CD, releases |
 | `.github/workflows/ci-cd.yml` | CI on every PR and push; release on a git tag |
 | `.github/dependabot.yml` | Weekly grouped PRs for actions, pip and the base image |
@@ -171,11 +184,33 @@ The bands are named **Rain unlikely / Rain possible / Rain likely**, not
 probability does not predict an intensity — the scale has to stay honest
 about what a percentage can tell you.
 
-**The hourly strip for today sits above the daily list.** It comes from
-`hourly=precipitation_probability` in the same request as the daily fields —
-one request per page load, not two. `parse_today_hours()` picks out the
-city's local day, and `summarise_hours()` turns it into the one-line
-"Bring an umbrella" sentence.
+**The page is a night street.** The panel is a dark plate laid over the
+photograph — the same night the picture shows, lit by the same sodium lamps
+— and the colours are taken from the image: asphalt, haze, mist, paper and
+the amber of a street lamp. **Amber is the only accent**, so a colour on the
+page always means something about the rain and never just decoration. The
+type is **Archivo, self-hosted** (`static/fonts/archivo-latin.woff2`, the
+Latin subset of a variable face), so the page asks no third party for
+anything and still works with no network. The width axis does the work: the
+city name is set wide, the labels narrow, the figures wide again in tabular
+numerals.
+
+**The answer is at the top of the page.** The city is the `h1`, the sentence
+about the week is the banner under it, and the strip and the week follow.
+The search is a compact field in the top bar on a page that already has a
+forecast, and a full-width field under the name on the start page — one
+form, two sizes, and never both on the same page. The `h1` is the city
+name on a city's page, so the strip's title is the `h2` and the headings
+stay in order. Under the name is a **caption line** — "7-day rain chance"
+on the left, the calendar export on the right, on one baseline — so the two
+read as one line rather than as a label and a button.
+
+**The hourly strip sits between the banner and the week.** It
+comes from `hourly=precipitation_probability` in the same request as the
+daily fields — one request per page load, not two. `parse_hourly_days()`
+splits the hours by the day they fall on, `parse_today_hours()` picks out
+the city's local day, and `summarise_hours()` turns a day's hours into the
+one-line "Bring an umbrella" sentence.
 
 The strip's hours are the **city's local hours**, exactly like the daily
 dates. The current hour comes from the `current` block the API returns, in
@@ -190,12 +225,30 @@ in the tooltip and in the table view, so the rounding never hides a value.
 A **known 0% still gets a 2px stub** — a hole in the strip reads as
 missing data rather than as "no rain".
 
-**The headline banner is one sentence above the list.** `forecast_headline()`
-picks the first day worth mentioning: a day at or above `UMBRELLA_THRESHOLD`,
-a day that is only *possible*, or the week as a whole. The band name in the
-sentence is the day's own band — the same one its row in the list carries —
-so the banner and the list never disagree. The colour follows the band and
-the band name is in the text, so the meaning never rests on colour alone.
+**Every hour's number is written over its own bar.** The strip is a row of
+equal columns, and the row of values above it is the same row of cells, so
+a value never needs a hover to be read — and a touch screen never shows
+one. The value row carries the **bare number**, without the percent sign:
+twenty-four columns of three digits do not fit across the panel with it,
+and the sentence above, the tooltip and the table below all say what the
+numbers are. The sign is left off in the row and nowhere else.
+
+**The current hour is a rule, and it is labelled.** A 1px line in paper
+white runs through the strip at the current hour, and the words "now 11:00"
+are written in the gap above it, over the rule they point at. It is a rule
+rather than a mark in a data colour, so the data mark itself is not
+altered, and it is labelled rather than left to be inferred from the axis.
+The label lives in the **value row**, not in the axis: the axis is for
+the hours, and a label that sat in the axis collided with the hour marks
+below it.
+
+**The headline banner is one sentence under the city's name.**
+`forecast_headline()` picks the first day worth mentioning: a day at or
+above `UMBRELLA_THRESHOLD`, a day that is only *possible*, or the week as a
+whole. The band name in the sentence is the day's own band — the same one
+its column in the week carries — so the banner and the week never
+disagree. The colour follows the band and the band name is in the text, so
+the meaning never rests on colour alone.
 
 **Today is judged on the hours that are left, not on the daily maximum.**
 The daily maximum covers the whole day, so at 18:00 it still counts the
@@ -206,6 +259,56 @@ while the row in the list keeps the daily maximum. The two are different
 quantities and each is labelled with which one it is. When the day is over
 it drops out of the banner entirely. A missing chance is never counted as
 dry: a quiet week with one unreported day is "most of", not "all of".
+
+**The week can be picked, and the day panel answers.** Each of the seven
+columns is a button, and picking one puts that day's rain in the panel above
+the week: the day itself, the band it is in, the chance, how much rain falls
+in it and how long it lasts. The panel is **rendered by the server for every
+day**, and the script only decides which of the seven panels is showing — so
+the page says something useful without any script at all, which is today's
+panel, because the week starts on today. All seven panels sit in **one cell of
+one grid**, so the strip keeps its height when the day changes and the week
+never moves.
+
+- **The button is built by the script**, not by the markup, so a reader
+  without JavaScript is never handed a button that cannot work. The columns
+  stay a list of figures, and the panel shows today.
+- **The panel carries the same chance the column shows**, and the same
+  threshold for the umbrella, so the panel, the column, the banner and the
+  tab title can never disagree about how wet the day is.
+- **The millimetres and the hours are only shown when there is rain in
+  them.** A day the model expects no rain in says nothing more than that:
+  "0 mm" beside a chance of rain would read as a contradiction, because the
+  two come from different parts of the model.
+- **A day the service did not report is named as such** — "Rain not
+  reported" — and carries no figures at all. An unreported day is never
+  counted as a dry one.
+- **The picked day is marked with a rule in the paper's own colour**, not
+  the band's: the band colour already means the rain, and the selection is a
+  different thing.
+
+**The graph follows the picked day too.** The strip is drawn for the day the
+reader picked, so the graph and the panel are always about the same day.
+There is **one strip per day**, rendered by the server for all seven of
+them, and the script only decides which one is showing — the same split as
+the panels, and for the same reason: the page says something useful without
+any script, and the rule that decides what a bar means stays behind the
+offline test suite.
+
+- **The title of the strip names the day it draws** — "Today, hour by
+  hour", "Friday, hour by hour" — and the script writes the day's own title
+  into it, so the heading is never about another day than the bars.
+- **The summary of a day names that day.** A dry day says "No rain likely
+  tomorrow", not "No rain likely for the rest of today": only the day that
+  is running has hours left to come.
+- **The strips sit in one cell of one grid**, like the panels, so the graph
+  does not move and the week below it never moves either. Two lines are
+  reserved for the summary, so a day whose sentence is shorter than another
+  day's does not push the graph down.
+- **The banner and the tab title do not follow the picked day.** Picking a
+  day is browsing; the banner is the app's own alert and names the first
+  day worth mentioning, which is the same sentence whatever the reader is
+  looking at.
 
 **The tab title and the favicon are the alert.** `tab_alert()` decides whether
 the browser tab should say anything, and the route passes `page_title` and
@@ -227,50 +330,116 @@ unreported week simply has no alert, and neither does a dry week.
 The two favicons are **separate files** (`favicon.svg` and `favicon-rain.svg`),
 not one file that is recoloured, because browsers cache a favicon by its URL
 and a single file would keep showing the old icon until the cache was
-cleared. The rain icon changes **shape** as well as colour — an amber square
-with white streaks against a blue cloud — so the two are told apart at 16
-pixels by the shape and not by the hue alone.
+cleared. The rain icon changes **shape** as well as colour — the same
+umbrella mark, but on the sodium-lamp amber plate with two strokes of rain
+falling from it, against the dark plate with the mark in paper white — so
+the two are told apart at 16 pixels by the shape and not by the hue alone.
 
-**The daily row says "chance of rain" once, in the column heading.** The
-phrase used to be on all seven rows, where it carried nothing after the first
-one. Now `format_rain_chance()` returns the bare number for the visible row
+**Every city has one address, and it is `/city/<slug>`.** A forecast is
+reachable by half a dozen routes — the search form, a query string, a
+bookmark, a link somebody sent — and a search engine would index each of
+them as a separate page. So `city_path()` decides the one address, the page
+carries a canonical link to it, and everything else is sent there.
+
+- **The address comes from the name the city was asked for**, never from the
+  geocoder's `display_name`. The geocoder answers with a full address
+  ("London, Greater London, England, United Kingdom"), and an address built
+  from it would be `/city/paris-france` for `/city/paris`. The reader asked
+  for a city, so the city is what the address carries.
+- **A curated city keeps the slug the list gives it.** `cities.py` is the
+  list of the 92 cities that have a page; `CITY_NAMES` and `CITY_SLUGS` map
+  between the names and the slugs, so the address in the city index, the
+  address in the sitemap and the address the page claims for itself are the
+  same one. Only "Washington, D.C." does not slug to its own name, and the
+  map handles it.
+- **`GET /?city=X` answers `301`.** The redirect is worked out before the
+  forecast is fetched, so the extra hop asks the server for no more than a
+  header. A `POST` renders the page where it is and points its canonical
+  link at the address, so there is still one page per city. The unit travels
+  with the redirect as `?unit=`, because the reader's chosen scale is part
+  of the request.
+- **A slug that is not the canonical one is also a `301`.** `/city/London`
+  and `/city/london` are one page, not two.
+- **`city_from_slug()` capitalises only the first letter** of a fallback
+  name. A name is not a sentence, and capitalising every word would turn
+  "St John's" into "St John'S" — the same rule that keeps `.title()` away
+  from user input.
+
+**A missing page answers `404`, and a broken upstream answers `503`.** A
+page that says "not found" but answers `200` is a soft 404, and search
+engines treat it as one. On a city's page a `CityNotFound` is a `404` and a
+`GeocodingUnavailable` or `WeatherUnavailable` is a `503`; on the start
+page both stay `200`, because a failed *search* is not a missing *page*.
+`templates/404.html` is the real 404 page, with a search form on it, and
+it says `noindex, follow`.
+
+**The title, the description, the canonical link, the Open Graph tags and
+the JSON-LD are decided in one place.** `render_forecast_page()` renders
+every page of the site — the start page, a city's page, an error page — and
+passes the whole set to the template, so the title a reader sees in the tab
+and the title a search engine shows in its results cannot drift apart. The
+title is still the alert: on a city's page it reads "Rain tomorrow in
+London - Rain Alert", which is the same `UMBRELLA_THRESHOLD` as the ☔ icon
+and the banner. `page_title()` is the only builder of a title.
+
+**`SITE_URL` is the site's own address.** It is read from the environment
+(with `https://rainalert.live` as the default) and used for the canonical
+link, the Open Graph image, the sitemap and the structured data. It is
+absolute, and it is the address the site is actually served from — a
+canonical link pointing somewhere else is worse than none.
+
+**The endpoints that are not pages say so in their headers.** `/api/alert`
+and `/calendar.ics` carry `X-Robots-Tag: noindex, nofollow` and are
+disallowed in `robots.txt`: they are an endpoint the page uses and a file
+the page hands over, and crawling them costs two upstream requests each.
+
+**The city index is the front door of the crawlable part of the site.**
+`/cities` links to every curated city, and `/sitemap.xml` lists the start
+page, the index and every city. The list is short on purpose — the
+geocoder is rate-limited, and every address in it is a forecast the app has
+to fetch.
+
+**The headings are in order.** The forecast page is `h1` (the city's name)
+→ `h2` (the hourly strip's title), and the day list is a real `<ol>` of
+`<li>`s, so the page says what it is to a reader who never sees the
+picture. The list is laid out as **seven columns of figures** — a CSS grid
+over the `<ol>`, so the markup is still a list of days in the order of the
+days. Each column carries the weekday, the chance, the temperature and the
+umbrella, and today is lifted out of the row with a slightly lighter
+plate behind it.
+
+**The week says "chance of rain" once, in the column heading.** The phrase
+used to be on all seven rows, where it carried nothing after the first one.
+Now `format_rain_chance()` returns the bare number for the visible column
 and `describe_rain_chance()` returns the full phrase for screen readers and
 tooltips, and the wording itself lives in the `.severity-legend` row above
-the list. That row already sat directly above the list and had free space on
-it, so the heading costs **zero** vertical height — which matters, because
-the card is at its vertical limit.
+the week. That row is also the **heading row of the week**: "Rain chance"
+names what the figures are, the three band names say what the colours
+mean, and the temperature switch sits on the right of it.
 
-The two right-hand cells are **fixed-width columns** and the date takes the
-slack (`flex: 1 1 auto`), with `justify-content: space-between` removed from
-`.weather-item`. Without that, `space-between` distributed the free space
-between the date and the number instead of pinning the number to a column,
-and the percentages floated: their right edge came out at 358, 351, 342,
-350, 345, 348 on six consecutive rows.
-
-The legend row has to be **one flex row with the same two fixed-width
-columns**, not a row of five loose items, or the headings drift away from
-the columns they head. The three band names are wrapped in a
-`.legend-bands` group so that the group takes the slack, exactly as the date
-takes the slack in a data row.
+The legend row is **one flex row that wraps**, with the three band names
+wrapped in a `.legend-bands` group so that the group takes the slack, and
+the unit switch pushed to the right with `margin-left: auto`. When the row
+is too narrow for the bands and the switch, the switch wraps to a second
+line and stays on the right of that line.
 
 The visible number is wrapped in `aria-hidden="true"` and a `.sr-only` span
 carries "100% chance of rain. Take an umbrella." The heading is a `<span>`,
-not a real table header, so the row itself has to say what the number means.
-The hourly table below *does* have a real `<th scope="col">Rain chance</th>`,
-so its cells can be bare numbers.
+not a real table header, so the column itself has to say what the number
+means. The hourly table below *does* have a real `<th scope="col">Rain
+chance</th>`, so its cells can be bare numbers.
 
-**The narrow layout is decided, not left to flexbox.** Below 560px the date,
-the chance and the temperature do not fit on one line, and letting them
-wrap where they liked gave a different layout on every row — a longer
-weekday name pushed its own row over the line, and the columns drifted out
-of alignment with the headings above them. The media query gives the date a
-line of its own and puts both columns on the line below it, right-aligned,
-and the legend row does the same, so the headings still line up.
+**The narrow layout is decided, not left to flexbox.** Below 560px the
+seven columns get narrow enough for the numbers to touch, so the type in
+them is cut down and the **date number goes**: the weekday stays, the full
+date is still on the page for screen readers. The columns stay seven — a
+week that turned into a stack of rows at phone width would be a different
+design, not a narrower one.
 
-**The donation link sits under the button, not under the forecast.** It is
+**The donation link sits under the search, not under the forecast.** It is
 on every page, including error pages, because it is a site-wide link rather
 than part of the result. The band name in the headline is a sentence, not a
-badge, and the ☔ icon in the list keeps its own meaning — one icon for one
+badge, and the ☔ icon in the week keeps its own meaning — one icon for one
 meaning — so the banner carries no icon of its own.
 
 **The temperature switch asks the service to convert, not the app.** The
@@ -315,6 +484,17 @@ Hub as the version without the `v`, and calls Render's deploy hook with an
 deploy, so the secrets are only touched on a tag run. **No tag has been
 pushed yet**, so the push-and-deploy half of the workflow has never run.
 
+**Every page says which build is answering.** `APP_VERSION` and `APP_COMMIT`
+are read from the environment and passed to every template as `app_version`
+and `app_commit`; the footer carries them under the data credits, on every
+page — the forecast, the city index and the 404. A release build is stamped
+by the Docker build args the CI workflow passes, so the live page names the
+release and the commit it came from. A development run says "Version dev"
+and names no commit, because a working tree is not a commit. The point is
+that the version is *on the page*: the workflow's smoke test greps the live
+page for `Version <tag>`, which is how it tells "the site is up" from "the
+new build is up".
+
 **The donation link is opt-in.** `DONATION_URL` is read once at import through
 `clean_donation_url()`, which accepts only absolute `https://` URLs without
 whitespace, quotes or angle brackets and returns `""` for anything else. A
@@ -358,10 +538,10 @@ carried by colour alone.
 **The preferences row is set in bold.** It is a feature, not a footnote:
 at the quiet weight it started at, a reader walked straight past it and
 did not know the app could remember anything. The row is also slightly
-larger and darker than the surrounding text (`0.78rem` at `#4a5a6a`, a
-7:1 contrast ratio) so it reads as a control rather than as a caption.
-The row costs 2px of the card's vertical budget, and the card still fits
-a 768px window with no scrollbar.
+larger and lighter than the surrounding text (`0.75rem` at `#a3b3bb`) so it
+reads as a control rather than as a caption. It sits at the foot of the
+panel, below a hairline, and the panel still fits a 768px window with no
+scrollbar.
 
 **The threshold is compared against the number the page shows.** The row
 carries `data-chance`, the same whole number `format_rain_chance()` renders,
@@ -391,11 +571,16 @@ current hour, or rain starting within `NOTIFICATION_LEAD_HOURS`.
   says so in the body ("Above your 40% threshold."). Without a threshold it
   uses `UMBRELLA_THRESHOLD` and it is the app's advice, umbrella and all —
   the same split as the ▲ marker, for the same reason.
-- **The button lives in the hourly title row**, because the card has no
-  vertical room for another line: the card is 702px and the page fits a
+- **The button lives in the hourly title row**, because the panel has no
+  vertical room for another line: the panel is 597px and the page fits a
   768px window with no scrollbar. The `.hourly-head` row takes the button on
   the right of the title, so it costs the 2px the button is taller than the
   title, not a whole line.
+- **The bell is drawn, not borrowed.** It is an inline SVG in the markup and
+  the script never swaps it for an emoji: a colour emoji arrives as a
+  little coloured picture in the middle of a night. The state is in the
+  drawing as well as in the words — a strike across the bell when the
+  browser has blocked notifications, the lamp's amber when they are on.
 - **The button is `hidden` in the markup** and only revealed by the script,
   and only when `Notification` exists and the context is secure. A browser
   that cannot show notifications never gets a dead button; one that has
@@ -432,10 +617,20 @@ already has.
   to remind them about it. The event id is derived from the city and the
   date, so importing the file again updates the same events instead of
   adding a second copy of every one of them.
-- **The link sits on the forecast's heading row**, on the line the heading
-  already takes. The card is at its vertical limit — 702px, and the page
-  fits a 768px window with no scrollbar — so a new line would not fit, and
-  the link costs 0px: it is inside the heading's own line box.
+- **The link sits on the caption's line**, next to "7-day rain chance".
+  The two are in one `.result-subline` row with `align-items: baseline`, so
+  the link reads as part of the caption rather than as a button dropped
+  beside the answer. The panel is at its vertical limit — 597px, and the
+  page fits a 768px window with no scrollbar — so a new line would not
+  fit, and the link costs 0px: the caption's line is a line the page was
+  already taking. The heading above takes the slack and the subline does
+  not, so a long city name wraps the heading rather than pushing the link
+  off the panel.
+- **The icon is 10px, so it belongs to the caption's line.** An icon that
+  stands on the baseline is as tall as the icon is, and at 13px it
+  climbed above the caption and read as part of the city's name instead.
+  At 10px its top is level with the caption's own text, and the whole
+  link sits in the band just above the headline.
 - **The link is hidden when there is nothing to export.** A link that would
   download an empty calendar is not an offer, so the server leaves it
   `hidden` when no day reaches the app's threshold, and the script takes it
@@ -466,10 +661,10 @@ safe zone the generator keeps clear), and `templates/index.html` links it with
   wrong, so it is never replayed.
 - **The shell is cached**, so an installed app opens without a network and
   shows `static/offline.html` instead of the browser's error screen. The
-  shell is the stylesheet, the script, the icons and the background photo:
-  the files that make the page *look* like Rain Alert, and nothing that
-  carries data. The offline page says plainly that the forecast cannot be
-  fetched, and shows no forecast.
+  shell is the stylesheet, the script, the icons, the font and the
+  background photo: the files that make the page *look* like Rain Alert,
+  and nothing that carries data. The offline page says plainly that the
+  forecast cannot be fetched, and shows no forecast.
 
 **Bump `CACHE_VERSION` in `static/service-worker.js` when the shell
 changes.** The old caches are dropped when the new worker takes over, and
@@ -499,9 +694,11 @@ because the app works without it.
 - **The `hidden` attribute loses to a class that sets `display`.** The UA
   stylesheet's `[hidden] { display: none }` is weaker than
   `.notify-toggle { display: inline-flex }`, so a button that is hidden in the
-  markup would still show up. The rule `.notify-toggle[hidden] { display:
-  none; }` is there for exactly that, and it is what keeps the notification
-  button from being a dead button before the script has run.
+  markup would still show up. The rules `.notify-toggle[hidden]` and
+  `.calendar-export[hidden] { display: none; }` are there for exactly that:
+  the first keeps the notification button from being a dead button before
+  the script has run, the second keeps the export link from appearing when
+  there is nothing to export.
 - **The browser suite needs Chrome and selenium, and skips without them.**
   `test_browser.py` is not in the image: the image installs no system
   packages, so there is no Chrome in it. It runs on the CI runner instead,
@@ -518,63 +715,107 @@ because the app works without it.
   (`static/favicon-rain.svg`). If the icon ever stops swapping, look for a
   reused URL before suspecting the code.
 - **The `<title>` and the icon are template variables, not static markup.**
-  `index()` passes `page_title` and `favicon` to the template, so any route
-  that renders `index.html` has to pass them too — otherwise the title
-  renders empty and the icon URL breaks. There is one route that renders the
-  template today — the other three (`/api/alert`, `/manifest.json` and
-  `/service-worker.js`) do not — and it keeps the plain "Rain Alert" title
-  and the default icon whenever there is no forecast, which is the case for
-  the empty page and for every error page.
+  `render_forecast_page()` passes `page_title` and `favicon` to the template,
+  so any route that renders `index.html` has to pass them too — otherwise the
+  title renders empty and the icon URL breaks. Two routes render that
+  template today, `/` and `/city/<slug>`, and both go through
+  `render_forecast_page()`; the other four (`/api/alert`, `/calendar.ics`,
+  `/manifest.json` and `/service-worker.js`) render nothing, and `/cities`
+  and the 404 handler render their own templates with their own titles. The
+  forecast page keeps the plain "Rain Alert" title and the default icon
+  whenever there is no forecast, which is the case for the empty page and
+  for every error page.
+- **A city page is a `404` or a `503`, not a page with a message on it.**
+  A `200` that says "not found" is a soft 404. The start page is different:
+  a failed *search* there is not a missing *page*, so it stays `200`.
 - **The page is a `.page` flex wrapper around `.container` plus the
   copyright footer.** `margin: auto` lives on `.page`, not on `.container`.
   The footer sits over the background photo, so it is white text with a
-  shadow rather than inside the card. Adding vertical space to the card or
-  footer can push the document past `100vh` and reintroduce a scrollbar on a
-  standard desktop view — measure `scrollHeight - clientHeight` after
+  shadow rather than inside the panel. Adding vertical space to the panel
+  or footer can push the document past `100vh` and reintroduce a scrollbar
+  on a standard desktop view — measure `scrollHeight - clientHeight` after
   changing it.
-- **The forecast list must stay one line per day on desktop.** The card's
-  content is 500px, and a date plus a rain chance plus a text badge needs
-  ~525px in English, so a per-row badge forces a wrap and doubles the list
-  height. The band name therefore lives in a **legend** above the list, and
-  each row carries the same word in a `.sr-only` span for screen readers.
-  Severity must never be conveyed by colour alone. The same rule is why the
-  "chance of rain" wording is a column heading rather than a per-row
-  label, and why the two right-hand cells are fixed-width columns: the
-  numbers have to line up, or the list reads as noise. Below 560px the rows
-  wrap on purpose, and the wrap is the same on every row — a row that
-  wrapped because its own weekday name was one letter longer would look
-  broken.
-- **The card has to stay inside a 748px-tall window.** The hourly strip
-  added ~150px above the list, which pushed the document 25px past the
-  viewport. The strip is 38px tall, the `.weather-item` padding was cut
-  from `0.45rem` to `0.32rem`, and the h3 margin from `0.5rem` to
-  `0.35rem` to claw the space back. Measure
-  `scrollHeight - clientHeight` in a real browser after changing any of
-  them — a stock GitHub runner has a different viewport than the
-  developer box, and the CI image is where the tests run.
-- **The headline banner is paid for out of the card's own padding.** It is
-  21px tall, and the h1 margin, the `.container` padding, the `.result`
-  margin and the `.hourly` padding were all trimmed to pay for it: the
-  card was 718px and is now 696px, so the page fits a 768px window with
-  no scrollbar. The levers, in the order they were used: `h1` margin
-  (0.5rem/0.6rem), `.container` padding (`1.4rem 1.75rem`), `.result`
-  margin-top (0.7rem) and padding-top (0.5rem), `.hourly` padding. The
-  list rows themselves are already at their thinnest.
+- **A colour emoji is not a glyph.** `☔` (U+2614) takes the text
+  presentation selector `&#xFE0E;` and comes out in the panel's own
+  amber, but `📅` and `🔔` ignore it on Windows and arrive as little
+  coloured pictures. The calendar and the bell are inline SVGs with
+  `stroke="currentColor"`, and the script never swaps them for emoji
+  either — it changes the words and a class, and the drawing follows.
+- **The week must stay seven columns.** The columns are a CSS grid over
+  the `<ol>`, and the band name lives in a **legend** above them, not on
+  every column: seven repeated labels do not fit and would carry nothing
+  after the first one. Each column carries the band name in a `.sr-only`
+  span for screen readers. Severity must never be conveyed by colour
+  alone. The same rule is why the "chance of rain" wording is a column
+  heading rather than a per-column label.
+- **The panel has to stay inside a 768px-tall window.** The panel is 597px
+  tall and the page fits a 768px window with no scrollbar, with about 65px
+  of slack above and below. Measure `scrollHeight - clientHeight` in a
+  real browser after changing anything in it — a stock GitHub runner has
+  a different viewport than the developer box, and the CI image is where
+  the tests run. `tools/measure.py` prints the boxes, and there is a
+  browser test that fails when the page scrolls.
+- **The seven day panels share one cell of one grid.** They are laid out
+  with `grid-area: 1 / 1` and the ones that are not showing are hidden
+  with `visibility: hidden`, which keeps them in the cell without
+  showing them. That is what stops the strip from changing height when
+  the reader picks another day. Do not swap `visibility` for the
+  `hidden` attribute: that takes the panel out of the grid, the cell
+  shrinks to the shortest panel, and the week jumps.
+- **The seven strips share one cell of one grid, the same way.** A strip
+  is a day's graph, and the reader picks the day, so there is one strip
+  per day and only the picked one shows. The same rule applies: `visibility:
+  hidden`, never the `hidden` attribute.
+- **The summary reserves two lines.** The days' summaries are different
+  lengths, and a longer one would push the graph down, so
+  `.hourly-summary` has a `min-height` of two lines. Drop it and the
+  graph jumps when the reader picks a day whose sentence is longer.
+- **The value row has to fit twenty-four numbers across the panel.** The
+  sign is left off for that reason, and the type is set at the narrowest
+  width of the family (62) at `0.55rem`. Set the percent sign back and
+  the numbers collide; the sign lives in the sentence above, the tooltip
+  and the table below.
+- **A flex row of an icon and its words aligns on the icon, not on the
+  words.** An inline SVG is a replaced element, so its baseline is its
+  bottom margin edge, and the first flex item is what decides the
+  baseline of the whole flex container. The export link therefore sets
+  `align-items: baseline` on itself: the icon's bottom edge lands on the
+  text's baseline, and the link then shares the caption's baseline
+  through the subline. Put `align-items: center` back and the link's
+  baseline becomes the icon's, so the words ride up above "7-day rain
+  chance" instead of sitting on it.
+- **An icon that stands on the baseline is as tall as it is.** The
+  calendar icon is 10px for that reason: at 13px it reached above the
+  caption's line and into the gap under the city's name, which is what
+  made the whole link look as if it belonged to the name. The browser
+  test that guards this measures the icon's top against the caption's
+  own top.
+- **The caption and the link are set at slightly different sizes**
+  (0.72rem and 0.7rem), so their text boxes are not the same height
+  even when the baselines match. A test that compares the boxes will
+  fail for the right reason; the test measures the baseline, with a
+  zero-height box standing on the text.
+- **The label of the current hour lives in the value row.** It is
+  absolutely positioned under its own value, in the gap the strip's
+  `margin-top: 20px` leaves above the bars. Put it in the axis and it
+  collides with the hour marks below it.
+- **A `set_window_size` in headless Chrome measures the wrong page.**
+  It includes the browser's own chrome, so the viewport comes out at
+  616px instead of 768px and the page looks as if it scrolls. Set the
+  viewport with `Emulation.setDeviceMetricsOverride`, the way
+  `test_browser.py` does.
 - **The hourly axis labels sit on the hour boundary, not on the bar.** Each
   label is positioned at the left edge of its own cell, so "06" is under
   the gap before the 06:00 bar rather than under the middle of it. The
   first cell is nudged back inside, or its label would hang off the card.
-- **The current hour is a pulsing dot, not a tick.** It is a `::after`
-  pseudo-element under the baseline, animated with a growing-and-fading
-  `box-shadow` halo. The pulse is decoration, so it is dropped under
-  `prefers-reduced-motion: reduce` — the dot stays, so the hour is still
-  marked. The dot must not collide with the axis labels below it, which is
-  what the `margin-top` on `.hourly-axis` is for. The dot is 8px with a
-  10px halo and sits at `bottom: -9px`; the axis margin is 11px, which
-  leaves the dot clear of the labels. If you resize the dot, resize the
-  halo with it (twice the radius) and re-measure the axis margin.
+- **The current hour is a rule, not a mark.** It is a `::after`
+  pseudo-element on the hour's own cell, a 1px line in paper white running
+  through the strip. It is drawn in ink rather than in a data colour, so
+  the data mark itself is not altered, and it carries no animation: a
+  pulse is decoration, and the night street has none. The words "now
+  11:00" sit over the rule in the gap above the strip.
 - **`.container` is `box-sizing: border-box`.** With the default
-  content-box, `width: 90%` plus the padding pushed the card past the
+  content-box, `width: 92%` plus the padding pushed the panel past the
   viewport edge on narrow screens.
 - **gunicorn 26 needs a writable home.** It opens a control socket at
   `$HOME/.gunicorn/gunicorn.ctl` (or `$XDG_RUNTIME_DIR/gunicorn.ctl`) and
@@ -626,6 +867,16 @@ because the app works without it.
   They all read the same forecast and fire at the same `UMBRELLA_THRESHOLD`.
   Do not give any of them a threshold of its own — the moment two of them
   disagree, the page starts lying to the reader.
+- **A city has one address.** `/city/<slug>` is the canonical one, and every
+  other way of reaching the same forecast is sent there. Do not add a second
+  way of rendering a forecast, and do not change the shape of the slug: the
+  address is what people bookmark and what search engines index.
+- **A missing page answers `404` and a broken upstream answers `503`.** A
+  page that says "not found" but answers `200` is a soft 404, and search
+  engines treat it as one.
+- **One builder per page-level fact.** The title, the description, the
+  canonical link, the robots meta and the structured data are all made in
+  `render_forecast_page()`. Do not build a second one in a template.
 - **Do not bump the image tag in `render.yaml` by hand as part of a normal
   change.** Releases are cut by pushing a `v*` tag; the workflow derives the
   image tag from it. The tag in `render.yaml` is only the fallback for a
@@ -633,3 +884,9 @@ because the app works without it.
 - **The test count appears in four documents** — `README.md`, `CLAUDE.md`,
   `DEPLOY.md` and `implementation-plan.md`. They drift. Update all four when
   tests are added.
+- **`API.md` and `openapi.yaml` describe the HTTP surface, and they are
+  written by hand.** They are not generated from the app, so they drift the
+  moment a route, a parameter or a status code changes. When you change one,
+  change both of them in the same change. The spec is a description of the
+  app, not a contract with a third party — the app is free to change, but the
+  documentation must not lag behind it.

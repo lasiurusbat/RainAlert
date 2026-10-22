@@ -27,11 +27,28 @@ RUN pip wheel --wheel-dir /wheels -r requirements.txt
 # --- Runtime stage ------------------------------------------------------------
 FROM python:3.14-slim AS runtime
 
+# The container's clock is UTC, on purpose. The forecast's dates and hours
+# come from the API in the queried city's own time, so the container's
+# clock is only ever the server's own clock: the log stamps and the day
+# the sitemap says the pages last changed. UTC is the honest answer for
+# both, and it needs no locale data in the image.
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
-    PORT=8000
+    PORT=8000 \
+    TZ=UTC
+
+# Which build this is. The footer of every page carries the version and the
+# commit, so that a reader — and the person looking after the site — can
+# see which build is answering. A release build passes them in; a plain
+# local build passes neither and says "dev".
+#
+#   docker build --build-arg APP_VERSION=0.8 --build-arg APP_COMMIT=1a2b3c4 .
+ARG APP_VERSION=dev
+ARG APP_COMMIT=
+ENV APP_VERSION=${APP_VERSION} \
+    APP_COMMIT=${APP_COMMIT}
 
 # The image installs no system packages. The weekday names are hard-coded in
 # the app, so there is no locale data to compile and nothing to install.
@@ -57,13 +74,21 @@ ENV XDG_RUNTIME_DIR=/run/rainalert
 
 WORKDIR /app
 
-COPY --chown=rainalert:rainalert app.py ./
+COPY --chown=rainalert:rainalert app.py cities.py ./
 COPY --chown=rainalert:rainalert templates ./templates
 COPY --chown=rainalert:rainalert static ./static
 
-# The test suites come along so that "docker compose run --rm tests" exercises
-# exactly the image that gets deployed. They are about 20 KB together.
+# The two HTTP test suites come along so that "docker compose run --rm tests"
+# exercises exactly the image that gets deployed. They are about 20 KB
+# together. The browser suite is deliberately not here: it drives a real
+# headless Chrome, and the image installs no system packages on purpose, so
+# it runs on the CI runner instead.
 COPY --chown=rainalert:rainalert test_app.py test_api.py ./
+
+# The API reference and its OpenAPI spec come along for the same reason: the
+# offline suite checks them against the routes the app actually serves, and
+# that check has to run inside the image like the rest of the suite.
+COPY --chown=rainalert:rainalert API.md openapi.yaml ./
 
 USER rainalert
 

@@ -1,5 +1,71 @@
+/* RainAlert - the night street.
+ *
+ * The card is a dark panel laid over the photograph: the same night the
+ * picture shows, lit by the same sodium lamps. The colours are taken from
+ * the image - asphalt, haze, mist, paper, and the amber of a street lamp -
+ * and the amber is the only accent, so a colour on the page always means
+ * something about the rain.
+ *
+ * The type is Archivo, self-hosted: no third party is asked for it, and the
+ * page works with no network. The width axis does the work - the city name
+ * is set wide, the labels are set narrow, and the figures are set wide
+ * again in tabular numerals.
+ */
+
+@font-face {
+    font-family: 'Archivo';
+    font-style: normal;
+    font-weight: 400 800;
+    font-stretch: 62% 125%;
+    font-display: swap;
+    src: url('fonts/archivo-latin.woff2') format('woff2');
+    /* The Latin subset. A character outside it falls back to the system
+       font, which is better than a page that asks a third party for it. */
+    unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6,
+        U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122,
+        U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+/* The extended Latin subset, for the accented letters of a city nobody
+   looked up in advance — Gdansk, Malmo, Zurich. The browser only fetches
+   this file when a page actually uses one of these characters, so it costs
+   nothing to the readers who do not. */
+@font-face {
+    font-family: 'Archivo';
+    font-style: normal;
+    font-weight: 400 800;
+    font-stretch: 62% 125%;
+    font-display: swap;
+    src: url('fonts/archivo-latin-ext.woff2') format('woff2');
+    unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7,
+        U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F,
+        U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F,
+        U+A720-A7FF;
+}
+
+:root {
+    /* The palette, taken from the photograph. */
+    --asphalt: #0d1216;
+    --haze: #182027;
+    --haze-deep: #121a20;
+    --line: #202a31;
+    --line-lit: #2a343b;
+    --mist: #8fa3ae;
+    --dim: #6f818b;
+    --paper: #e9eff2;
+    --lamp: #e9a93c;
+    --wet: #5fa8d3;
+    --calm: #7c8b94;
+    /* The reader's own threshold. It answers a different question from the
+       app's advice, so it has its own colour and never stands in for it. */
+    --ember: #e4795f;
+
+    --font: 'Archivo', 'Segoe UI', system-ui, -apple-system, 'Helvetica Neue',
+        Arial, sans-serif;
+}
+
 body {
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    font-family: var(--font);
     background: url('image/rain-alert-bg.jpg') no-repeat center center fixed;
     background-size: cover;
     display: flex;
@@ -12,6 +78,7 @@ body {
        below the card, and this keeps a standard desktop view scroll-free. */
     padding: 0.75rem 0 0.5rem;
     box-sizing: border-box;
+    -webkit-font-smoothing: antialiased;
 }
 
 .page {
@@ -25,121 +92,194 @@ body {
     margin: auto;
 }
 
+/* The panel. A dark plate on the photograph, not a white slab on it. */
 .container {
-    background: white;
-    padding: 1.15rem 1.75rem;
-    border-radius: 10px;
-    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-    /* Border-box so the 90% width includes the padding. With the default
-       content-box the card was 90% of the viewport *plus* the padding, which
-       pushed it past the screen edge on narrow viewports. */
+    background: var(--asphalt);
+    color: var(--paper);
+    padding: 0.9rem 1.05rem 0.8rem;
+    border: 1px solid rgba(233, 239, 242, 0.08);
+    border-radius: 14px;
+    box-shadow: 0 18px 44px rgba(0, 0, 0, 0.45);
     box-sizing: border-box;
-    max-width: 564px;
-    width: 90%;
+    max-width: 520px;
+    width: 92%;
+    font-size: 0.85rem;
+    line-height: 1.45;
 }
 
-.copyright {
-    margin-top: 0.5rem;
-    color: #ffffff;
-    font-size: 0.8rem;
-    text-align: center;
-    /* The footer sits over the background photo, so it needs a shadow to stay
-       legible against the lighter parts of the image. */
-    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.7);
+/* The city index is a list of links rather than a forecast card, so it is
+   allowed to be wider. */
+.container-wide {
+    max-width: 640px;
 }
 
-/* Links in the footer sit over the background photo, so they are white like
-   the text around them and underlined to show they are links. */
-.copyright a {
-    color: inherit;
-    text-decoration: underline;
+/* --- The top bar ------------------------------------------------------------
+   The mark, the name, and - on a page that already has a forecast - the
+   search as one compact field. */
+.topbar {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem 0.75rem;
+    margin-bottom: 0.6rem;
 }
 
-.copyright a:hover,
-.copyright a:focus-visible {
-    text-decoration-thickness: 2px;
+.brand {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    color: var(--paper);
+    text-decoration: none;
+    font-size: 0.82rem;
+    font-variation-settings: 'wdth' 74, 'wght' 700;
+    letter-spacing: 0.01em;
 }
 
-/* The data credits (Open-Meteo requires attribution) are a second, smaller
-   line under the copyright notice. */
-.credits {
+.brand-mark {
     display: block;
-    margin-top: 0.15rem;
-    font-size: 0.7rem;
+    border-radius: 7px;
+    flex: 0 0 auto;
 }
 
-h1 {
-    color: #2c3e50;
-    text-align: center;
-    /* The default h1 margins are generous. Trimming them keeps the card
-       inside a 768px-tall window now that the headline banner is one more
-       line in it, and now that the preferences row is another. */
-    margin: 0.35rem 0 0.45rem;
+.brand:hover .brand-name,
+.brand:focus-visible .brand-name {
+    text-decoration: underline;
+    text-underline-offset: 3px;
 }
 
-.form-group {
-    margin-bottom: 0.45rem;
+/* --- The search -------------------------------------------------------------
+   One form, in two sizes: a compact field in the top bar of a page that
+   already has a forecast, and a full-width field on a start page, where the
+   search is the whole point of the page. */
+.search {
+    display: flex;
+    align-items: stretch;
+    gap: 0.4rem;
+}
+
+.search-compact {
+    margin-left: auto;
+}
+
+.search-compact input[type="text"] {
+    width: 8.5rem;
+}
+
+.search-wide {
+    width: 100%;
+    margin: 0.9rem 0 0;
+}
+
+.search-wide input[type="text"] {
+    flex: 1 1 auto;
+    width: auto;
 }
 
 input[type="text"] {
-    width: 100%;
-    padding: 0.5rem;
-    border: 1px solid #ddd;
-    border-radius: 5px;
+    padding: 0.4rem 0.6rem;
+    background: var(--haze);
+    border: 1px solid var(--line-lit);
+    border-radius: 7px;
+    color: var(--paper);
+    font: inherit;
+    font-size: 0.8rem;
     box-sizing: border-box;
 }
 
+input[type="text"]::placeholder {
+    color: var(--dim);
+}
+
+input[type="text"]:focus-visible {
+    outline: 2px solid var(--lamp);
+    outline-offset: 1px;
+    border-color: transparent;
+}
+
 button {
-    width: 100%;
-    padding: 0.75rem;
-    background-color: #3498db;
-    color: white;
+    padding: 0.4rem 0.85rem;
+    background: var(--lamp);
+    color: #17130b;
     border: none;
-    border-radius: 5px;
+    border-radius: 7px;
     cursor: pointer;
-    font-size: 1rem;
+    font: inherit;
+    font-size: 0.8rem;
+    font-variation-settings: 'wdth' 74, 'wght' 700;
 }
 
 button:hover {
-    background-color: #2980b9;
+    background: #f0b855;
 }
 
-.error {
-    color: #e74c3c;
-    font-weight: bold;
-    text-align: center;
-    margin: 20px 0;
+button:focus-visible {
+    outline: 2px solid var(--paper);
+    outline-offset: 2px;
 }
 
+/* --- The start page ---------------------------------------------------------
+   What the site is, and the one thing to do with it. */
+.intro {
+    margin: 1.2rem 0 0;
+}
+
+.page-title,
+.city-name {
+    margin: 0;
+    font-size: 1.85rem;
+    line-height: 1.05;
+    font-variation-settings: 'wdth' 100, 'wght' 700;
+    letter-spacing: -0.02em;
+    color: var(--paper);
+    text-wrap: balance;
+}
+
+.lead {
+    margin: 0.35rem 0 0;
+    color: var(--mist);
+    font-size: 0.85rem;
+}
+
+/* --- The forecast ----------------------------------------------------------- */
 .result {
-    margin-top: 0.6rem;
-    border-top: 1px solid #eee;
-    padding-top: 0.4rem;
+    margin-top: 0.1rem;
 }
 
-.result h3 {
-    color: #2c3e50;
-    margin-top: 0;
-    /* The default h3 bottom margin is generous; trimming it keeps the whole
-       card inside a 768px-tall window once the forecast list is rendered. */
-    margin-bottom: 0.35rem;
-}
-
-/* The heading row of the result. The export link sits on the right of it,
-   on the line the heading already takes, so the card does not grow by a
-   line for it - and the card has no room for one. */
+/* The heading row. The export link sits on the line of the caption under
+   the city's name, so the answer at the top of the page is not pushed down
+   by it. */
 .result-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 0.4rem 0.9rem;
+    flex-wrap: wrap;
+}
+
+/* The heading takes the slack, so a long city name wraps the heading rather
+   than pushing the link off the panel. */
+.result-titles {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+/* The line under the city's name: what the week is, and the way to put the
+   wet days into a calendar. The two sit on one baseline, so the link reads
+   as part of the caption rather than as a button dropped beside the
+   answer. */
+.result-subline {
     display: flex;
     align-items: baseline;
     justify-content: space-between;
-    gap: 0.5rem;
+    gap: 0.25rem 0.9rem;
+    flex-wrap: wrap;
 }
 
-/* The heading takes the slack, so a long city name wraps the heading
-   rather than pushing the link off the card. */
-.result-head h3 {
-    flex: 1 1 auto;
-    min-width: 0;
+.result-caption {
+    margin: 0.15rem 0 0;
+    color: var(--mist);
+    font-size: 0.72rem;
+    font-variation-settings: 'wdth' 74, 'wght' 600;
+    letter-spacing: 0.02em;
 }
 
 /* The calendar export: a quiet link that puts the rainy days into the
@@ -147,20 +287,33 @@ button:hover {
    RainAlert needs no server and no account for that. */
 .calendar-export {
     display: inline-flex;
-    align-items: center;
-    gap: 0.25rem;
+    align-items: baseline;
+    gap: 0.3rem;
     flex: 0 0 auto;
-    color: #1a5e96;
-    font-size: 0.68rem;
-    font-weight: 600;
+    color: var(--mist);
+    font-size: 0.7rem;
+    font-variation-settings: 'wdth' 74, 'wght' 600;
     line-height: 1.2;
-    text-decoration: none;
+    text-decoration: underline;
+    text-decoration-color: rgba(143, 163, 174, 0.4);
+    text-underline-offset: 3px;
     white-space: nowrap;
 }
 
 .calendar-export:hover,
 .calendar-export:focus-visible {
-    text-decoration: underline;
+    color: var(--paper);
+    text-decoration-color: var(--paper);
+}
+
+/* The two little glyphs on the page - the calendar and the bell - are
+   drawn rather than borrowed, so that they take the panel's own colours
+   instead of arriving as little coloured pictures in the middle of a
+   night. A blue calendar in particular would be read as a rain colour. */
+.calendar-icon,
+.notify-icon {
+    display: block;
+    flex: 0 0 auto;
 }
 
 /* The hidden attribute has to win against the display above, or the link
@@ -172,132 +325,290 @@ button:hover {
 
 /* The headline above the list: one line saying what the week looks like. It
    carries the same severity band as the rows below, but the band name is in
-   the sentence too, so the meaning never rests on the colour alone. The
-   padding and line height are tight, because the card has to fit a 768px
-   window and the banner is one more line in it. */
+   the sentence too, so the meaning never rests on the colour alone. */
 .headline {
-    margin: 0 0 0.3rem;
-    padding: 0.2rem 0.55rem;
+    margin: 0.6rem 0 0.65rem;
+    padding: 0.5rem 0.7rem;
     background: var(--severity-tint);
     border-left: 3px solid var(--severity-accent);
-    border-radius: 4px;
+    border-radius: 0 8px 8px 0;
     color: var(--severity-text);
-    font-size: 0.78rem;
-    font-weight: 600;
-    line-height: 1.2;
+    font-size: 0.85rem;
+    font-variation-settings: 'wdth' 74, 'wght' 600;
+    line-height: 1.35;
 }
 
 .result-empty {
-    border-top-color: #eee;
     text-align: center;
+    padding: 1.2rem 0;
 }
 
 .result-empty p {
-    color: #7f8c8d;
+    color: var(--mist);
     margin: 0;
 }
 
-.weather-item {
-    /* Fallback band colours. A row always carries a severity-* class, which
-       overrides these; they only apply if that ever changes. */
-    --severity-text: #5d6d7e;
-    --severity-accent: #6c7a89;
-    --severity-tint: #f7f9fa;
-    display: flex;
-    align-items: center;
-    gap: 0.5rem 1rem;
-    /* Wrap rather than squeeze the two columns on narrow screens. */
-    flex-wrap: wrap;
-    padding: 0.32rem 0.75rem;
-    /* The negative margin lets the tint reach the card's padding edge, but
-       it must not push the row past the card, so the right margin cancels
-       the left one out. */
-    margin: 0 -0.75rem;
-    border-bottom: 1px solid #f9f9f9;
-    background: var(--severity-tint);
-    border-left: 3px solid var(--severity-accent);
-}
-
-/* The band classes are defined after .weather-item so they win the cascade
-   for a row that carries both, and so they can be used on their own by the
-   legend swatches. */
+/* --- The band colours --------------------------------------------------------
+   One colour per band, and the same colour for the number, the bar and the
+   banner. Amber is the lamp, blue is the rain that is possible, grey is the
+   rain that is unlikely. */
 .severity-low {
-    --severity-text: #5d6d7e;
-    --severity-accent: #6c7a89;
-    --severity-tint: #f7f9fa;
+    --severity-text: #97a8b1;
+    --severity-accent: #7c8b94;
+    --severity-tint: rgba(124, 139, 148, 0.1);
 }
 
 .severity-moderate {
-    --severity-text: #1a5e96;
-    --severity-accent: #2e86c1;
-    --severity-tint: #eef5fc;
+    --severity-text: #7fc3ea;
+    --severity-accent: #5fa8d3;
+    --severity-tint: rgba(95, 168, 211, 0.12);
 }
 
 .severity-high {
-    --severity-text: #a35c00;
-    --severity-accent: #d35400;
-    --severity-tint: #fdf3e6;
+    --severity-text: #f0b95a;
+    --severity-accent: #e9a93c;
+    --severity-tint: rgba(233, 169, 60, 0.12);
 }
 
 .severity-unknown {
-    --severity-text: #5d6d7e;
-    --severity-accent: #aab7b8;
-    --severity-tint: #f7f9fa;
+    --severity-text: #8fa3ae;
+    --severity-accent: #4e5c64;
+    --severity-tint: rgba(143, 163, 174, 0.06);
 }
 
-.weather-item:last-child {
-    border-bottom: none;
+/* --- The day panel -----------------------------------------------------------
+   The detail of the day the reader has picked, above the week it belongs
+   to. Every day has a panel of its own, and they all sit in the same cell
+   of one grid, so the strip keeps its height when the day changes.
+
+   Only the active panel is visible. The others are hidden rather than
+   removed, so they take no part in the tab order and are not read out. */
+.day-detail {
+    display: grid;
+    margin: 0.6rem 0 0;
+}
+
+.day-panel {
+    grid-area: 1 / 1;
+    visibility: hidden;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0.1rem 0.55rem;
+    padding-left: 0.55rem;
+    border-left: 2px solid var(--severity-accent, var(--line-lit));
+    font-size: 0.72rem;
+    color: var(--mist);
+}
+
+.day-panel.is-active {
+    visibility: visible;
+}
+
+/* The day itself, and the band it is in. The band is named in words as
+   well as coloured, so the meaning never rests on the colour alone. */
+.day-panel-when {
+    color: var(--paper);
+    font-variation-settings: 'wdth' 74, 'wght' 700;
+}
+
+.day-panel-band {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    color: var(--severity-text);
+    font-variation-settings: 'wdth' 74, 'wght' 600;
+}
+
+/* The chance, and the two figures that say how much rain falls and how
+   long it lasts. */
+.day-panel-chance {
+    color: var(--paper);
+    font-variation-settings: 'wdth' 100, 'wght' 600;
+    font-variant-numeric: tabular-nums;
+}
+
+.day-panel-amount,
+.day-panel-hours {
+    color: var(--dim);
+    font-variant-numeric: tabular-nums;
+}
+
+/* The app's own advice, at the same threshold as the umbrella in the
+   column and the banner above. */
+.day-panel-advice {
+    color: var(--lamp);
+    font-variation-settings: 'wdth' 74, 'wght' 600;
+}
+
+/* --- The week ----------------------------------------------------------------
+   Seven columns of figures. The list is still a list in the markup: it is a
+   list of days, and the order is the order of the days. */
+.weather-list {
+    list-style: none;
+    margin: 0;
+    padding: 0.55rem 0 0;
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 0.15rem;
+    border-top: 1px solid var(--line);
+}
+
+.weather-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    gap: 0.1rem;
+    min-width: 0;
+    padding: 0.2rem 0.1rem 0.15rem;
+    border-radius: 8px;
+}
+
+/* Today is the day the reader is standing in, so its column is lifted a
+   little out of the row. */
+.weather-item.is-today {
+    background: rgba(233, 239, 242, 0.05);
+}
+
+/* The day the reader has picked. The script wraps each column in a
+   button, so the whole column is the target and the figures in it are the
+   button's own words - a reader who cannot see the column still hears
+   what it says. */
+.day-pick {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.1rem;
+    width: 100%;
+    padding: 0;
+    margin: 0;
+    border: 0;
+    background: none;
+    color: inherit;
+    font-family: inherit;
+    font-size: inherit;
+    font-weight: inherit;
+    font-style: inherit;
+    line-height: inherit;
+    text-align: center;
+    cursor: pointer;
+    border-radius: 6px;
+}
+
+.day-pick:focus-visible {
+    outline: 2px solid var(--lamp);
+    outline-offset: 2px;
+}
+
+/* The selected day is marked with a rule under its column, in the paper's
+   own colour. The band's colour already means the rain, and the selection
+   is a different thing, so it does not borrow it. */
+.weather-item.is-selected .day-pick {
+    box-shadow: inset 0 -2px 0 var(--paper);
 }
 
 .date {
-    font-weight: bold;
-    color: var(--severity-text);
     display: flex;
-    align-items: center;
-    gap: 0.45rem;
-    min-width: 0;
-    /* The date takes the slack. The two right-hand cells are fixed-width
-       columns, so the numbers line up down the list instead of floating. */
-    flex: 1 1 auto;
+    align-items: baseline;
+    justify-content: center;
+    gap: 0.22rem;
+    color: var(--mist);
+    font-size: 0.63rem;
+    line-height: 1.3;
+    white-space: nowrap;
 }
 
-/* The dot carries the band colour; the legend below the form explains what
-   each colour means, so severity never depends on colour alone. */
-.severity-dot {
-    width: 0.6rem;
-    height: 0.6rem;
-    flex: 0 0 auto;
-    border-radius: 50%;
-    background: var(--severity-accent);
+.day-name {
+    font-variation-settings: 'wdth' 74, 'wght' 600;
+}
+
+.day-num {
+    color: var(--dim);
+    font-variant-numeric: tabular-nums;
+}
+
+.is-today .day-name {
+    color: var(--paper);
+    font-variation-settings: 'wdth' 74, 'wght' 700;
+}
+
+/* The chance. It is the figure of the column, so it is the largest thing in
+   it, and it is set in the band's own colour. */
+.rain-chance {
+    display: flex;
+    align-items: baseline;
+    justify-content: center;
+    gap: 0.08rem;
+    color: var(--severity-text);
+    font-size: 1.05rem;
+    font-variation-settings: 'wdth' 100, 'wght' 700;
+    letter-spacing: -0.02em;
+    line-height: 1.15;
+}
+
+/* A day the service did not report says so, in words, rather than showing
+   a number that could be read as zero. The word is shorter than a
+   percentage, so it is set smaller to stay inside its column. */
+.weather-item.severity-unknown .rain-chance {
+    font-size: 0.62rem;
+    font-variation-settings: 'wdth' 74, 'wght' 600;
+    letter-spacing: 0;
+}
+
+.temp {
+    color: var(--dim);
+    font-size: 0.6rem;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+/* The umbrella: the app's advice, and only on the days that reach the
+   threshold. It sits at the foot of the column, so the numbers above it
+   stay in their columns. The glyph is asked for as text rather than as an
+   emoji, so that it takes the lamp's colour instead of arriving as a
+   little blue picture in the middle of a night. */
+.umbrella-slot {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 0.9rem;
+}
+
+.umbrella {
+    color: var(--lamp);
+    font-size: 0.9rem;
+    line-height: 1;
 }
 
 /* The legend maps each band colour to a word, once, instead of repeating
-   the word on every row - seven repeated labels do not fit on one line
-   beside the date and would double the height of the list.
+   the word on every day - seven repeated labels do not fit and would carry
+   nothing after the first one.
 
-   The same row doubles as the header row for the list below it: the two
-   column headings sit on the right, above the two columns they head. That
-   costs no extra height, and the card is already at its vertical limit. */
+   It is also the heading row of the week below it: "Rain chance" names
+   what the figures are, and the switch sets the scale of the
+   temperatures. */
 .severity-legend {
     display: flex;
     flex-wrap: wrap;
-    /* The column gap matches the one on .weather-item, so the two column
-       headings sit exactly above the columns they head. */
-    gap: 0.2rem 1rem;
-    margin: 0.15rem 0 0.35rem;
-    font-size: 0.72rem;
-    color: #5d6d7e;
+    align-items: center;
+    gap: 0.2rem 0.8rem;
+    margin: 0.55rem 0 0.1rem;
+    font-size: 0.7rem;
+    color: var(--mist);
 }
 
-/* The three band names are one group. The group is what takes the slack
-   between the band key and the column headings, exactly as the date takes
-   the slack in a data row - so the two headings line up with their columns
-   at every width, and not only on a wide desktop. */
+.column-head {
+    color: var(--mist);
+    font-variation-settings: 'wdth' 74, 'wght' 600;
+    white-space: nowrap;
+}
+
 .legend-bands {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
-    gap: 0.2rem 0.9rem;
+    gap: 0.2rem 0.75rem;
     flex: 1 1 auto;
     min-width: 0;
 }
@@ -305,119 +616,117 @@ button:hover {
 .legend-item {
     display: flex;
     align-items: center;
-    gap: 0.3rem;
+    gap: 0.28rem;
 }
 
-.legend-item .severity-dot {
+/* The dot carries the band colour; the legend beside it explains what each
+   colour means, so severity never depends on colour alone. */
+.severity-dot {
     width: 0.5rem;
     height: 0.5rem;
+    flex: 0 0 auto;
+    border-radius: 50%;
+    background: var(--severity-accent);
 }
 
-/* The heading for the chance column. It is as wide as that column, and
-   pushed to the right of the band legend, so it sits exactly above the
-   numbers it heads. */
-.column-head {
-    color: #5d6d7e;
-    font-weight: 600;
-    white-space: nowrap;
-    text-align: right;
-    margin-left: auto;
-    flex: 0 0 4.75rem;
-}
-
-/* The temperature switch is the heading for the temperature column, so it
-   gets that column's width and its contents are pushed to the right. That
-   puts the switch directly above the temperatures. */
 .unit-switch {
     display: flex;
     align-items: center;
     gap: 0.15rem;
-    flex: 0 0 5.25rem;
-    justify-content: flex-end;
+    flex: 0 0 auto;
+    /* The switch is pushed to the right of the legend row. When the row is
+       too narrow for it and the bands, it wraps to a second line and stays
+       on the right of that line. */
+    margin-left: auto;
 }
 
 .unit-option {
     display: inline-block;
-    padding: 0.05rem 0.35rem;
-    border: 1px solid #d7dee3;
-    border-radius: 4px;
-    color: #5d6d7e;
+    padding: 0.1rem 0.4rem;
+    border: 1px solid var(--line-lit);
+    border-radius: 5px;
+    color: var(--mist);
     text-decoration: none;
+    font-size: 0.68rem;
     line-height: 1.4;
 }
 
-/* The active scale is filled, so the current unit is clear at a glance
-   and not only from the colour. */
+/* The active scale is filled, so the current unit is clear at a glance and
+   not only from the colour. */
 .unit-option.is-active {
-    background: #2c3e50;
-    border-color: #2c3e50;
-    color: #ffffff;
-    font-weight: 600;
+    background: var(--paper);
+    border-color: var(--paper);
+    color: var(--asphalt);
+    font-weight: 700;
 }
 
 .unit-option:hover,
 .unit-option:focus-visible {
-    border-color: #2c3e50;
+    color: var(--paper);
+    border-color: var(--mist);
 }
 
 .unit-option.is-active:hover,
 .unit-option.is-active:focus-visible {
-    background: #34495e;
-    border-color: #34495e;
-    color: #ffffff;
-}
-
-/* The chance column. The width is the widest value it has to hold: the
-   umbrella icon plus "100%" is 68px and "unknown" is 70px, so 76px. The
-   icon sits inside the column, so the digits' right edge is the same on
-   every row and the column reads as a column. */
-.rain-chance {
-    color: var(--severity-text);
-    font-weight: bold;
-    white-space: nowrap;
-    display: flex;
-    align-items: center;
-    justify-content: flex-end;
-    gap: 0.2rem;
-    flex: 0 0 4.75rem;
+    color: var(--asphalt);
+    background: #ffffff;
+    border-color: #ffffff;
 }
 
 /* --- Hour-by-hour strip ----------------------------------------------------
    One column per hour of the city's local day. The bar height is the rain
-   chance; the bar colour is the same severity band the daily list uses, so
-   the two lists read the same way. The exact percentage is in the tooltip
-   and in the screen-reader text, never only in the bar. */
+   chance; the bar colour is the same severity band the week uses, so the
+   two read the same way. Every hour's number is written over its own bar,
+   so a value never needs a hover to be read. */
 .hourly {
-    margin: 0.2rem 0 0.35rem;
-    padding: 0.25rem 0.6rem;
-    background: #f8fafb;
-    border-radius: 6px;
+    margin: 0.65rem 0 0.6rem;
+    padding: 0.6rem 0.65rem 0.5rem;
+    background: var(--haze-deep);
+    border: 1px solid var(--line);
+    border-radius: 10px;
 }
 
-.hourly-title {
-    margin: 0;
-    font-size: 0.75rem;
-    font-weight: 600;
-    color: #2c3e50;
-    line-height: 1.2;
-}
-
-.hourly-summary {
-    margin: 0.1rem 0 0;
-    font-size: 0.75rem;
-    font-weight: 600;
-    color: #1a5e96;
-    line-height: 1.2;
-}
-
-/* The title row of the hourly block. The notification control sits on the
-   right of it, on the line the title already takes, so the card does not
-   grow by a line for it. */
 .hourly-head {
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 0.5rem;
+}
+
+.hourly-title {
+    margin: 0;
+    font-size: 0.78rem;
+    font-variation-settings: 'wdth' 74, 'wght' 600;
+    color: var(--paper);
+    line-height: 1.2;
+}
+
+/* The strips, one for each day of the week. They share one cell of one
+   grid, so the graph stays exactly where it is when the reader picks
+   another day: the page does not change height, and the strip does not
+   jump. The `hidden` attribute would collapse the cell instead and make
+   the week below move, so the days are hidden with `visibility`. */
+.hourly-days {
+    display: grid;
+}
+
+.day-strip {
+    grid-area: 1 / 1;
+    visibility: hidden;
+}
+
+.day-strip.is-active {
+    visibility: visible;
+}
+
+.hourly-summary {
+    margin: 0.25rem 0 0;
+    font-size: 0.78rem;
+    color: var(--mist);
+    line-height: 1.35;
+    /* Two lines are reserved for every day, so a day whose sentence is
+       shorter than another day's does not move the graph. */
+    min-height: 2.7em;
 }
 
 /* The notification control: a small, quiet button. It belongs next to the
@@ -428,15 +737,15 @@ button:hover {
     flex: 0 0 auto;
     display: inline-flex;
     align-items: center;
-    gap: 0.2rem;
-    padding: 0.05rem 0.4rem;
-    font-size: 0.65rem;
-    font-weight: 600;
-    line-height: 1.2;
-    color: #1a5e96;
-    background: #ffffff;
-    border: 1px solid #cfe0ec;
-    border-radius: 4px;
+    gap: 0.25rem;
+    padding: 0.15rem 0.45rem;
+    font-size: 0.68rem;
+    font-variation-settings: 'wdth' 74, 'wght' 600;
+    line-height: 1.3;
+    color: var(--mist);
+    background: transparent;
+    border: 1px solid var(--line-lit);
+    border-radius: 6px;
     cursor: pointer;
 }
 
@@ -448,7 +757,8 @@ button:hover {
 
 .notify-toggle:hover,
 .notify-toggle:focus-visible {
-    border-color: #2e86c1;
+    color: var(--paper);
+    border-color: var(--mist);
 }
 
 .notify-toggle:focus-visible {
@@ -457,26 +767,83 @@ button:hover {
 
 /* A browser that will not show notifications has no button to offer. */
 .notify-toggle[disabled] {
-    color: #7f8c8d;
-    border-color: #dde3e6;
+    color: var(--dim);
+    border-color: var(--line);
     cursor: default;
 }
 
-/* The strip is a flex row of equal columns and the axis below it is the
-   same row of cells, so every label sits under its own bar. The 2px gap is
-   the surface gap that separates one bar from the next - no borders. */
+/* The bell is drawn, not borrowed. The strike appears only when the
+   browser has blocked notifications, so the state is in the drawing as
+   well as in the words. */
+.bell-slash {
+    display: none;
+}
+
+.notify-toggle.is-blocked .bell-slash {
+    display: inline;
+}
+
+.notify-toggle.is-on {
+    color: var(--lamp);
+    border-color: var(--lamp);
+}
+
+/* The value row. It is the same row of cells as the strip below it, so
+   every number sits over its own bar. The type is set at the narrowest
+   width of the family, because twenty-four columns of three digits have
+   to fit across the panel. */
+.hourly-values {
+    display: flex;
+    gap: 2px;
+    height: 0.65rem;
+    margin-top: 0.45rem;
+}
+
+.hour-value {
+    position: relative;
+    flex: 1 1 0;
+    min-width: 0;
+    text-align: center;
+    font-size: 0.55rem;
+    line-height: 1.2;
+    font-variation-settings: 'wdth' 62, 'wght' 600;
+    letter-spacing: -0.02em;
+    color: var(--mist);
+    font-variant-numeric: tabular-nums;
+    overflow: visible;
+}
+
+/* The label of the current hour. It is written under its own value, in
+   the gap above the strip, so the rule below it says which hour is now. */
+.now-label {
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    margin-top: 1px;
+    color: var(--paper);
+    font-size: 0.5rem;
+    line-height: 1;
+    font-variation-settings: 'wdth' 74, 'wght' 600;
+    letter-spacing: 0.03em;
+    white-space: nowrap;
+}
+
+/* The strip is a flex row of equal columns and the row of values and the
+   axis below it are the same row of cells, so every number and every label
+   sits over its own bar. The 2px gap is the surface gap that separates one
+   bar from the next - no borders. */
 .hourly-strip {
     display: flex;
     align-items: flex-end;
     gap: 2px;
-    height: 38px;
-    /* The gap above the strip is where the hover tooltip opens. It is sized
-       so that a tooltip on the tallest bar clears the summary line above
-       it: tooltip height plus its margin. */
-    margin-top: 24px;
+    height: 62px;
+    /* The gap above the strip is where the label of the current hour is
+       written, and where the hover tooltip opens. */
+    margin-top: 20px;
     /* The baseline the bars grow from: a solid hairline, one step off the
        surface, recessive. */
-    border-bottom: 1px solid #e3e8ea;
+    border-bottom: 1px solid var(--line-lit);
 }
 
 .hour {
@@ -501,18 +868,18 @@ button:hover {
     transform: translateX(-50%);
     margin-bottom: 5px;
     padding: 0.18rem 0.4rem;
-    background: #2c3e50;
-    color: #ffffff;
+    background: var(--haze);
+    border: 1px solid var(--line-lit);
+    color: var(--paper);
     font-size: 0.65rem;
     line-height: 1.2;
     white-space: nowrap;
-    border-radius: 4px;
-    /* The tooltip must not be clipped by the strip. */
+    border-radius: 5px;
     z-index: 5;
     pointer-events: none;
 }
 
-/* The first and last bars would push their tooltip off the card, so those
+/* The first and last bars would push their tooltip off the panel, so those
    two are anchored to the edge instead of to the middle of the bar. */
 .hour:first-child:hover::before {
     left: 0;
@@ -527,15 +894,13 @@ button:hover {
 
 .hour-bar {
     width: 100%;
-    /* Capped so a bar never fills its whole slot; the leftover is air. */
-    max-width: 24px;
     height: 0;
     /* A known 0% chance is still a value, so the bar keeps a visible stub
        rather than disappearing. Without it the strip has holes in it, and a
        hole reads as missing data rather than as "no rain". */
     min-height: 2px;
     /* Rounded data-end, square at the baseline. */
-    border-radius: 3px 3px 0 0;
+    border-radius: 2px 2px 0 0;
     background: var(--severity-accent);
 }
 
@@ -562,64 +927,38 @@ button:hover {
 .hour-bar.height-95 { height: 95%; }
 .hour-bar.height-100 { height: 100%; }
 
-/* An hour the service reported no value for gets a flat stub, not a zero
-   bar: a missing value is not the same thing as a 0% chance. */
+/* An hour the service reported no value for gets a dashed stub, not a zero
+   bar: a missing value is not the same thing as a 0% chance, and it has to
+   look different from one. */
 .hour-bar.hour-bar-unknown {
     height: 2px;
-    background: #aab7b8;
+    background: repeating-linear-gradient(90deg,
+        var(--severity-accent) 0 2px, transparent 2px 4px);
 }
 
-/* The current hour is marked with a pulsing dot under the baseline, in ink
-   rather than in a data colour, so the data mark itself is not altered. */
+/* The hours that have already happened are dimmed, so the strip reads as
+   the rest of the day rather than as a chart of the whole day. */
+.hour-past .hour-bar {
+    opacity: 0.34;
+}
+
+/* The current hour is a rule through the strip, in ink rather than in a data
+   colour, so the data mark itself is not altered. */
 .hourly-strip .hour-now::after {
     content: "";
     position: absolute;
-    /* The dot hangs below the baseline, with a 1px gap under it. An 8px dot
-       therefore needs 9px of offset to keep that gap. */
-    bottom: -9px;
+    top: -4px;
+    bottom: -3px;
     left: 50%;
-    transform: translateX(-50%);
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    background: #2c3e50;
-    animation: hour-now-pulse 2.4s ease-out infinite;
-}
-
-/* A slow, small pulse: a halo grows a few pixels and fades, so the marker
-   reads as "now" without pulling the eye off the data. The dot dims
-   slightly at the midpoint, which is what makes it feel like a breath
-   rather than a blink. The halo is twice the dot's radius, so the two
-   stay in proportion when the dot is resized. */
-@keyframes hour-now-pulse {
-    0% {
-        box-shadow: 0 0 0 0 rgba(44, 62, 80, 0.4);
-        opacity: 1;
-    }
-    50% {
-        opacity: 0.7;
-    }
-    100% {
-        box-shadow: 0 0 0 10px rgba(44, 62, 80, 0);
-        opacity: 1;
-    }
-}
-
-/* The pulse is decoration, so it is dropped for anyone who has asked for
-   less motion. The dot stays, so the current hour is still marked. */
-@media (prefers-reduced-motion: reduce) {
-    .hourly-strip .hour-now::after {
-        animation: none;
-    }
+    width: 1px;
+    background: var(--paper);
+    opacity: 0.6;
 }
 
 .hourly-axis {
     display: flex;
     gap: 2px;
-    /* Room for the pulsing dot, which hangs below the baseline. An 8px dot
-       needs 9px of offset plus a 1px gap, so the axis sits 11px down to
-       keep the dot clear of the hour labels. */
-    margin-top: 11px;
+    margin-top: 3px;
 }
 
 .hour-axis-cell {
@@ -627,8 +966,8 @@ button:hover {
     flex: 1 1 0;
     min-width: 0;
     height: 0.75rem;
-    font-size: 0.6rem;
-    color: #5d6d7e;
+    font-size: 0.53rem;
+    color: var(--dim);
     font-variant-numeric: tabular-nums;
 }
 
@@ -648,85 +987,77 @@ button:hover {
 }
 
 .hour-axis-label.hour-now {
-    color: #2c3e50;
+    color: var(--paper);
     font-weight: 700;
 }
 
 /* The table view. Every value in the strip is reachable here without
    hovering, so the tooltip is never the only way to read a number. */
 .hourly-table {
-    margin-top: 0.4rem;
+    margin-top: 0.5rem;
     font-size: 0.72rem;
 }
 
 .hourly-table summary {
     cursor: pointer;
-    color: #5d6d7e;
+    color: var(--mist);
 }
 
 .hourly-table table {
     width: 100%;
     border-collapse: collapse;
-    margin-top: 0.3rem;
+    margin-top: 0.35rem;
 }
 
 .hourly-table th,
 .hourly-table td {
-    padding: 0.15rem 0.3rem;
+    padding: 0.18rem 0.35rem;
     text-align: left;
-    border-bottom: 1px solid #eef1f2;
+    border-bottom: 1px solid var(--line);
     font-weight: normal;
-    color: #5d6d7e;
+    color: var(--mist);
     font-variant-numeric: tabular-nums;
 }
 
 .hourly-table thead th {
     font-weight: 600;
-    color: #2c3e50;
+    color: var(--paper);
 }
 
 .hourly-table tr.is-now th,
 .hourly-table tr.is-now td {
-    color: #2c3e50;
+    color: var(--paper);
     font-weight: 700;
 }
 
-/* The optional donation line under the "Check Rain Chance" button. It is quiet
-   on purpose: one short sentence, no box and no button. */
+/* --- The donation line ------------------------------------------------------
+   Under the search, not under the forecast: it is a site-wide link, not
+   part of the answer. One short sentence, no box and no button. */
 .donate {
-    margin: 0.5rem 0 0;
-    font-size: 0.75rem;
-    line-height: 1.3;
-    text-align: center;
-    color: #5d6d7e;
+    margin: 0.55rem 0 0;
+    font-size: 0.72rem;
+    line-height: 1.35;
+    color: var(--mist);
 }
 
 .donate a {
-    color: #1a5e96;
+    color: var(--paper);
     font-weight: 600;
+    text-decoration: underline;
+    text-underline-offset: 2px;
 }
 
-/* The umbrella icon. The gap to the number is the flex gap on the chance
-   column, so the icon sits the same distance from the number on every
-   row. */
-.umbrella {
-    font-size: 1.05em;
-}
-
-/* The temperature column. The width is the widest value it has to hold:
-   "-12° / -18°" is 78px and "100° / -40°" is 81px, so 84px. */
-.temp {
-    color: #5d6d7e;
-    font-weight: normal;
-    white-space: nowrap;
-    text-align: right;
-    flex: 0 0 5.25rem;
+.error {
+    color: #f09a8a;
+    font-weight: 600;
+    margin: 0.7rem 0 0;
+    font-size: 0.85rem;
 }
 
 /* --- The browser-side preferences -------------------------------------------
-   The row under the search form: which city to remember, and the reader's
-   own rain threshold. Both are kept in the browser's localStorage, so the
-   server stays stateless and learns nothing about the reader.
+   The row at the foot of the panel: which city to remember, and the
+   reader's own rain threshold. Both are kept in the browser's localStorage,
+   so the server stays stateless and learns nothing about the reader.
 
    Without JavaScript neither control can do anything, so the row stays
    hidden until the script has run. */
@@ -738,41 +1069,46 @@ button:hover {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
-    gap: 0.25rem 0.9rem;
-    margin: 0.3rem 0 0;
-    font-size: 0.78rem;
-    color: #4a5a6a;
+    gap: 0.3rem 1rem;
+    margin: 0.8rem 0 0;
+    padding-top: 0.55rem;
+    border-top: 1px solid var(--line);
+    font-size: 0.75rem;
+    color: #a3b3bb;
     /* The preferences are a feature, not a footnote, so they are set in
-       bold. At this size a quiet weight was easy to walk past, and the
-       whole point of the row is that a reader notices it exists. */
+       bold. At a quiet weight a reader walked straight past them. */
     font-weight: 600;
 }
 
 .pref {
     display: inline-flex;
     align-items: center;
-    gap: 0.3rem;
+    gap: 0.35rem;
     white-space: nowrap;
 }
 
 .pref input[type="checkbox"] {
     width: auto;
     margin: 0;
+    accent-color: var(--lamp);
 }
 
 .pref input[type="number"] {
-    width: 3.4rem;
-    padding: 0.1rem 0.25rem;
-    border: 1px solid #d7dee3;
-    border-radius: 4px;
-    font-size: 0.78rem;
+    width: 3.2rem;
+    padding: 0.15rem 0.25rem;
+    background: var(--haze);
+    border: 1px solid var(--line-lit);
+    border-radius: 5px;
+    color: var(--paper);
+    font: inherit;
+    font-size: 0.75rem;
     font-weight: 600;
     text-align: center;
     box-sizing: border-box;
 }
 
 .pref input[type="number"]:focus-visible {
-    border-color: #2c3e50;
+    border-color: var(--lamp);
     outline: none;
 }
 
@@ -782,18 +1118,101 @@ button:hover {
 }
 
 .pref-status {
-    color: #4a5a6a;
+    color: #a3b3bb;
 }
 
 /* The marker for a day that reaches the reader's own threshold.
 
    It has its own symbol and its own words, because it answers a different
-   question from the umbrella: the umbrella is the app's advice, the triangle
-   is the reader's own limit. The two never stand in for each other. */
+   question from the umbrella: the umbrella is the app's advice, the
+   triangle is the reader's own limit. The two never stand in for each
+   other. */
 .alert-marker {
-    color: #c0392b;
-    font-size: 0.7em;
+    color: var(--ember);
+    font-size: 0.6rem;
     line-height: 1;
+}
+
+/* --- The other pages --------------------------------------------------------
+   The city index and the page that is not there share the panel with the
+   forecast. */
+.cities-lead,
+.notfound-lead {
+    color: var(--mist);
+    margin: 0.5rem 0 0.9rem;
+}
+
+.cities-lead a,
+.notfound-links a {
+    color: var(--paper);
+}
+
+/* The list of cities. A grid rather than a column, so that the page is
+   short and the links are easy to scan. */
+.city-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 0 0.9rem;
+}
+
+.city-list a {
+    display: block;
+    padding: 0.3rem 0;
+    color: var(--paper);
+    text-decoration: none;
+    border-bottom: 1px solid var(--line);
+}
+
+.city-list a:hover,
+.city-list a:focus-visible {
+    color: var(--lamp);
+    border-bottom-color: var(--lamp);
+}
+
+.notfound-links {
+    margin: 0.9rem 0 0;
+    font-size: 0.8rem;
+    color: var(--mist);
+}
+
+/* The copyright line sits over the photograph, so it is white with a
+   shadow, and the links in it are white like the text around them. */
+.copyright {
+    margin-top: 0.5rem;
+    color: #ffffff;
+    font-size: 0.8rem;
+    text-align: center;
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.7);
+}
+
+.copyright a {
+    color: inherit;
+    text-decoration: underline;
+}
+
+.copyright a:hover,
+.copyright a:focus-visible {
+    text-decoration-thickness: 2px;
+}
+
+/* The data credits (Open-Meteo requires attribution) are a second, smaller
+   line under the copyright notice. */
+.credits {
+    display: block;
+    margin-top: 0.15rem;
+    font-size: 0.7rem;
+}
+
+/* Which build this is, under the credits. It is the quietest thing on the
+   page: an answer to "which version is this?", not a headline. */
+.build-info {
+    display: block;
+    margin-top: 0.1rem;
+    font-size: 0.65rem;
+    opacity: 0.72;
 }
 
 /* --- The offline page ------------------------------------------------------
@@ -801,18 +1220,16 @@ button:hover {
    is wrong, and it shows no forecast at all: a stale rain chance is worse
    than none. */
 .offline-lead {
-    color: #2c3e50;
+    color: var(--paper);
     font-size: 0.9rem;
     line-height: 1.4;
-    text-align: center;
     margin: 0.6rem 0 0.4rem;
 }
 
 .offline-note {
-    color: #5d6d7e;
+    color: var(--mist);
     font-size: 0.78rem;
     line-height: 1.4;
-    text-align: center;
     margin: 0 0 0.8rem;
 }
 
@@ -820,50 +1237,48 @@ button:hover {
    is styled like the search button because it is the same action. */
 .offline-retry {
     display: block;
-    padding: 0.75rem;
-    background-color: #3498db;
-    color: #ffffff;
-    border-radius: 5px;
+    padding: 0.5rem 0.75rem;
+    background: var(--lamp);
+    color: #17130b;
+    border-radius: 7px;
     text-align: center;
     text-decoration: none;
-    font-size: 1rem;
+    font-size: 0.85rem;
+    font-variation-settings: 'wdth' 74, 'wght' 700;
 }
 
 .offline-retry:hover,
 .offline-retry:focus-visible {
-    background-color: #2980b9;
+    background: #f0b855;
 }
 
 /* --- Narrow screens --------------------------------------------------------
-   Below this width the date, the chance and the temperature no longer fit on
-   one line, and letting flexbox wrap them where it liked gave a different
-   layout on every row - a longer weekday name pushed its own row over the
-   line, and the columns drifted out of alignment with the headings above
-   them. So the narrow layout is decided here instead: the date takes a line
-   of its own, and the two columns share the line below it, right-aligned.
-
-   The legend row does the same thing, so the headings still sit exactly
-   above the columns they head. */
+   Below this width the seven columns of the week get narrow enough for the
+   numbers to touch, so the type in them is cut down and the date number
+   goes: the full date is still on the page, for screen readers. */
 @media (max-width: 559px) {
-    .date,
-    .legend-bands {
-        flex: 1 0 100%;
+    .container {
+        padding: 0.8rem 0.8rem 0.7rem;
     }
 
-    /* The chance column takes the slack on the second line, which puts both
-       columns at the right edge, as they are on a wide screen. */
+    .weather-list {
+        gap: 0;
+    }
+
+    .day-num {
+        display: none;
+    }
+
     .rain-chance {
-        margin-left: auto;
+        font-size: 0.95rem;
     }
 
-    /* The heading and the export link do not fit on one line here, so the
-       link takes a line of its own, under the heading. */
-    .result-head {
-        flex-wrap: wrap;
+    .temp {
+        font-size: 0.55rem;
     }
 
-    .calendar-export {
-        flex: 1 0 100%;
+    .hour-value {
+        font-size: 0.47rem;
     }
 }
 

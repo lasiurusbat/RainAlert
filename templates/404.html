@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en" class="no-js">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ page_title }}</title>
+    <meta name="description" content="{{ page_description }}">
+    <link rel="canonical" href="{{ canonical_url }}">
+    <!-- A page that is not there is not to be indexed, and the status code
+         says so as well. -->
+    <meta name="robots" content="noindex, follow">
+    <meta name="theme-color" content="#0d1216">
+    <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}">
+    <link rel="preload" as="image" href="{{ url_for('static', filename='image/rain-alert-bg.jpg') }}">
+    <link rel="preload" as="font" type="font/woff2" crossorigin
+          href="{{ url_for('static', filename='fonts/archivo-latin.woff2') }}">
+    <link rel="manifest" href="{{ url_for('manifest') }}">
+    <link rel="apple-touch-icon" href="{{ url_for('static', filename='icon-180.png') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <script type="application/ld+json">{{ structured_data | tojson }}</script>
+</head>
+<body data-autoload="0" data-search="none" data-city="" data-unit="celsius">
+    <div class="page">
+        <div class="container">
+            <div class="topbar">
+                <a class="brand" href="{{ url_for('index') }}">
+                    <svg class="brand-mark" viewBox="0 0 64 64" width="24" height="24"
+                         aria-hidden="true" focusable="false">
+                        <rect width="64" height="64" rx="14" fill="#182027"/>
+                        <g fill="none" stroke="#E9EFF2" stroke-width="5"
+                           stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M9 33c6-20 40-20 46 0"/>
+                            <path d="M32 20v24a8 8 0 0 1-8 8"/>
+                        </g>
+                    </svg>
+                    <span class="brand-name">Rain Alert</span>
+                </a>
+            </div>
+            <div class="intro">
+                <h1 class="page-title notfound-title">There is no page at this address.</h1>
+            </div>
+            <form class="search search-wide" method="GET" action="{{ url_for('index') }}">
+                <label class="sr-only" for="city-input">City</label>
+                <input id="city-input" type="text" name="city" placeholder="City, e.g. London" required>
+                <input type="hidden" name="unit" value="celsius">
+                <button type="submit">Search</button>
+            </form>
+            <p class="notfound-links">
+                <a href="{{ url_for('index') }}">The start page</a> ·
+                <a href="{{ url_for('cities_index') }}">Rain forecasts by city</a>
+            </p>
+        </div>
+
+        <footer class="copyright">
+            Rain Alert © 2026. Vedad Dizdarevic. All rights reserved.
+            {% if donation_url %}
+            <a href="{{ donation_url }}" target="_blank" rel="noopener noreferrer">Buy me a coffee<span class="sr-only"> (donation, opens in a new tab)</span></a>
+            {% endif %}
+            <span class="credits">
+                Weather data by <a href="https://open-meteo.com/" target="_blank" rel="noopener noreferrer">Open-Meteo.com</a>
+                (<a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener noreferrer">CC BY 4.0</a>)
+                · Place names © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a> contributors
+            </span>
+            <span class="build-info">
+                Version {{ app_version }}{% if app_commit %} · build {{ app_commit }}{% endif %}
+            </span>
+        </footer>
+    </div>
+</body>
+</html>

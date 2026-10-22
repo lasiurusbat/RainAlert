@@ -1,0 +1,907 @@
+<title>Rain Alert Directions</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..800&family=Bricolage+Grotesque:opsz,wdth,wght@12..96,75..100,400..800&family=Instrument+Sans:wght@400..700&family=Instrument+Serif:ital@0;1&family=Spline+Sans+Mono:wght@300..600&display=swap">
+<style>
+/* ------------------------------------------------------------------
+   Board chrome. The board is a document about three directions; the
+   loud parts of the page are the mockups, which carry their own
+   palettes. The board stays on a cool graphite ground with one
+   sodium-lamp amber, the colour of the street in the photograph.
+   ------------------------------------------------------------------ */
+:root {
+  --bg: #ECEEEF;
+  --fg: #11151A;
+  --muted: #57636A;
+  --rule: #C7CFD3;
+  --card: #FFFFFF;
+  --accent: #8F560C;
+  --accent-soft: #F1E4CE;
+  --code-bg: #F3F5F6;
+  --shadow: 0 1px 2px rgba(16, 22, 26, .06), 0 8px 24px rgba(16, 22, 26, .07);
+  --sans: 'Instrument Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --disp: 'Archivo', 'Helvetica Neue', Arial, sans-serif;
+  --mono: 'Spline Sans Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+  --serif: 'Instrument Serif', Georgia, 'Times New Roman', serif;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0D1114;
+    --fg: #E6ECEF;
+    --muted: #96A2A9;
+    --rule: #2A3238;
+    --card: #151A1E;
+    --accent: #E9A93C;
+    --accent-soft: #2A2218;
+    --code-bg: #12171B;
+    --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 10px 30px rgba(0, 0, 0, .45);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0D1114;
+  --fg: #E6ECEF;
+  --muted: #96A2A9;
+  --rule: #2A3238;
+  --card: #151A1E;
+  --accent: #E9A93C;
+  --accent-soft: #2A2218;
+  --code-bg: #12171B;
+  --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 10px 30px rgba(0, 0, 0, .45);
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--sans);
+  font-size: 16px;
+  line-height: 1.55;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.wrap { max-width: 1220px; margin: 0 auto; padding-block: 40px 72px; }
+
+h1, h2, h3, h4 { margin: 0; font-weight: 600; letter-spacing: -.01em; }
+p { margin: 0 0 .9em; }
+a { color: var(--accent); }
+
+.lede { max-width: 68ch; font-size: 1.06rem; color: var(--fg); }
+.lede strong { font-weight: 600; }
+.note { color: var(--muted); max-width: 72ch; }
+
+/* --- masthead ---------------------------------------------------- */
+.mast { padding-bottom: 26px; border-bottom: 1px solid var(--rule); margin-bottom: 34px; }
+.mast h1 {
+  font-family: var(--disp);
+  font-variation-settings: 'wdth' 88, 'wght' 700;
+  font-size: clamp(2rem, 5vw, 3rem);
+  line-height: 1.05;
+  letter-spacing: -.02em;
+  margin-bottom: .5rem;
+}
+.mast .kicker {
+  font-family: var(--mono);
+  font-size: .78rem;
+  color: var(--muted);
+  display: block;
+  margin-bottom: .7rem;
+}
+
+/* --- sections ---------------------------------------------------- */
+.sec { margin-bottom: 60px; }
+.sec-head { display: grid; grid-template-columns: 2.6rem minmax(0, 1fr); gap: 0 1.1rem; margin-bottom: 22px; }
+.sec-num {
+  font-family: var(--mono);
+  font-size: .78rem;
+  color: var(--accent);
+  padding-top: .45rem;
+}
+@media (max-width: 560px) { .sec-head { grid-template-columns: minmax(0, 1fr); } .sec-num { padding-top: 0; margin-bottom: .2rem; } }
+.sec-title {
+  font-family: var(--disp);
+  font-variation-settings: 'wdth' 92, 'wght' 700;
+  font-size: clamp(1.4rem, 3vw, 1.9rem);
+  line-height: 1.15;
+  letter-spacing: -.015em;
+  margin: .2rem 0 .5rem;
+}
+.sec-idea { font-size: 1.05rem; max-width: 74ch; color: var(--fg); }
+
+.dir-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.08fr); gap: 26px; align-items: start; }
+@media (max-width: 1000px) { .dir-grid { grid-template-columns: minmax(0, 1fr); } }
+
+.card {
+  background: transparent;
+  border-top: 1px solid var(--rule);
+  border-bottom: 1px solid var(--rule);
+  padding: 15px 0 17px;
+}
+.card + .card { margin-top: 24px; }
+.card h3 {
+  font-family: var(--disp);
+  font-variation-settings: 'wdth' 80, 'wght' 700;
+  font-size: .95rem;
+  color: var(--fg);
+  border-bottom: 1px solid var(--rule);
+  padding-bottom: .45rem;
+  margin-bottom: .8rem;
+}
+.ticks { margin: 0; padding-left: 1.1rem; }
+.ticks li { margin-bottom: .45rem; }
+.ticks li::marker { color: var(--accent); }
+.tight { font-size: .92rem; }
+
+/* --- tokens ------------------------------------------------------ */
+.swatches { display: grid; grid-template-columns: repeat(auto-fill, minmax(112px, 1fr)); gap: 10px; }
+.sw { border: 1px solid var(--rule); border-radius: 10px; overflow: hidden; }
+.sw i { display: block; height: 40px; background: var(--c); }
+.sw b { display: block; font-family: var(--mono); font-size: .68rem; font-weight: 500; padding: 6px 8px 0; }
+.sw span { display: block; font-size: .68rem; color: var(--muted); padding: 0 8px 7px; font-family: var(--mono); }
+
+.spec { margin-top: 14px; border-top: 1px solid var(--rule); padding-top: 12px; }
+.spec .l { font-family: var(--mono); font-size: .68rem; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; }
+.spec .s { margin: 2px 0 10px; }
+.spec .s.s1 { font-size: 1.5rem; line-height: 1.15; }
+.spec .s.s2 { font-size: 1.05rem; }
+.spec .s.s3 { font-size: .85rem; color: var(--muted); }
+
+.wire { background: var(--code-bg); border: 1px solid var(--rule); border-radius: 10px; padding: 14px 16px; overflow-x: auto; margin: 0; }
+.wire pre { margin: 0; font-family: var(--mono); font-size: 11.5px; line-height: 1.5; color: var(--fg); white-space: pre; }
+
+/* --- mockup frames ----------------------------------------------- */
+.frame { border: 1px solid var(--rule); border-radius: 14px; overflow: hidden; background: #1A1F23; box-shadow: var(--shadow); }
+.frame-bar { display: flex; align-items: center; gap: 6px; padding: 8px 12px; background: #232A2F; border-bottom: 1px solid #313A40; }
+.frame-bar i { width: 9px; height: 9px; border-radius: 50%; background: #46525A; display: block; }
+.frame-bar .url {
+  font-family: var(--mono); font-size: 10.5px; color: #A9B6BD; background: #1B2126;
+  border-radius: 999px; padding: 3px 12px; margin-left: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.frame figcaption { padding: 9px 14px; font-size: .78rem; color: var(--muted); background: var(--card); border-top: 1px solid var(--rule); }
+.vp { position: relative;
+  background-image: url('bg.jpg'), url('../static/image/rain-alert-bg.jpg');
+  background-position: center, center;
+  background-size: cover, cover;
+  background-repeat: no-repeat, no-repeat;
+}
+
+/* ================================================================
+   MOCKUP: the app as it is today. Small, for reference.
+   ================================================================ */
+.vp-now { padding: 14px 10px; }
+.now-card { background: #fff; color: #2c3e50; width: min(360px, 100%); margin: 0 auto; padding: 10px 16px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,.1); font-family: 'Segoe UI', Tahoma, sans-serif; font-size: 13px; }
+.now-card h1 { text-align: center; font-size: 1.25rem; margin: .35rem 0; color: #2c3e50; }
+.now-card input { width: 100%; padding: .45rem; border: 1px solid #ddd; border-radius: 5px; box-sizing: border-box; font-size: 12px; }
+.now-card button { width: 100%; margin-top: .4rem; padding: .55rem; background: #3498db; color: #fff; border: 0; border-radius: 5px; font-size: 13px; }
+.now-donate { text-align: center; font-size: 10.5px; color: #5d6d7e; margin: .5rem 0 0; }
+.now-prefs { font-size: 10.5px; color: #4a5a6a; font-weight: 600; margin: .35rem 0 .6rem; }
+.now-card h2 { font-size: 1.02rem; margin: 0 0 .3rem; color: #2c3e50; }
+.now-head { font-size: 10.5px; font-weight: 600; color: #a35c00; background: #fdf3e6; border-left: 3px solid #d35400; padding: .2rem .5rem; border-radius: 4px; margin: 0 0 .4rem; }
+.now-strip { display: flex; align-items: flex-end; gap: 1px; height: 26px; background: #f8fafb; border-radius: 6px; padding: 0 4px 3px; }
+.now-strip i { flex: 1; background: #6c7a89; border-radius: 2px 2px 0 0; display: block; }
+.now-strip i.m { background: #2e86c1; } .now-strip i.h { background: #d35400; }
+.now-legend { display: flex; gap: .6rem; font-size: 8.5px; color: #5d6d7e; margin: .35rem 0 .25rem; }
+.now-list { list-style: none; margin: 0; padding: 0; font-size: 11.5px; }
+.now-list li { display: flex; align-items: center; gap: .5rem; padding: .22rem .4rem; border-bottom: 1px solid #f4f4f4; }
+.now-list .d { flex: 1; font-weight: bold; }
+.now-list .p { width: 62px; text-align: right; font-weight: bold; }
+.now-list .t { width: 62px; text-align: right; color: #5d6d7e; }
+.now-list .dot { width: 7px; height: 7px; border-radius: 50%; background: #d35400; display: inline-block; }
+
+/* ================================================================
+   MOCKUP 1: night street.
+   ================================================================ */
+.vp-d1 { padding: 20px 14px 14px; }
+.d1 {
+  --d1-lo: #7C8B94; --d1-mo: #5FA8D3; --d1-hi: #E9A93C;
+  width: min(520px, 100%); margin: 0 auto; background: #0D1216; color: #E9EFF2;
+  border-radius: 18px; padding: 14px 16px 12px; box-shadow: 0 18px 50px rgba(0,0,0,.55);
+  font-family: 'Archivo', system-ui, sans-serif; font-size: 13px;
+}
+.d1-top { display: flex; align-items: center; gap: 8px; }
+.d1-name { font-variation-settings: 'wdth' 72, 'wght' 700; font-size: 12.5px; letter-spacing: .02em; }
+.d1-search { margin-left: auto; display: flex; gap: 6px; }
+.d1-search input { width: 108px; background: #182027; border: 1px solid #2A343B; color: #E9EFF2; border-radius: 7px; padding: .3rem .45rem; font: inherit; font-size: 11.5px; }
+.d1-search button { background: #E9A93C; color: #17130B; border: 0; border-radius: 7px; padding: .3rem .6rem; font: inherit; font-size: 11.5px; font-weight: 700; }
+.d1 h1 { font-variation-settings: 'wdth' 100, 'wght' 700; font-size: 30px; line-height: 1.05; margin: 12px 0 2px; letter-spacing: -.02em; }
+.d1-meta { color: #8FA3AE; font-size: 11.5px; margin: 0 0 10px; }
+.d1-alert { border-left: 3px solid #E9A93C; background: #17202699; padding: 7px 10px; border-radius: 0 8px 8px 0; margin: 0 0 12px; font-size: 12.5px; line-height: 1.35; }
+.d1-alert b { color: #E9A93C; font-weight: 700; }
+.d1-stripwrap { background: #121A20; border: 1px solid #202A31; border-radius: 10px; padding: 8px 9px 6px; }
+.d1-caption { display: flex; justify-content: space-between; font-size: 10.5px; color: #8FA3AE; margin-bottom: 6px; }
+.d1-caption b { color: #C9D6DC; font-weight: 600; }
+.d1-strip { display: flex; align-items: flex-end; gap: 2px; height: 62px; }
+.d1-hour { flex: 1; height: 100%; display: flex; align-items: flex-end; position: relative; }
+.d1-bar { width: 100%; background: var(--d1-lo); border-radius: 2px 2px 0 0; display: block; }
+.d1-bar.m { background: var(--d1-mo); } .d1-bar.h { background: var(--d1-hi); }
+.d1-hour.past .d1-bar { opacity: .38; }
+.d1-hour.now::after { content: ""; position: absolute; left: 50%; top: -4px; bottom: -3px; width: 1px; background: #E9EFF2; opacity: .55; }
+.d1-hour.now::before { content: "now"; position: absolute; left: 50%; top: -16px; transform: translateX(-50%); font-size: 8.5px; color: #E9EFF2; letter-spacing: .04em; }
+.d1-axis { display: flex; gap: 2px; margin-top: 4px; }
+.d1-axis span { flex: 1; font-size: 8.5px; color: #7C8B94; font-variant-numeric: tabular-nums; }
+.d1-axis span:first-child { text-align: left; }
+.d1-axis span:nth-child(7), .d1-axis span:nth-child(13), .d1-axis span:nth-child(19) { text-align: left; }
+.d1-axis span:last-child { text-align: right; }
+.d1-week { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; margin-top: 14px; border-top: 1px solid #202A31; padding-top: 10px; }
+.d1-day { text-align: center; }
+.d1-day .w { font-size: 9.5px; color: #8FA3AE; }
+.d1-day .p { font-size: 17px; font-weight: 700; font-variation-settings: 'wght' 700; letter-spacing: -.02em; }
+.d1-day.lo .p { color: #7C8B94; } .d1-day.mo .p { color: #5FA8D3; } .d1-day.hi .p { color: #E9A93C; }
+.d1-day .t { font-size: 9.5px; color: #6F818B; font-variant-numeric: tabular-nums; }
+.d1-day .mark { height: 2px; margin: 4px 6px 0; background: transparent; border-radius: 2px; }
+.d1-day.hi .mark { background: #E9A93C; }
+.d1-day.today .w { color: #E9EFF2; font-weight: 600; }
+.d1-foot { display: flex; align-items: center; gap: 14px; margin-top: 12px; padding-top: 9px; border-top: 1px solid #202A31; font-size: 10.5px; color: #8FA3AE; }
+.d1-foot label { display: flex; align-items: center; gap: 5px; }
+.d1-foot input[type=number] { width: 2.6rem; background: #182027; border: 1px solid #2A343B; color: #E9EFF2; border-radius: 5px; padding: .1rem .2rem; font: inherit; font-size: 10.5px; text-align: center; }
+.d1-foot .credits { margin-left: auto; font-size: 9px; color: #6F818B; }
+
+/* ================================================================
+   MOCKUP 2: the instrument.
+   ================================================================ */
+.vp-d2 { padding: 20px 14px 14px; }
+.d2 {
+  --d2-ink: #101418; --d2-graphite: #5C666D; --d2-rule: #D3D9DC; --d2-wet: #C4831C; --d2-mine: #B3392B;
+  width: min(540px, 100%); margin: 0 auto; background: #F1F3F4; color: var(--d2-ink);
+  border-radius: 6px; padding: 14px 16px 12px; box-shadow: 0 18px 50px rgba(0,0,0,.5);
+  font-family: 'Bricolage Grotesque', system-ui, sans-serif; font-size: 13px;
+}
+.d2-top { display: flex; align-items: baseline; gap: 8px; border-bottom: 1px solid var(--d2-rule); padding-bottom: 8px; }
+.d2-brand { font-variation-settings: 'wdth' 88, 'wght' 700; font-size: 12px; letter-spacing: .01em; }
+.d2-where { font-family: 'Spline Sans Mono', monospace; font-size: 10.5px; color: var(--d2-graphite); }
+.d2-where b { color: var(--d2-ink); font-weight: 600; }
+.d2 h2 { font-size: 13px; font-variation-settings: 'wdth' 80, 'wght' 700; margin: 12px 0 2px; }
+.d2 h2 span { font-family: 'Spline Sans Mono', monospace; font-size: 10px; color: var(--d2-graphite); font-weight: 400; margin-left: 6px; }
+.d2 svg { display: block; width: 100%; height: auto; }
+.d2-legend { display: flex; gap: 14px; font-family: 'Spline Sans Mono', monospace; font-size: 9.5px; color: var(--d2-graphite); margin: 2px 0 10px; }
+.d2-legend i { display: inline-block; width: 16px; border-top: 2px solid; margin-right: 5px; vertical-align: middle; }
+.d2-legend .app i { border-top-style: dashed; border-color: var(--d2-graphite); }
+.d2-legend .mine i { border-color: var(--d2-mine); }
+.d2-readout { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; font-family: 'Spline Sans Mono', monospace; font-size: 10px; border-top: 1px solid var(--d2-rule); padding-top: 8px; }
+.d2-readout div { text-align: center; color: var(--d2-graphite); }
+.d2-readout b { display: block; font-size: 15px; color: var(--d2-ink); font-weight: 600; }
+.d2-readout div.wet b { color: var(--d2-wet); }
+.d2-foot { display: flex; align-items: center; gap: 12px; margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--d2-rule); font-family: 'Spline Sans Mono', monospace; font-size: 10px; color: var(--d2-graphite); }
+.d2-foot .unit { display: flex; }
+.d2-foot .unit span { border: 1px solid var(--d2-rule); padding: 1px 6px; }
+.d2-foot .unit span.on { background: var(--d2-ink); color: #F1F3F4; border-color: var(--d2-ink); }
+.d2-foot .sp { margin-left: auto; }
+
+/* ================================================================
+   MOCKUP 3: the almanac.
+   ================================================================ */
+.vp-d3 { padding: 20px 14px 14px; }
+.d3 {
+  width: min(480px, 100%); margin: 0 auto; background: #EDF0EF; color: #16191B;
+  padding: 16px 20px 14px; box-shadow: 0 18px 50px rgba(0,0,0,.5);
+  font-family: 'Instrument Sans', system-ui, sans-serif; font-size: 13px;
+}
+.d3-mast { display: flex; align-items: center; gap: 8px; border-bottom: 1.5px solid #16191B; padding-bottom: 7px; }
+.d3-mast .b { font-family: 'Instrument Serif', Georgia, serif; font-size: 17px; }
+.d3-mast .w { margin-left: auto; font-size: 10.5px; color: #5A646A; letter-spacing: .01em; }
+.d3-lead { font-family: 'Instrument Serif', Georgia, serif; font-size: 27px; line-height: 1.16; margin: 14px 0 4px; letter-spacing: -.01em; }
+.d3-sub { font-size: 11.5px; color: #5A646A; margin: 0 0 12px; }
+.d3-rows { border-top: 1px solid #C9D0D2; }
+.d3-row { display: flex; align-items: baseline; gap: 10px; padding: 7px 0; border-bottom: 1px solid #DDE2E3; }
+.d3-row i { width: 4px; height: 15px; background: transparent; flex: 0 0 auto; align-self: center; }
+.d3-row.wet i { background: #B4741B; }
+.d3-row .d { font-size: 12.5px; }
+.d3-row .d small { display: block; color: #7C868C; font-size: 10px; }
+.d3-row .rule { flex: 1; border-bottom: 1px dotted #C9D0D2; align-self: center; }
+.d3-row .t { font-size: 11.5px; color: #5A646A; font-variant-numeric: tabular-nums; }
+.d3-row .p { font-family: 'Instrument Serif', Georgia, serif; font-size: 23px; min-width: 58px; text-align: right; font-variant-numeric: tabular-nums; }
+.d3-row.wet .p { color: #8F560C; }
+.d3-row.today .d { font-weight: 600; }
+.d3-note { font-size: 10.5px; color: #5A646A; margin: 10px 0 0; }
+.d3-foot { display: flex; align-items: center; gap: 12px; margin-top: 10px; padding-top: 8px; border-top: 1.5px solid #16191B; font-size: 10.5px; color: #5A646A; }
+.d3-foot .sp { margin-left: auto; }
+.d3-foot .unit span { border: 1px solid #C9D0D2; padding: 1px 6px; }
+.d3-foot .unit span.on { background: #16191B; color: #EDF0EF; border-color: #16191B; }
+
+/* --- closing ----------------------------------------------------- */
+.keep { display: grid; grid-template-columns: repeat(auto-fit, minmax(330px, 1fr)); column-gap: 44px; }
+.keep .rule { border-top: 1px solid var(--rule); padding: 13px 0 15px; }
+.keep .rule h3 {
+  font-family: var(--disp);
+  font-variation-settings: 'wdth' 80, 'wght' 700;
+  font-size: .95rem;
+  border: 0;
+  padding: 0;
+  margin-bottom: .35rem;
+}
+.keep .rule p { margin: 0; font-size: .9rem; color: var(--muted); }
+@media (max-width: 620px) {
+  .wrap { padding-block: 28px 48px; }
+  .d1-search input { width: 84px; }
+  .d1-week { gap: 0; }
+}
+</style>
+
+<div class="wrap">
+
+<header class="mast">
+  <span class="kicker">Rain Alert design directions</span>
+  <h1>Three ways to make the forecast read faster</h1>
+  <p class="lede">Rain Alert answers one question, and the reader asks it from the doorway: <strong>will I get wet, and when?</strong> A person on a phone at 7:40 needs a single number and a single time. A person at a laptop needs to see the shape of the week. The three directions below answer that at three different distances: <strong>Night street</strong> for the person on the move, <strong>The instrument</strong> for the person who wants the shape of the week, <strong>The almanac</strong> for the person who likes a printed table. Every direction below keeps the photograph, keeps the honest band names, and reorganises the page around the moment the question is asked.</p>
+  <p class="note">The background photograph is unchanged in all three. It is a wet street at dusk, and everything below takes its palette from that picture: wet asphalt, sodium lamps, tail-light red, the haze in the middle distance. Nothing here introduces a stock palette.</p>
+</header>
+
+<section class="sec" id="now">
+  <div class="sec-head">
+    <span class="sec-num">01</span>
+    <div>
+      <h2 class="sec-title">Where the app is today</h2>
+    <p class="sec-idea">A white card on a dark photograph. The search box and the preferences row sit above the forecast, so on a phone the answer is below the fold. The hourly strip is 38 pixels tall and its values live in a hover tooltip, which a touch screen never shows. The week is seven rows of nearly identical text.</p>
+    </div>
+  </div>
+  <figure class="frame" style="margin:0">
+    <div class="frame-bar"><i></i><i></i><i></i><span class="url">rainalert.live/city/london</span></div>
+    <div class="vp vp-now">
+      <div class="now-card">
+        <h1>Rain Alert 🌧️</h1>
+        <input placeholder="Enter city name (e.g., London)">
+        <button>Check Rain Chance</button>
+        <p class="now-donate">Saved you from getting wet? <u>Buy me a coffee</u> and help keep Rain Alert free.</p>
+        <div class="now-prefs">☐ Remember this city &nbsp;·&nbsp; Alert me above [__] %</div>
+        <h2>7-day rain chance for London</h2>
+        <p class="now-head">Rain likely for the rest of today (70%).</p>
+        <div class="now-strip">
+          <i style="height:20%"></i><i style="height:20%"></i><i style="height:25%"></i><i style="height:30%"></i><i style="height:35%"></i><i style="height:40%"></i><i class="m" style="height:50%"></i><i class="m" style="height:60%"></i><i class="h" style="height:65%"></i><i class="h" style="height:70%"></i><i class="m" style="height:60%"></i><i class="m" style="height:45%"></i><i class="m" style="height:40%"></i><i class="m" style="height:30%"></i><i class="m" style="height:35%"></i><i class="m" style="height:50%"></i><i class="m" style="height:60%"></i><i class="h" style="height:70%"></i><i class="h" style="height:65%"></i><i class="m" style="height:55%"></i><i class="m" style="height:45%"></i><i class="m" style="height:40%"></i><i class="m" style="height:35%"></i><i class="m" style="height:30%"></i>
+        </div>
+        <div class="now-legend">● unlikely &nbsp; ● possible &nbsp; ● likely &nbsp;&nbsp; Rain chance &nbsp; °C|°F</div>
+        <ul class="now-list">
+          <li><span class="dot" style="background:#d35400"></span><span class="d">Thursday 22.10.2026</span><span class="p">☔ 70%</span><span class="t">12° / 7°</span></li>
+          <li><span class="dot" style="background:#d35400"></span><span class="d">Friday 23.10.2026</span><span class="p">☔ 80%</span><span class="t">11° / 6°</span></li>
+          <li><span class="dot" style="background:#2e86c1"></span><span class="d">Saturday 24.10.2026</span><span class="p">30%</span><span class="t">12° / 6°</span></li>
+          <li><span class="dot" style="background:#6c7a89"></span><span class="d">Sunday 25.10.2026</span><span class="p">15%</span><span class="t">13° / 8°</span></li>
+          <li><span class="dot" style="background:#6c7a89"></span><span class="d">Monday 26.10.2026</span><span class="p">5%</span><span class="t">14° / 9°</span></li>
+          <li><span class="dot" style="background:#6c7a89"></span><span class="d">Tuesday 27.10.2026</span><span class="p">10%</span><span class="t">12° / 7°</span></li>
+          <li><span class="dot" style="background:#6c7a89"></span><span class="d">Wednesday 28.10.2026</span><span class="p">40%</span><span class="t">11° / 6°</span></li>
+        </ul>
+      </div>
+    </div>
+    <figcaption>The current card, at 360 pixels. The forecast sits below the form, the donation line and the preferences row.</figcaption>
+  </figure>
+</section>
+
+<section class="sec" id="mark">
+  <div class="sec-head">
+    <span class="sec-num">02</span>
+    <div>
+      <h2 class="sec-title">A new logo: the umbrella, reduced to one stroke</h2>
+    <p class="sec-idea">The current mark is a blue rounded square with a white droplet, which is the most common shape on the internet for a rain app, and it repeats the ☔ emoji that already appears in the daily rows. The new mark is the app's own advice drawn once: a canopy, a centre shaft, a hooked handle. The silhouette is a hook and an arc, which never reads as a teardrop at 16 pixels.</p>
+    </div>
+  </div>
+  <div class="dir-grid">
+    <div>
+      <div class="card">
+        <h3>The two states</h3>
+        <div style="display:flex;gap:18px;align-items:flex-end;flex-wrap:wrap">
+          <div style="text-align:center">
+            <svg width="96" height="96" viewBox="0 0 64 64" role="img" aria-label="Rain Alert mark, quiet state">
+              <rect width="64" height="64" rx="14" fill="#0E1418"/>
+              <g fill="none" stroke="#EDF2F4" stroke-width="5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M9 33c6-20 40-20 46 0"/><path d="M32 20v24a8 8 0 0 1-8 8"/>
+              </g>
+            </svg>
+            <div class="l" style="font-family:var(--mono);font-size:.68rem;color:var(--muted);margin-top:6px">favicon.svg</div>
+          </div>
+          <div style="text-align:center">
+            <svg width="96" height="96" viewBox="0 0 64 64" role="img" aria-label="Rain Alert mark, rain state">
+              <rect width="64" height="64" rx="14" fill="#D99A2B"/>
+              <g fill="none" stroke="#14100A" stroke-width="5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M9 33c6-20 40-20 46 0"/><path d="M32 20v24a8 8 0 0 1-8 8"/>
+                <path d="M18 38v7"/><path d="M46 38v7"/>
+              </g>
+            </svg>
+            <div class="l" style="font-family:var(--mono);font-size:.68rem;color:var(--muted);margin-top:6px">favicon-rain.svg</div>
+          </div>
+          <div style="text-align:center">
+            <svg width="32" height="32" viewBox="0 0 64 64" role="img" aria-label="Rain Alert mark at 32 pixels">
+              <rect width="64" height="64" rx="14" fill="#0E1418"/>
+              <g fill="none" stroke="#EDF2F4" stroke-width="5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M9 33c6-20 40-20 46 0"/><path d="M32 20v24a8 8 0 0 1-8 8"/>
+              </g>
+            </svg>
+            <svg width="16" height="16" viewBox="0 0 64 64" role="img" aria-label="Rain Alert mark at 16 pixels">
+              <rect width="64" height="64" rx="14" fill="#0E1418"/>
+              <g fill="none" stroke="#EDF2F4" stroke-width="6" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M9 33c6-20 40-20 46 0"/><path d="M32 20v24a8 8 0 0 1-8 8"/>
+              </g>
+            </svg>
+            <div class="l" style="font-family:var(--mono);font-size:.68rem;color:var(--muted);margin-top:6px">32 / 16 px</div>
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <h3>Rules the mark keeps</h3>
+        <ul class="ticks tight">
+          <li>Two files, never one recoloured file. A browser caches a favicon by its URL, so the quiet and the rain icon have to live at two addresses.</li>
+          <li>The two states differ in shape as well as colour. Rain adds two strokes to the silhouette, so the icons are told apart at 16 pixels without relying on hue.</li>
+          <li>The mark replaces the 🌧️ in the heading and the ☔ in the rows. Emoji render differently on every platform, and the rows already carry a written severity for screen readers.</li>
+          <li><code>tools/make_icons.py</code> has the old droplet hard-coded in it. Adopting this mark means replacing that constant and regenerating the four PNGs.</li>
+          <li>The wordmark is the mark plus the name set in the direction's own display face, never an image, so it stays selectable and it scales.</li>
+        </ul>
+      </div>
+    </div>
+    <div>
+      <div class="card">
+        <h3>Why the hook</h3>
+        <p class="tight">A droplet is the shape of the weather. A hook is the shape of the decision: the reader is carrying something. The mark names the app's advice, which is the same advice the banner, the title and the calendar export give.</p>
+        <div class="spec">
+          <div class="l">Lockup</div>
+          <div class="s s1" style="font-family:var(--disp);font-variation-settings:'wdth' 74,'wght' 700;display:flex;align-items:center;gap:10px">
+            <svg width="30" height="30" viewBox="0 0 64 64" aria-hidden="true"><rect width="64" height="64" rx="14" fill="#0E1418"/><g fill="none" stroke="#EDF2F4" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 33c6-20 40-20 46 0"/><path d="M32 20v24a8 8 0 0 1-8 8"/></g></svg>
+            Rain Alert
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <h3>What it must not do</h3>
+        <ul class="ticks tight">
+          <li>Carry the severity on its own. The favicon switches on the umbrella threshold, and the threshold is a server setting. The mark is a brand, the rain state is the alert.</li>
+          <li>Lose the plate. The installed icon has to fill its canvas because the platform crops it, and the maskable variant keeps the middle 80% clear.</li>
+          <li>Depend on a gradient or a blur. At 16 pixels there is room for a silhouette and nothing else.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="sec" id="d1">
+  <div class="sec-head">
+    <span class="sec-num">03</span>
+    <div>
+      <h2 class="sec-title">Night street</h2>
+    <p class="sec-idea">The card stops being a white slab and becomes part of the photograph: a dark panel of the same night the photo shows, lit by the same sodium lamps. The forecast is reordered by the order people ask in it, right now, then the rest of today, then the week.</p>
+    </div>
+  </div>
+  <div class="dir-grid">
+    <div>
+      <div class="card">
+        <h3>What it changes in the experience</h3>
+        <ul class="ticks tight">
+          <li>The answer moves to the top. The city and the sentence about today are the first thing on the page, and the search field is one compact input in the top bar. A reader on a phone no longer scrolls past a form to find out whether to take an umbrella.</li>
+          <li>The hourly strip grows from 38 pixels to 62 and gets values without a hover. The hours that have already passed are dimmed, so the strip reads as the rest of the day rather than as a chart of the whole day.</li>
+          <li>Now becomes a labelled rule instead of an 8 pixel dot, and the hours after it are the bright ones. That answers the only question that matters at 7:40.</li>
+          <li>The week becomes seven columns of figures. The eye reads a column of numbers instead of seven rows of sentences, and the two days that reach the threshold carry an amber rule under them.</li>
+          <li>One accent colour. Amber means wet, blue means possible, grey means unlikely. Nothing else in the panel is coloured, so colour keeps carrying one meaning.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3>Palette, taken from the photograph</h3>
+        <div class="swatches">
+          <div class="sw" style="--c:#0D1216"><b>asphalt</b><span>#0D1216</span></div>
+          <div class="sw" style="--c:#182027"><b>haze</b><span>#182027</span></div>
+          <div class="sw" style="--c:#8FA3AE"><b>mist</b><span>#8FA3AE</span></div>
+          <div class="sw" style="--c:#E9EFF2"><b>paper</b><span>#E9EFF2</span></div>
+          <div class="sw" style="--c:#E9A93C"><b>lamp</b><span>#E9A93C</span></div>
+          <div class="sw" style="--c:#5FA8D3"><b>wet</b><span>#5FA8D3</span></div>
+        </div>
+        <div class="spec">
+          <div class="l">Type</div>
+          <div class="s s1" style="font-family:var(--disp);font-variation-settings:'wdth' 100,'wght' 700">London</div>
+          <div class="s s2" style="font-family:var(--disp);font-variation-settings:'wdth' 74,'wght' 600">Archivo, a signage grotesque with a width axis</div>
+          <div class="s s3">One family, three widths: 100 for the city name, 74 for the labels, 100 for the figures in tabular numerals. Nothing else is loaded.</div>
+        </div>
+      </div>
+      <div class="card">
+        <h3>Layout</h3>
+        <div class="wire"><pre>┌───────────────────────────────────────────┐
+│ [mark] Rain Alert            [London  ⌕] │
+│                                           │
+│ London                                    │
+│ Thursday 22.10.2026 · 12° / 7°            │
+│ ┃ Rain from 06:00 to 10:00, and again     │
+│ ┃ from 15:00. Up to 70%.                  │
+│                                           │
+│ Today                        now 10:00    │
+│ ▁▁▂▃▄▅▆▇██▇▆▅▄▃▂▁▁▃▄▅▆▇██▇▆▅▄▃▂▁▁▂▃▂▃    │
+│ 00     06     12     18     23            │
+│                                           │
+│ Thu   Fri   Sat   Sun   Mon   Tue   Wed   │
+│ 70%   80%   30%   15%    5%   10%   40%   │
+│ 12°   11°   12°   13°   14°   12°   11°   │
+│  ──    ──                                 │
+│                                           │
+│ ☐ Remember   Alert me above [50] %        │
+└───────────────────────────────────────────┘</pre></div>
+      </div>
+    </div>
+    <div>
+      <figure class="frame" style="margin:0">
+        <div class="frame-bar"><i></i><i></i><i></i><span class="url">rainalert.live/city/london</span></div>
+        <div class="vp vp-d1">
+          <div class="d1">
+            <div class="d1-top">
+              <svg width="19" height="19" viewBox="0 0 64 64" aria-hidden="true"><rect width="64" height="64" rx="14" fill="#0E1418"/><g fill="none" stroke="#EDF2F4" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 33c6-20 40-20 46 0"/><path d="M32 20v24a8 8 0 0 1-8 8"/></g></svg>
+              <span class="d1-name">Rain Alert</span>
+              <span class="d1-search"><input value="London" aria-label="City"><button>Search</button></span>
+            </div>
+            <h1>London</h1>
+            <p class="d1-meta">Thursday 22.10.2026 &nbsp;·&nbsp; 12° / 7°</p>
+            <p class="d1-alert">Rain from <b>06:00 to 10:00</b>, and again from <b>15:00</b>. Up to <b>70%</b>.</p>
+            <div class="d1-stripwrap">
+              <div class="d1-caption"><b>Today</b><span>now 10:00</span></div>
+              <div class="d1-strip">
+                <div class="d1-hour past"><i class="d1-bar" style="height:20%"></i></div>
+                <div class="d1-hour past"><i class="d1-bar" style="height:20%"></i></div>
+                <div class="d1-hour past"><i class="d1-bar" style="height:25%"></i></div>
+                <div class="d1-hour past"><i class="d1-bar" style="height:30%"></i></div>
+                <div class="d1-hour past"><i class="d1-bar" style="height:35%"></i></div>
+                <div class="d1-hour past"><i class="d1-bar" style="height:40%"></i></div>
+                <div class="d1-hour past"><i class="d1-bar m" style="height:50%"></i></div>
+                <div class="d1-hour past"><i class="d1-bar m" style="height:60%"></i></div>
+                <div class="d1-hour past"><i class="d1-bar h" style="height:65%"></i></div>
+                <div class="d1-hour past"><i class="d1-bar h" style="height:70%"></i></div>
+                <div class="d1-hour now"><i class="d1-bar m" style="height:60%"></i></div>
+                <div class="d1-hour"><i class="d1-bar m" style="height:45%"></i></div>
+                <div class="d1-hour"><i class="d1-bar m" style="height:40%"></i></div>
+                <div class="d1-hour"><i class="d1-bar m" style="height:30%"></i></div>
+                <div class="d1-hour"><i class="d1-bar m" style="height:35%"></i></div>
+                <div class="d1-hour"><i class="d1-bar m" style="height:50%"></i></div>
+                <div class="d1-hour"><i class="d1-bar m" style="height:60%"></i></div>
+                <div class="d1-hour"><i class="d1-bar h" style="height:70%"></i></div>
+                <div class="d1-hour"><i class="d1-bar h" style="height:65%"></i></div>
+                <div class="d1-hour"><i class="d1-bar m" style="height:55%"></i></div>
+                <div class="d1-hour"><i class="d1-bar m" style="height:45%"></i></div>
+                <div class="d1-hour"><i class="d1-bar m" style="height:40%"></i></div>
+                <div class="d1-hour"><i class="d1-bar m" style="height:35%"></i></div>
+                <div class="d1-hour"><i class="d1-bar m" style="height:30%"></i></div>
+              </div>
+              <div class="d1-axis"><span>00</span><span></span><span></span><span></span><span></span><span></span><span>06</span><span></span><span></span><span></span><span></span><span></span><span>12</span><span></span><span></span><span></span><span></span><span></span><span>18</span><span></span><span></span><span></span><span></span><span>23</span></div>
+            </div>
+            <div class="d1-week">
+              <div class="d1-day hi today"><div class="w">Thu</div><div class="p">70%</div><div class="t">12° / 7°</div><div class="mark"></div></div>
+              <div class="d1-day hi"><div class="w">Fri</div><div class="p">80%</div><div class="t">11° / 6°</div><div class="mark"></div></div>
+              <div class="d1-day mo"><div class="w">Sat</div><div class="p">30%</div><div class="t">12° / 6°</div><div class="mark"></div></div>
+              <div class="d1-day lo"><div class="w">Sun</div><div class="p">15%</div><div class="t">13° / 8°</div><div class="mark"></div></div>
+              <div class="d1-day lo"><div class="w">Mon</div><div class="p">5%</div><div class="t">14° / 9°</div><div class="mark"></div></div>
+              <div class="d1-day lo"><div class="w">Tue</div><div class="p">10%</div><div class="t">12° / 7°</div><div class="mark"></div></div>
+              <div class="d1-day mo"><div class="w">Wed</div><div class="p">40%</div><div class="t">11° / 6°</div><div class="mark"></div></div>
+            </div>
+            <div class="d1-foot">
+              <label><input type="checkbox"> Remember this city</label>
+              <label>Alert me above <input type="number" value="50"> %</label>
+              <span class="credits">Weather data by Open-Meteo · OpenStreetMap</span>
+            </div>
+          </div>
+        </div>
+        <figcaption>Direction one, at the width the card has today. The panel is 520 pixels wide and the page behind it is the photograph.</figcaption>
+      </figure>
+      <div class="card" style="margin-top:16px">
+        <h3>What it costs</h3>
+        <ul class="ticks tight">
+          <li>The dark panel is a bigger contrast job. Every figure has to clear 4.5 to 1 against <code>#0D1216</code>, and the three band colours have to stay apart in the dark.</li>
+          <li>Amber on a dark ground reads as warm, which is right for this photograph, but the tab favicon and the social card would need the same treatment or the page and the card stop being the same object.</li>
+          <li>The card grows. It has to stay inside a 768 pixel window, and the strip plus the week row have to be paid for out of the padding that the headline and the donation line currently take.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="sec" id="d2">
+  <div class="sec-head">
+    <span class="sec-num">04</span>
+    <div>
+      <h2 class="sec-title">The instrument</h2>
+    <p class="sec-idea">A forecast is a measurement, so the page is a measuring instrument. The week is one continuous curve with the umbrella threshold drawn across it as a rule, and the reader's own threshold is a second rule on the same axis. The only question the chart asks is whether a point sits above the line or below it.</p>
+    </div>
+  </div>
+  <div class="dir-grid">
+    <div>
+      <div class="card">
+        <h3>What it changes in the experience</h3>
+        <ul class="ticks tight">
+          <li>The shape of a week becomes one glance. Seven rows cannot tell you that Tuesday and Thursday are wet and the rest is dry. A curve can, before you read a single figure.</li>
+          <li>The reader's own threshold stops being a small triangle on a row and becomes a line on the chart. The days their line catches are visible in the same picture as the days the umbrella catches.</li>
+          <li>The hourly strip and the weekly list stop being two different visual languages for one quantity. They become the same chart at two scales: today in hours, the week in days.</li>
+          <li>Nothing is coloured to mean bad. The curve is ink, the area under it is a tint, and amber marks the part that is above the threshold. Colour stops competing with the numbers.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3>Palette</h3>
+        <div class="swatches">
+          <div class="sw" style="--c:#F1F3F4"><b>paper</b><span>#F1F3F4</span></div>
+          <div class="sw" style="--c:#101418"><b>ink</b><span>#101418</span></div>
+          <div class="sw" style="--c:#5C666D"><b>graphite</b><span>#5C666D</span></div>
+          <div class="sw" style="--c:#D3D9DC"><b>rule</b><span>#D3D9DC</span></div>
+          <div class="sw" style="--c:#C4831C"><b>above the line</b><span>#C4831C</span></div>
+          <div class="sw" style="--c:#B3392B"><b>your line</b><span>#B3392B</span></div>
+        </div>
+        <div class="spec">
+          <div class="l">Type</div>
+          <div class="s s1" style="font-family:'Bricolage Grotesque';font-variation-settings:'wdth' 92,'wght' 700">Next 7 days</div>
+          <div class="s s2" style="font-family:'Spline Sans Mono',monospace">70 80 30 15 05 10 40</div>
+          <div class="s s3">Bricolage Grotesque for the headings, Spline Sans Mono for every figure. The mono does the work of aligning columns that the old list had to fight flexbox for.</div>
+        </div>
+      </div>
+      <div class="card">
+        <h3>Layout</h3>
+        <div class="wire"><pre>┌──────────────────────────────────────────┐
+│ Rain Alert   London · Thursday 22.10.2026  │
+│                                          │
+│ Next 7 days                                │
+│ 100 ┤     ╭─╮                             │
+│  50 ┤╌╌╌╌╌╯ ╰────╮                        │  ← umbrella 50%
+│   0 ┼────────────╰───╮___╭───────        │
+│      Thu Fri Sat Sun Mon Tue Wed          │
+│  - - - - - - - - - - - - - - - - - -      │  ← your 40%
+│                                          │
+│ Today                                     │
+│ 100 ┤  ╱╲        ╱╲                       │
+│  50 ┤─╱──╲──────╱──╲────                  │
+│   0 ┼────────┊────────────────             │
+│      00   04   08   12   16   20   23     │
+│                ↑ now                       │
+│                                          │
+│  70%  80%  30%  15%   5%  10%  40%        │
+│  °C/°F    ☐ Remember   Alert above 40%    │
+└──────────────────────────────────────────┘</pre></div>
+      </div>
+    </div>
+    <div>
+      <figure class="frame" style="margin:0">
+        <div class="frame-bar"><i></i><i></i><i></i><span class="url">rainalert.live/city/london</span></div>
+        <div class="vp vp-d2">
+          <div class="d2">
+            <div class="d2-top">
+              <span class="d2-brand">Rain Alert</span>
+              <span class="d2-where"><b>London</b> · Thursday 22.10.2026</span>
+            </div>
+
+            <h2>Next 7 days <span>rain chance, %</span></h2>
+            <svg viewBox="0 0 620 148" role="img" aria-label="Rain chance for the next seven days, drawn as a curve against a 50 percent threshold line and the reader's own 40 percent line. Thursday 70 percent and Friday 80 percent sit above the 50 percent line.">
+              <defs>
+                <clipPath id="wet-week"><rect x="36" y="0" width="137" height="70"/></clipPath>
+                <clipPath id="wet-today"><rect x="36" y="0" width="564" height="42.5"/></clipPath>
+              </defs>
+              <g stroke="#D3D9DC" stroke-width="1">
+                <line x1="36" y1="20" x2="600" y2="20"/>
+                <line x1="36" y1="70" x2="600" y2="70"/>
+                <line x1="36" y1="120" x2="600" y2="120"/>
+              </g>
+              <g font-family="Spline Sans Mono, monospace" font-size="9" fill="#5C666D" text-anchor="end">
+                <text x="30" y="23">100</text><text x="30" y="73">50</text><text x="30" y="123">0</text>
+              </g>
+              <path d="M40 50 C74 50 91 40 125 40 C159 40 176 90 210 90 C244 90 261 105 295 105 C329 105 346 115 380 115 C414 115 431 110 465 110 C499 110 516 80 550 80 L550 120 L40 120 Z" fill="#101418" opacity=".07"/>
+              <path d="M40 50 C74 50 91 40 125 40 C159 40 176 90 210 90 C244 90 261 105 295 105 C329 105 346 115 380 115 C414 115 431 110 465 110 C499 110 516 80 550 80 L550 120 L40 120 Z" fill="#C4831C" opacity=".22" clip-path="url(#wet-week)"/>
+              <path d="M40 50 C74 50 91 40 125 40 C159 40 176 90 210 90 C244 90 261 105 295 105 C329 105 346 115 380 115 C414 115 431 110 465 110 C499 110 516 80 550 80" fill="none" stroke="#101418" stroke-width="2"/>
+              <line x1="36" y1="70" x2="600" y2="70" stroke="#5C666D" stroke-width="1" stroke-dasharray="4 4"/>
+              <line x1="36" y1="80" x2="600" y2="80" stroke="#B3392B" stroke-width="1.2"/>
+              <circle cx="40" cy="50" r="4" fill="#C4831C"/>
+              <circle cx="125" cy="40" r="4" fill="#C4831C"/>
+              <circle cx="210" cy="90" r="3" fill="#101418"/>
+              <circle cx="295" cy="105" r="3" fill="#101418"/>
+              <circle cx="380" cy="115" r="3" fill="#101418"/>
+              <circle cx="465" cy="110" r="3" fill="#101418"/>
+              <circle cx="550" cy="80" r="3" fill="#101418"/>
+              <g font-family="Spline Sans Mono, monospace" font-size="10" fill="#5C666D" text-anchor="middle">
+                <text x="40" y="136">Thu</text><text x="125" y="136">Fri</text><text x="210" y="136">Sat</text>
+                <text x="295" y="136">Sun</text><text x="380" y="136">Mon</text><text x="465" y="136">Tue</text><text x="550" y="136">Wed</text>
+              </g>
+            </svg>
+            <div class="d2-legend">
+              <span class="app"><i></i>umbrella threshold 50%</span>
+              <span class="mine"><i></i>your threshold 40%</span>
+            </div>
+
+            <h2>Today <span>rain chance, % by hour</span></h2>
+            <svg viewBox="0 0 620 104" role="img" aria-label="Rain chance hour by hour for today, with the current hour marked at 10 o'clock. The trace crosses above the 50 percent line in the early morning and again in the late afternoon.">
+              <path d="M40 59 L63.3 59 L86.7 56.3 L110 53.5 L133.3 50.8 L156.7 48 L180 42.5 L203.3 37 L226.7 34.3 L250 31.5 L273.3 37 L296.7 45.3 L320 48 L343.3 53.5 L366.7 50.8 L390 42.5 L413.3 37 L436.7 31.5 L460 34.3 L483.3 39.8 L506.7 45.3 L530 48 L553.3 50.8 L576.7 53.5 L576.7 74 L40 74 Z" fill="#101418" opacity=".07"/>
+              <path d="M40 59 L63.3 59 L86.7 56.3 L110 53.5 L133.3 50.8 L156.7 48 L180 42.5 L203.3 37 L226.7 34.3 L250 31.5 L273.3 37 L296.7 45.3 L320 48 L343.3 53.5 L366.7 50.8 L390 42.5 L413.3 37 L436.7 31.5 L460 34.3 L483.3 39.8 L506.7 45.3 L530 48 L553.3 50.8 L576.7 53.5" fill="none" stroke="#101418" stroke-width="1.6" stroke-linejoin="round" clip-path="url(#wet-today)"/>
+              <path d="M40 59 L63.3 59 L86.7 56.3 L110 53.5 L133.3 50.8 L156.7 48 L180 42.5 L203.3 37 L226.7 34.3 L250 31.5 L273.3 37 L296.7 45.3 L320 48 L343.3 53.5 L366.7 50.8 L390 42.5 L413.3 37 L436.7 31.5 L460 34.3 L483.3 39.8 L506.7 45.3 L530 48 L553.3 50.8 L576.7 53.5" fill="none" stroke="#101418" stroke-width="1.6" stroke-linejoin="round"/>
+              <path d="M40 59 L63.3 59 L86.7 56.3 L110 53.5 L133.3 50.8 L156.7 48 L180 42.5 L203.3 37 L226.7 34.3 L250 31.5 L273.3 37 L296.7 45.3 L320 48 L343.3 53.5 L366.7 50.8 L390 42.5 L413.3 37 L436.7 31.5 L460 34.3 L483.3 39.8 L506.7 45.3 L530 48 L553.3 50.8 L576.7 53.5" fill="none" stroke="#C4831C" stroke-width="3" stroke-linejoin="round" clip-path="url(#wet-today)"/>
+              <line x1="273.3" y1="14" x2="273.3" y2="74" stroke="#101418" stroke-width="1"/>
+              <line x1="36" y1="42.5" x2="600" y2="42.5" stroke="#5C666D" stroke-width="1" stroke-dasharray="4 4"/>
+              <line x1="36" y1="48" x2="600" y2="48" stroke="#B3392B" stroke-width="1.2"/>
+              <g font-family="Spline Sans Mono, monospace" font-size="9.5" fill="#5C666D">
+                <text x="40" y="90">00</text><text x="180" y="90">06</text><text x="320" y="90">12</text><text x="460" y="90">18</text><text x="565" y="90">23</text>
+                <text x="279" y="90" fill="#101418">now</text>
+              </g>
+            </svg>
+
+            <div class="d2-readout">
+              <div class="wet"><b>70%</b>Thu</div><div class="wet"><b>80%</b>Fri</div><div><b>30%</b>Sat</div><div><b>15%</b>Sun</div>
+              <div><b>5%</b>Mon</div><div><b>10%</b>Tue</div><div><b>40%</b>Wed</div>
+            </div>
+            <div class="d2-foot">
+              <span class="unit"><span class="on">°C</span><span>°F</span></span>
+              <span>☐ Remember this city</span>
+              <span>Alert me above 40 %</span>
+              <span class="sp">Open-Meteo · OpenStreetMap</span>
+            </div>
+          </div>
+        </div>
+        <figcaption>Direction two. One visual language for two scales: the week in days, today in hours, the same threshold on both axes.</figcaption>
+      </figure>
+      <div class="card" style="margin-top:16px">
+        <h3>What it costs</h3>
+        <ul class="ticks tight">
+          <li>The chart is drawn from data the page already has, but the browser still has to draw it, and a screen reader gets a sentence instead of a picture. The values have to be repeated in text, which the readout row does.</li>
+          <li>Two thresholds on one axis is more than a first-time reader expects. The legend has to name both, and the reader's line only appears once they have set one.</li>
+          <li>It is the hardest of the three to build and the easiest to get wrong at small sizes. The curve has to stay legible at 320 pixels, where the week chart is 280 pixels wide.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="sec" id="d3">
+  <div class="sec-head">
+    <span class="sec-num">05</span>
+    <div>
+      <h2 class="sec-title">The almanac</h2>
+    <p class="sec-idea">A forecast printed in an almanac: a masthead, a rule, and seven ruled rows with the figures set large in a right-hand column. There are no charts at all. The numbers are the chart, and the wet days are marked once in the gutter.</p>
+    </div>
+  </div>
+  <div class="dir-grid">
+    <div>
+      <div class="card">
+        <h3>What it changes in the experience</h3>
+        <ul class="ticks tight">
+          <li>The week becomes a column of figures. A reader scans the numbers down the right edge instead of reading seven rows of sentences, and Thursday and Friday stand out because they are the two large ones.</li>
+          <li>The heading stops being an emoji. The masthead is the mark and the name, and the sentence under it is the one thing the page has to say.</li>
+          <li>One mark per row, in the gutter. A filled block means the day reaches the umbrella threshold, and the block says the same thing the ☔ says today, only once per row and without a second meaning to learn.</li>
+          <li>It is the quietest of the three. Nothing pulses, nothing glows, and the page reads like a printed table you could pin up.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3>Palette</h3>
+        <div class="swatches">
+          <div class="sw" style="--c:#EDF0EF"><b>sheet</b><span>#EDF0EF</span></div>
+          <div class="sw" style="--c:#16191B"><b>ink</b><span>#16191B</span></div>
+          <div class="sw" style="--c:#5A646A"><b>pencil</b><span>#5A646A</span></div>
+          <div class="sw" style="--c:#C9D0D2"><b>rule</b><span>#C9D0D2</span></div>
+          <div class="sw" style="--c:#8F560C"><b>wet figure</b><span>#8F560C</span></div>
+          <div class="sw" style="--c:#B4741B"><b>gutter mark</b><span>#B4741B</span></div>
+        </div>
+        <div class="spec">
+          <div class="l">Type</div>
+          <div class="s s1" style="font-family:'Instrument Serif',Georgia,serif;font-size:2rem">Rain likely tomorrow</div>
+          <div class="s s2" style="font-family:'Instrument Serif',Georgia,serif">70% &nbsp; 80% &nbsp; 30% &nbsp; 15%</div>
+          <div class="s s3">Instrument Serif for the sentence and the figures, Instrument Sans for the labels. A designed pair, and neither of them is a weather app's usual face.</div>
+        </div>
+      </div>
+      <div class="card">
+        <h3>Layout</h3>
+        <div class="wire"><pre>┌───────────────────────────────────────┐
+│ ☂ Rain Alert        London · Thu 22 Oct │
+│ ───────────────────────────────────── │
+│                                       │
+│ Rain likely for the rest              │
+│ of today.                              │
+│                                       │
+│ ▌ Thursday 22.10        12° / 7°   70% │
+│ ▌ Friday  23.10        11° / 6°   80% │
+│   Saturday 24.10       12° / 6°   30% │
+│   Sunday  25.10        13° / 8°   15% │
+│   Monday  26.10        14° / 9°    5% │
+│   Tuesday 27.10        12° / 7°   10% │
+│   Wednesday 28.10      11° / 6°   40% │
+│ ───────────────────────────────────── │
+│ °C °F   ☐ Remember   Alert above 40%  │
+└───────────────────────────────────────┘</pre></div>
+      </div>
+    </div>
+    <div>
+      <figure class="frame" style="margin:0">
+        <div class="frame-bar"><i></i><i></i><i></i><span class="url">rainalert.live/city/london</span></div>
+        <div class="vp vp-d3">
+          <div class="d3">
+            <div class="d3-mast">
+              <svg width="20" height="20" viewBox="0 0 64 64" aria-hidden="true"><rect width="64" height="64" rx="14" fill="#16191B"/><g fill="none" stroke="#EDF0EF" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 33c6-20 40-20 46 0"/><path d="M32 20v24a8 8 0 0 1-8 8"/></g></svg>
+              <span class="b">Rain Alert</span>
+              <span class="w">London · Thu 22 Oct 2026</span>
+            </div>
+
+            <p class="d3-lead">Rain likely for the rest of today.</p>
+            <p class="d3-sub">Up to 70% between 06:00 and 10:00, and again from 15:00. Take an umbrella.</p>
+
+            <div class="d3-rows">
+              <div class="d3-row wet today"><i></i><span class="d">Thursday 22.10<small>today</small></span><span class="rule"></span><span class="t">12° / 7°</span><span class="p">70%</span></div>
+              <div class="d3-row wet"><i></i><span class="d">Friday 23.10<small>tomorrow</small></span><span class="rule"></span><span class="t">11° / 6°</span><span class="p">80%</span></div>
+              <div class="d3-row"><i></i><span class="d">Saturday 24.10</span><span class="rule"></span><span class="t">12° / 6°</span><span class="p">30%</span></div>
+              <div class="d3-row"><i></i><span class="d">Sunday 25.10</span><span class="rule"></span><span class="t">13° / 8°</span><span class="p">15%</span></div>
+              <div class="d3-row"><i></i><span class="d">Monday 26.10</span><span class="rule"></span><span class="t">14° / 9°</span><span class="p">5%</span></div>
+              <div class="d3-row"><i></i><span class="d">Tuesday 27.10</span><span class="rule"></span><span class="t">12° / 7°</span><span class="p">10%</span></div>
+              <div class="d3-row"><i></i><span class="d">Wednesday 28.10</span><span class="rule"></span><span class="t">11° / 6°</span><span class="p">40%</span></div>
+            </div>
+
+            <p class="d3-note">Rain unlikely below 30%, possible from 30% to 60%, likely above that. The marked days reach 50%.</p>
+
+            <div class="d3-foot">
+              <span class="unit"><span class="on">°C</span><span>°F</span></span>
+              <span>☐ Remember this city</span>
+              <span>Alert me above 40 %</span>
+              <span class="sp">Open-Meteo</span>
+            </div>
+          </div>
+        </div>
+        <figcaption>Direction three. The same data as the other two, set as a printed table. The wet days are the two large figures and the two marks in the gutter.</figcaption>
+      </figure>
+      <div class="card" style="margin-top:16px">
+        <h3>What it costs</h3>
+        <ul class="ticks tight">
+          <li>It gives up the hourly strip, which is the only part of the page that says <em>when</em>. That has to be put back somewhere, and a printed page has no good place for it.</li>
+          <li>A sheet of pale paper on a dark photograph is the sharpest contrast of the three, and it is the one most likely to look like a different website pasted onto the page.</li>
+          <li>It is the least useful on a phone, where the week is the thing people scroll past and the next few hours are the thing they came for.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="sec" id="keep">
+  <div class="sec-head">
+    <span class="sec-num">06</span>
+    <div>
+      <h2 class="sec-title">What every direction has to keep</h2>
+    <p class="sec-idea">These are the app's rules, not styling preferences. A redesign that breaks any of them has changed what the app says, not how it looks.</p>
+    </div>
+  </div>
+  <div class="keep">
+    <div class="rule">
+      <h3>One threshold, one alert</h3>
+      <p>The tab title, the favicon, the banner, the row mark, the notification and the calendar export all fire at the same <code>UMBRELLA_THRESHOLD</code>. The reader's own threshold is a second answer with its own words, and it never stands in for the app's advice.</p>
+    </div>
+    <div class="rule">
+      <h3>Honest band names</h3>
+      <p>Rain unlikely, rain possible, rain likely. A 25% day is not dry, and a probability does not predict an intensity. The name is always in the text as well as the colour.</p>
+    </div>
+    <div class="rule">
+      <h3>Unknown is not zero</h3>
+      <p>A day the service did not report gets its own band, is never counted as dry, and never appears in the calendar file or above a threshold line.</p>
+    </div>
+    <div class="rule">
+      <h3>One address per city</h3>
+      <p>Every way of asking for a forecast is redirected to <code>/city/&lt;slug&gt;</code>, and the canonical link, the sitemap and the structured data all point at the same address.</p>
+    </div>
+    <div class="rule">
+      <h3>Right status codes</h3>
+      <p>A missing city answers 404, a broken upstream answers 503, and a failed search on the start page stays 200. The error copy says what happened in plain English.</p>
+    </div>
+    <div class="rule">
+      <h3>Reachable without a mouse</h3>
+      <p>Every value in a chart is also in text, the hourly values are in a table as well as a strip, and the whole thing works with the script switched off.</p>
+    </div>
+  </div>
+</section>
+
+<section class="sec" id="rec">
+  <div class="sec-head">
+    <span class="sec-num">07</span>
+    <div>
+      <h2 class="sec-title">Night street, with the mark from this page</h2>
+    <p class="sec-idea">Night street fixes the most: the answer stops sitting below the form, the hourly strip stops needing a hover, and the page stops being a white slab on top of a good photograph. The mark and the dark panel belong to the same idea, because both come out of the street in the picture.</p>
+    </div>
+  </div>
+  <div class="dir-grid">
+    <div>
+      <div class="card">
+        <h3>What it would take</h3>
+        <ul class="ticks tight">
+          <li><code>templates/index.html</code>: the panel structure, the mark in the heading, the strip with its now rule, the week as columns. The Jinja loops stay the same, so the tests that check the markup keep working.</li>
+          <li><code>static/style.css</code>: a new palette as custom properties, a new type stack, and the strip rewritten for the taller bars. The layout budget has to be measured again afterwards.</li>
+          <li><code>static/favicon.svg</code> and <code>static/favicon-rain.svg</code>: the two new marks, and the constant in <code>tools/make_icons.py</code> with them.</li>
+          <li><code>app.py</code>: the hourly summary sentence, because "rain from 06:00 to 10:00, and again from 15:00" is a new string and a new rule, and the rule belongs behind the test suite.</li>
+        </ul>
+      </div>
+    </div>
+    <div>
+      <div class="card">
+        <h3>What to do first</h3>
+        <ul class="ticks tight">
+          <li>Put the mark in place on its own. It is a change to two files and it is independent of any layout decision, and it makes every later screenshot read as one app.</li>
+          <li>Reorder one page: the city and the answer first, the form after. That is a template change, it costs no CSS, and it is the change a phone reader notices most.</li>
+          <li>Then take the dark panel, because it is the expensive half and the one that needs the vertical budget measured in a real browser.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+</div>
