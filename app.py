@@ -21,6 +21,7 @@ from geopy.exc import GeocoderQueryError, GeocoderServiceError, GeocoderTimedOut
 from geopy.geocoders import Nominatim
 
 from cities import CITY_NAMES, CITY_SLUGS, CURATED_CITIES
+from releases import RELEASES
 
 # Load environment variables from .env file
 load_dotenv()
@@ -1831,6 +1832,30 @@ def cities_index():
     )
 
 
+@app.route('/release-notes')
+def release_notes():
+    """What each release brought.
+
+    The notes are written by hand, in `releases.py`, the same way the API
+    reference is: they describe the app rather than being generated from
+    it. The page is a page like any other, with the same panel and the
+    same background, and the footer links to it from everywhere else.
+    """
+    return render_template(
+        'release_notes.html',
+        page_title="Release notes - Rain Alert",
+        page_description=("What changed in each release of Rain Alert: the "
+                          "night street page, the calendar export, the "
+                          "browser notification and the installable app."),
+        canonical_url=canonical_url("/release-notes"),
+        og_image_url=OG_IMAGE,
+        og_image_width=OG_IMAGE_WIDTH,
+        og_image_height=OG_IMAGE_HEIGHT,
+        structured_data=structured_data(),
+        releases=RELEASES,
+    )
+
+
 @app.route('/robots.txt')
 def robots():
     """Where the crawlers may go.
@@ -1863,6 +1888,7 @@ def sitemap():
     urls = [
         ("/", "1.0", "daily"),
         ("/cities", "0.8", "weekly"),
+        ("/release-notes", "0.4", "monthly"),
     ]
     for slug, _name in CURATED_CITIES:
         urls.append((f"/city/{slug}", "0.7", "daily"))

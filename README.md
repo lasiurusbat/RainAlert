@@ -129,8 +129,8 @@ Python 3.14.5.
 ## Running the tests
 
 ```bash
-python -m unittest test_app    # 348 offline tests, no network required
-python -m unittest test_browser  # 75 browser tests, needs Chrome
+python -m unittest test_app    # 359 offline tests, no network required
+python -m unittest test_browser  # 79 browser tests, needs Chrome
 python -m unittest test_api     # 7 live integration tests, hits both APIs
 ```
 
@@ -626,6 +626,7 @@ has to be findable, and it is built to be:
 | `/` | The start page: the search form, and the site's own name in the title |
 | `/city/london` | The forecast for one city, at that city's address |
 | `/cities` | The index of the cities that have a page, with a link to each |
+| `/release-notes` | What each release of the app brought, linked from the footer |
 | `/robots.txt` | Where the crawlers may go, and where the sitemap is |
 | `/sitemap.xml` | Every page of the site, for the crawlers |
 
@@ -693,6 +694,12 @@ fills in from the release tag. It is not decoration: the deployment smoke
 test greps the live page for the version, so it can tell "the site is up"
 from "the new build is up".
 
+**The changelog is a page of the site.** Next to the version, the footer
+carries a link to `/release-notes`, which says what each release brought,
+newest first, in the same night-street frame as the rest of the site. The
+content lives in `releases.py`, so cutting a release means adding an entry
+there.
+
 ---
 
 ## Project layout
@@ -701,9 +708,12 @@ from "the new build is up".
 RainAlert/
 ├── app.py                       # the whole app: routes, geocoding, forecast, formatting
 ├── cities.py                    # the curated list of cities that have a page
+├── releases.py                  # what each release brought, for the release notes
 ├── templates/
 │   ├── index.html               # the start page and the forecast
 │   ├── cities.html              # the index of cities
+│   ├── release_notes.html       # what each release brought
+│   ├── _footer.html             # the shared footer
 │   └── 404.html                 # the page for an address that is not on this site
 ├── static/
 │   ├── style.css                # all styling

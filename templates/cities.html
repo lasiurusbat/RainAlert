@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+{% from '_footer.html' import site_footer with context %}
 <html lang="en" class="no-js">
 <head>
     <meta charset="UTF-8">
@@ -60,20 +61,7 @@
             </ul>
         </div>
 
-        <footer class="copyright">
-            Rain Alert © 2026. Vedad Dizdarevic. All rights reserved.
-            {% if donation_url %}
-            <a href="{{ donation_url }}" target="_blank" rel="noopener noreferrer">Buy me a coffee<span class="sr-only"> (donation, opens in a new tab)</span></a>
-            {% endif %}
-            <span class="credits">
-                Weather data by <a href="https://open-meteo.com/" target="_blank" rel="noopener noreferrer">Open-Meteo.com</a>
-                (<a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener noreferrer">CC BY 4.0</a>)
-                · Place names © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a> contributors
-            </span>
-            <span class="build-info">
-                Version {{ app_version }}{% if app_commit %} · build {{ app_commit }}{% endif %}
-            </span>
-        </footer>
+        {{ site_footer() }}
     </div>
 </body>
 </html>

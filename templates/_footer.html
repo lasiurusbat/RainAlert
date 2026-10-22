@@ -1,0 +1,31 @@
+{# The site footer, in one place.
+
+   Every page ends with the same footer: the copyright, the optional
+   donation link, the data credits, and the build that is answering. The
+   credits are required by the Open-Meteo licence, so the footer is not
+   optional markup either.
+
+   The macro is imported with the context, so it can read the donation
+   link and the build's version the same way the page does.
+
+   `release_notes` is false on the release notes page itself: a link to
+   the page you are already on is not an offer. #}
+{% macro site_footer(release_notes=True) %}
+<footer class="copyright">
+    Rain Alert © 2026. Vedad Dizdarevic. All rights reserved.
+    {% if donation_url %}
+    <a href="{{ donation_url }}" target="_blank" rel="noopener noreferrer">Buy me a coffee<span class="sr-only"> (donation, opens in a new tab)</span></a>
+    {% endif %}
+    <span class="credits">
+        Weather data by <a href="https://open-meteo.com/" target="_blank" rel="noopener noreferrer">Open-Meteo.com</a>
+        (<a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener noreferrer">CC BY 4.0</a>)
+        · Place names © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a> contributors
+    </span>
+    <!-- Which build this is. It sits under the credits, so the
+         answer to "which version is this?" is on the page. -->
+    <span class="build-info">
+        Version {{ app_version }}{% if app_commit %} · build {{ app_commit }}{% endif %}
+        {% if release_notes %}<span class="build-sep" aria-hidden="true">|</span><a class="release-link" href="{{ url_for('release_notes') }}">Release notes</a>{% endif %}
+    </span>
+</footer>
+{% endmacro %}

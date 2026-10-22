@@ -44,6 +44,8 @@ tags:
     description: The page itself and the data it is built from.
   - name: Discovery
     description: The files a crawler asks for: the robots file and the sitemap.
+  - name: Site
+    description: The pages about the site itself.
   - name: Alerts
     description: The notification endpoint the page polls while it is open.
   - name: Install
@@ -195,6 +197,26 @@ paths:
               schema:
                 type: string
 
+  /release-notes:
+    get:
+      tags: [Site]
+      summary: What each release of Rain Alert brought.
+      description: |
+        The release notes: what each release of the app changed, newest
+        first. The page is linked from the footer of every other page, and
+        it is in the sitemap, so the changelog is a page of the site rather
+        than a file that only exists in the repository.
+
+        The content comes from `releases.py`, so cutting a release means
+        adding an entry there.
+      responses:
+        "200":
+          description: The release notes.
+          content:
+            text/html:
+              schema:
+                type: string
+
   /robots.txt:
     get:
       tags: [Discovery]
@@ -216,9 +238,9 @@ paths:
       tags: [Discovery]
       summary: The pages of the site, for the crawlers.
       description: |
-        The start page, the city index and every city's page, with today's
-        date as the last modification — the forecast on every one of those
-        pages changes every day.
+        The start page, the city index, the release notes and every city's
+        page, with today's date as the last modification — the forecast on
+        every one of those pages changes every day.
       responses:
         "200":
           description: The sitemap.

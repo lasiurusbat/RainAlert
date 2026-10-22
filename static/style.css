@@ -1215,6 +1215,108 @@ button:focus-visible {
     opacity: 0.72;
 }
 
+/* The release notes link, after the build. The separator is a pipe rather
+   than a dot, so the two read as two different kinds of thing: one is
+   which build is answering, the other is a page to read. */
+.build-sep {
+    margin: 0 0.35rem;
+    opacity: 0.7;
+}
+
+.release-link {
+    color: inherit;
+    text-decoration: underline;
+    text-decoration-color: rgba(255, 255, 255, 0.4);
+    text-underline-offset: 3px;
+}
+
+.release-link:hover,
+.release-link:focus-visible {
+    text-decoration-color: currentColor;
+}
+
+/* --- The release notes ------------------------------------------------------
+   A page like any other: the same panel over the same photograph. The
+   notes are the app's own history, so the type does the work - the version
+   is narrow, the name is wide, and the points are quiet prose.
+
+   No amber here. The lamp means rain on the forecast page, and a colour
+   that means one thing on one page must not mean nothing on the next. */
+.notes-lead {
+    color: var(--mist);
+    margin: 0.5rem 0 1.1rem;
+}
+
+.notes-version {
+    color: var(--paper);
+    font-variation-settings: 'wdth' 74, 'wght' 600;
+}
+
+.releases {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.release {
+    padding: 0 0 1.1rem;
+    margin: 0 0 1.1rem;
+    border-bottom: 1px solid var(--line);
+}
+
+.release:last-child {
+    padding-bottom: 0;
+    margin-bottom: 0;
+    border-bottom: none;
+}
+
+.release-version {
+    margin: 0;
+    font-size: 0.72rem;
+    font-variation-settings: 'wdth' 74, 'wght' 600;
+    letter-spacing: 0.06em;
+    color: var(--mist);
+}
+
+.release-name {
+    margin: 0.15rem 0 0.6rem;
+    font-size: 1.02rem;
+    line-height: 1.25;
+    font-variation-settings: 'wdth' 100, 'wght' 600;
+    color: var(--paper);
+}
+
+.release-points {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    font-size: 0.85rem;
+    line-height: 1.55;
+    color: var(--mist);
+}
+
+.release-points li {
+    position: relative;
+    padding-left: 0.9rem;
+    margin-bottom: 0.5rem;
+}
+
+.release-points li:last-child {
+    margin-bottom: 0;
+}
+
+/* A small rule rather than a bullet: the same mark as the app's own
+   accents, and it cannot be mistaken for a rain mark. */
+.release-points li::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 0.62em;
+    width: 0.4rem;
+    height: 1px;
+    background: var(--dim);
+}
+
 /* --- The offline page ------------------------------------------------------
    The page the service worker shows when there is no network. It says what
    is wrong, and it shows no forecast at all: a stale rain chance is worse

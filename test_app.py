@@ -1388,6 +1388,99 @@ class TestBuildInfo(AppTestCase):
         self.assertLess(body.index("OpenStreetMap"), body.index("Version 0.8"))
 
 
+class TestReleaseNotes(AppTestCase):
+    """The release notes, and the link to them.
+
+    The notes are a page like any other, and the footer links to them from
+    everywhere else. The footer is one macro, so the link cannot be on one
+    page and missing from the next.
+    """
+
+    def footer(self, body):
+        """The footer's own text, without the rest of the page."""
+        start = body.index("<footer")
+        return body[start:body.index("</footer>")]
+
+    def pages(self):
+        """Every page of the site, and its body."""
+        bodies = [self.client.get("/").get_data(as_text=True),
+                  self.client.get("/cities").get_data(as_text=True),
+                  self.client.get("/city/london").get_data(as_text=True),
+                  self.client.get("/no-such-page").get_data(as_text=True)]
+        return bodies
+
+    # -- the page ---------------------------------------------------------------
+
+    def test_the_page_answers(self):
+        response = self.client.get("/release-notes")
+        self.assertEqual(response.status_code, 200)
+
+    def test_the_page_says_what_it_is(self):
+        """A title, a description, a canonical link and a social card."""
+        body = self.client.get("/release-notes").get_data(as_text=True)
+        self.assertIn("<title>Release notes - Rain Alert</title>", body)
+        self.assertIn('<meta name="description" content="', body)
+        self.assertIn(
+            '<link rel="canonical" href="https://rainalert.live/release-notes">',
+            body)
+        self.assertIn('<meta property="og:title" content="', body)
+
+    def test_the_page_is_in_the_sitemap(self):
+        body = self.client.get("/sitemap.xml").get_data(as_text=True)
+        self.assertIn("<loc>https://rainalert.live/release-notes</loc>", body)
+
+    def test_the_page_carries_every_release(self):
+        body = self.client.get("/release-notes").get_data(as_text=True)
+        for release in rainalert.RELEASES:
+            self.assertIn(release["version"], body)
+            self.assertIn(release["name"], body)
+
+    def test_the_releases_are_newest_first(self):
+        versions = [release["version"] for release in rainalert.RELEASES]
+        self.assertEqual(versions, sorted(versions, reverse=True))
+
+    def test_every_release_says_something(self):
+        """A release with no points is a heading and nothing else."""
+        for release in rainalert.RELEASES:
+            self.assertTrue(release["points"], release["version"])
+            for point in release["points"]:
+                self.assertTrue(point.strip(), release["version"])
+
+    def test_the_page_says_which_build_is_answering(self):
+        """The notes and the footer agree about the running build."""
+        with mock.patch.object(rainalert, "APP_VERSION", "0.8"):
+            body = self.client.get("/release-notes").get_data(as_text=True)
+        self.assertIn("Version 0.8", self.footer(body))
+        self.assertIn('<span class="notes-version">0.8</span>', body)
+
+    # -- the link to it ---------------------------------------------------------
+
+    def test_the_footer_links_to_the_release_notes(self):
+        """From every page, including the error page."""
+        for body in self.pages():
+            self.assertIn('<a class="release-link" href="/release-notes">',
+                          self.footer(body))
+
+    def test_the_link_is_after_the_version(self):
+        """The version comes first, then the separator, then the link."""
+        for body in self.pages():
+            footer = self.footer(body)
+            self.assertLess(footer.index("Version "),
+                             footer.index("Release notes"))
+            self.assertIn('<span class="build-sep" aria-hidden="true">|</span>',
+                          footer)
+
+    def test_the_page_does_not_link_to_itself(self):
+        """A link to the page you are already on is not an offer."""
+        body = self.client.get("/release-notes").get_data(as_text=True)
+        self.assertNotIn("release-link", body)
+
+    def test_the_footer_is_the_same_on_every_page(self):
+        """One macro, so the footer cannot drift from page to page."""
+        footers = {self.footer(body) for body in self.pages()}
+        self.assertEqual(len(footers), 1)
+
+
 class TestBrowserPreferences(AppTestCase):
     """Tier 2: the saved city and the personal alert threshold.
 
@@ -2115,7 +2208,12 @@ class TestAttribution(AppTestCase):
         self.assertIn("open-meteo.com", footer)
         for anchor in footer.split("<a ")[1:]:
             opening = anchor.split(">", 1)[0]
-            self.assertIn('rel="noopener noreferrer"', opening)
+            # A link to somewhere else on the site is not a risk: it opens
+            # in the same tab, and there is no window for it to reach. A
+            # link out of the site is, so that is the one that has to be
+            # opened safely.
+            if 'target="_blank"' in opening or 'href="http' in opening:
+                self.assertIn('rel="noopener noreferrer"', opening)
 
 
 class TestInstallableApp(AppTestCase):

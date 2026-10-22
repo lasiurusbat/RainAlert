@@ -35,7 +35,7 @@ a page that is missing says so with its status code.
 - [x] Geocoding cache, explicit timeouts, configuration through environment variables
 - [x] City-local dates (`timezone=auto`) and English weekday names
 - [x] Temperature rounding fix (round half up)
-- [x] Offline unit tests (348), browser tests (75) and live API tests (7)
+- [x] Offline unit tests (359), browser tests (79) and live API tests (7)
 - [x] Comprehensive `README.md` with screenshot, `CLAUDE.md` project notes
 - [x] API reference (`API.md`) and an OpenAPI 3.1 spec (`openapi.yaml`), with tests that keep them in step with the routes
 

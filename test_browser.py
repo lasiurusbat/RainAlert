@@ -1467,5 +1467,82 @@ class DayPickerTestCase(BrowserServerMixin, unittest.TestCase):
         self.assertEqual(sideways, 0)
 
 
+@unittest.skipUnless(
+    HAS_SELENIUM or REQUIRE_BROWSER,
+    "selenium is not installed")
+class ReleaseNotesBrowserTestCase(BrowserServerMixin, unittest.TestCase):
+    """The release notes link, followed in a real browser.
+
+    The link sits in the footer, under the credits, and it is a plain
+    link: it has to work without a script, and the page it opens has to
+    look like the rest of the site.
+    """
+
+    def open_the_forecast(self, width=1366, height=768):
+        self.driver.execute_cdp_cmd("Emulation.setDeviceMetricsOverride", {
+            "width": width, "height": height,
+            "deviceScaleFactor": 1, "mobile": False,
+        })
+        self.driver.get(self.base + "/?city=London")
+        self.wait_for("return document.querySelector('.weather-list') !== null;")
+        self.wait_for("return document.fonts.status === 'loaded';")
+
+    def test_the_link_is_in_the_footer(self):
+        self.open_the_forecast()
+        link = self.driver.execute_script(
+            "var l = document.querySelector('.copyright .release-link');"
+            "return l ? {text: l.innerText.trim(),"
+            "            href: l.getAttribute('href'),"
+            "            visible: l.getBoundingClientRect().height > 0}"
+            "       : null;")
+        self.assertIsNotNone(link)
+        self.assertEqual(link["text"], "Release notes")
+        self.assertEqual(link["href"], "/release-notes")
+        self.assertTrue(link["visible"])
+
+    def test_the_link_opens_the_notes(self):
+        """Clicking it lands on the page, with the panel and the notes."""
+        self.open_the_forecast()
+        self.driver.find_element(By.CSS_SELECTOR, ".release-link").click()
+        self.wait_for("return document.querySelector('.releases') !== null;")
+        self.assertIn("/release-notes", self.driver.current_url)
+        self.assertEqual(self.driver.title, "Release notes - Rain Alert")
+
+    def test_the_notes_page_has_the_panel_over_the_photograph(self):
+        """The same frame as every other page, not a bare document.
+
+        The panel is the dark plate of the night street, and the page
+        behind it is transparent, so the photograph shows through.
+        """
+        self.driver.get(self.base + "/release-notes")
+        self.wait_for("return document.querySelector('.releases') !== null;")
+        self.wait_for("return document.fonts.status === 'loaded';")
+        panel = self.driver.execute_script(
+            "var p = document.querySelector('.container');"
+            "return p ? {background: getComputedStyle(p).backgroundColor,"
+            "            radius: getComputedStyle(p).borderRadius,"
+            "            body: getComputedStyle(document.body)"
+            "                     .backgroundColor}"
+            "       : null;")
+        self.assertIsNotNone(panel)
+        # The asphalt plate, not a white card and not nothing at all.
+        self.assertEqual(panel["background"], "rgb(13, 18, 22)")
+        self.assertNotEqual(panel["radius"], "0px")
+        # The photograph is behind the page, so the page itself is clear.
+        self.assertEqual(panel["body"], "rgba(0, 0, 0, 0)")
+
+    def test_the_notes_page_does_not_scroll_sideways(self):
+        self.driver.execute_cdp_cmd("Emulation.setDeviceMetricsOverride", {
+            "width": 400, "height": 780,
+            "deviceScaleFactor": 1, "mobile": False,
+        })
+        self.driver.get(self.base + "/release-notes")
+        self.wait_for("return document.querySelector('.releases') !== null;")
+        sideways = self.driver.execute_script(
+            "return document.documentElement.scrollWidth - "
+            "document.documentElement.clientWidth;")
+        self.assertEqual(sideways, 0)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

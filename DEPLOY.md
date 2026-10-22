@@ -205,6 +205,13 @@ git push origin v0.9
 Watch the run under the repository's Actions tab. The first release after
 setup is `v0.8`, to match `render.yaml`, which pins `0.8`.
 
+**Cutting a release means adding an entry to `releases.py`.** The release
+notes page at `/release-notes` is a page of the site, and it says what each
+release brought. Add the new release at the top of `RELEASES`, with the
+version the tag carries and the points that release made, and the footer of
+every page will link to it. The top entry's version is the one the build
+stamps into the footer, so the page and the running build agree.
+
 ### Known limits
 
 - **Not run yet.** The image builds and the tests pass inside it locally,
@@ -243,5 +250,5 @@ setup is `v0.8`, to match `render.yaml`, which pins `0.8`.
 - **The test counts drift.** The count appears in **four** documents —
   `CLAUDE.md`, `README.md`, `DEPLOY.md` and `implementation-plan.md` — and
   they are updated together, but a test added without updating all four
-  leaves them disagreeing. The suite has 348 offline tests, 75 browser
+  leaves them disagreeing. The suite has 359 offline tests, 79 browser
   tests and 7 live integration tests.

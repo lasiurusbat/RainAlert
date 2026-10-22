@@ -20,6 +20,7 @@ authentication, no account and no database.
 | `POST` | `/` | `text/html` | The page, with the city taken from the form. |
 | `GET` | `/city/{city_slug}` | `text/html` | One city's forecast, at that city's own address. |
 | `GET` | `/cities` | `text/html` | The index of the cities that have a page of their own. |
+| `GET` | `/release-notes` | `text/html` | What each release of the app brought. |
 | `GET` | `/robots.txt` | `text/plain` | Where the crawlers may go, and where the sitemap is. |
 | `GET` | `/sitemap.xml` | `application/xml` | The pages of the site, for the crawlers. |
 | `GET` | `/api/alert` | `application/json` | The one thing worth interrupting the reader for. |
@@ -203,6 +204,26 @@ covers the rest.
 
 ---
 
+## `GET /release-notes` — what each release brought
+
+The app's own history, newest first. The footer of every page links here,
+after the version of the build that is answering.
+
+```bash
+curl "http://127.0.0.1:5000/release-notes"
+```
+
+The notes are written by hand, in `releases.py`, the same way this document
+is: they describe the app rather than being generated from it. Cutting a
+release means adding an entry there, and the version on the top entry is the
+one the build stamps into the footer, so the page and the footer never
+disagree about which release is running.
+
+The page is a page like any other: it has a title, a description, a
+canonical link and a social card, and it is in the sitemap.
+
+---
+
 ## `GET /robots.txt` and `GET /sitemap.xml`
 
 The two files a crawler asks for.
@@ -221,9 +242,10 @@ Sitemap: https://rainalert.live/sitemap.xml
 `/api/` and `/calendar.ics` are kept out of the crawl: they are not pages,
 and fetching either one costs two upstream requests.
 
-`sitemap.xml` names the start page, the city index and every city's page,
-with today's date as the last modification — the forecast on every one of
-those pages changes every day, so the date is today's every time.
+`sitemap.xml` names the start page, the city index, the release notes and
+every city's page, with today's date as the last modification — the forecast
+on every one of those pages changes every day, so the date is today's every
+time.
 
 ---
 

@@ -25,8 +25,8 @@ Serves on <http://127.0.0.1:5000>. `FLASK_DEBUG=1` enables the reloader and
 debugger.
 
 ```bash
-python -m unittest test_app    # offline suite, 348 tests, no network
-python -m unittest test_browser  # browser suite, 75 tests, needs Chrome
+python -m unittest test_app    # offline suite, 359 tests, no network
+python -m unittest test_browser  # browser suite, 79 tests, needs Chrome
 python -m unittest test_api     # live integration tests, hits both APIs
 ```
 
@@ -101,8 +101,11 @@ nothing else.
 |---|---|
 | `app.py` | The whole app: routes, geocoding, forecast fetching, formatting |
 | `cities.py` | The curated list of cities that have a page of their own |
+| `releases.py` | What each release brought, for the release notes page |
 | `templates/index.html` | Single page; inline styles are out, classes live in `style.css` |
 | `templates/cities.html` | The index of the cities, with a link to each |
+| `templates/release_notes.html` | What each release brought |
+| `templates/_footer.html` | The shared footer, a Jinja macro the pages call |
 | `templates/404.html` | The page for an address that is not on this site |
 | `static/style.css` | All styling |
 | `static/fonts/` | The self-hosted Archivo variable face (Latin subset) |
@@ -395,9 +398,29 @@ the page hands over, and crawling them costs two upstream requests each.
 
 **The city index is the front door of the crawlable part of the site.**
 `/cities` links to every curated city, and `/sitemap.xml` lists the start
-page, the index and every city. The list is short on purpose — the
-geocoder is rate-limited, and every address in it is a forecast the app has
-to fetch.
+page, the index, the release notes and every city. The list is short on
+purpose — the geocoder is rate-limited, and every address in it is a
+forecast the app has to fetch.
+
+**The changelog is a page of the site, not a file in the repository.**
+`/release-notes` says what each release brought, newest first, and the
+footer of every page links to it after the version. The content lives in
+`releases.py`, so **cutting a release means adding an entry there** — the
+version on the top entry is the one the build stamps into the footer, and
+the number of the release in preparation is the fallback tag in
+`render.yaml`.
+
+- **The page is the same night street as the rest of the site.** Same
+  background photograph, same panel over it, same frame. It is a page of
+  the site, so it looks like one.
+- **There is no amber on it.** The lamp means rain on the forecast page,
+  and a colour that means one thing on one page must not mean nothing on
+  the next. The release notes are set in paper and mist only.
+- **The footer is one macro.** `templates/_footer.html` holds the footer,
+  and every page calls `{{ site_footer() }}` — so the version, the credits
+  and the release-notes link cannot drift apart between pages. The release
+  notes page itself calls `site_footer(release_notes=False)`, so it does
+  not link to itself.
 
 **The headings are in order.** The forecast page is `h1` (the city's name)
 → `h2` (the hourly strip's title), and the day list is a real `<ol>` of

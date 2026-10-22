@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+{% from '_footer.html' import site_footer with context %}
+<html lang="en" class="no-js">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ page_title }}</title>
+    <meta name="description" content="{{ page_description }}">
+    <link rel="canonical" href="{{ canonical_url }}">
+    <meta name="robots" content="index, follow, max-image-preview:large">
+    <meta name="theme-color" content="#0d1216">
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="Rain Alert">
+    <meta property="og:title" content="{{ page_title }}">
+    <meta property="og:description" content="{{ page_description }}">
+    <meta property="og:url" content="{{ canonical_url }}">
+    <meta property="og:image" content="{{ og_image_url }}">
+    <meta property="og:image:width" content="{{ og_image_width }}">
+    <meta property="og:image:height" content="{{ og_image_height }}">
+    <meta property="og:image:alt" content="Rain Alert - the 7-day rain chance for any city">
+    <meta property="og:locale" content="en">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="{{ page_title }}">
+    <meta name="twitter:description" content="{{ page_description }}">
+    <meta name="twitter:image" content="{{ og_image_url }}">
+    <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}">
+    <link rel="preload" as="image" href="{{ url_for('static', filename='image/rain-alert-bg.jpg') }}">
+    <link rel="preload" as="font" type="font/woff2" crossorigin
+          href="{{ url_for('static', filename='fonts/archivo-latin.woff2') }}">
+    <link rel="manifest" href="{{ url_for('manifest') }}">
+    <link rel="apple-touch-icon" href="{{ url_for('static', filename='icon-180.png') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <script type="application/ld+json">{{ structured_data | tojson }}</script>
+</head>
+<body data-autoload="0" data-search="none" data-city="" data-unit="celsius">
+    <div class="page">
+        <div class="container container-wide">
+            <div class="topbar">
+                <a class="brand" href="{{ url_for('index') }}">
+                    <svg class="brand-mark" viewBox="0 0 64 64" width="24" height="24"
+                         aria-hidden="true" focusable="false">
+                        <rect width="64" height="64" rx="14" fill="#182027"/>
+                        <g fill="none" stroke="#E9EFF2" stroke-width="5"
+                           stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M9 33c6-20 40-20 46 0"/>
+                            <path d="M32 20v24a8 8 0 0 1-8 8"/>
+                        </g>
+                    </svg>
+                    <span class="brand-name">Rain Alert</span>
+                </a>
+            </div>
+            <div class="intro">
+                <h1 class="page-title">Release notes</h1>
+                <p class="notes-lead">What each release brought, newest first.
+                    The build that is answering you right now is
+                    <span class="notes-version">{{ app_version }}</span>.</p>
+            </div>
+            <ol class="releases">
+                {% for release in releases %}
+                <li class="release">
+                    <h2 class="release-version">{{ release.version }}</h2>
+                    <p class="release-name">{{ release.name }}</p>
+                    <ul class="release-points">
+                        {% for point in release.points %}
+                        <li>{{ point }}</li>
+                        {% endfor %}
+                    </ul>
+                </li>
+                {% endfor %}
+            </ol>
+        </div>
+
+        {{ site_footer(release_notes=False) }}
+    </div>
+</body>
+</html>

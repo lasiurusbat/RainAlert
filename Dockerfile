@@ -74,7 +74,7 @@ ENV XDG_RUNTIME_DIR=/run/rainalert
 
 WORKDIR /app
 
-COPY --chown=rainalert:rainalert app.py cities.py ./
+COPY --chown=rainalert:rainalert app.py cities.py releases.py ./
 COPY --chown=rainalert:rainalert templates ./templates
 COPY --chown=rainalert:rainalert static ./static
 
