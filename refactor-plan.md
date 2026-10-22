@@ -1,7 +1,7 @@
 # RainAlert refactor plan
 
-Status as of 2026-10-22: **steps 0–7 done** on the `refactor/modules`
-branch; steps 8–12 open. Checked items (`[x]`)
+Status as of 2026-10-22: **steps 0–12 done** on the `refactor/modules`
+branch. One item is open: `/calendar.ics` on `Day`s (step 7). Checked items (`[x]`)
 are finished and can be seen in the repository; unchecked items (`[ ]`) are
 open.
 
@@ -330,70 +330,101 @@ reaching them through `app`.
 
 Risk: low.
 
-- [ ] `rainalert/present/seo.py` takes the slug functions, `page_title`,
+- [x] `rainalert/present/seo.py` takes the slug functions, `page_title`,
       `page_description`, `canonical_url` and `structured_data`.
-- [ ] `page_meta(title, description, path)` returns the shared bundle: the
+- [x] `page_meta(title, description, path)` returns the shared bundle: the
       canonical link, the Open Graph image and its size, the structured
       data. The four `render_template` calls spread it in.
-- [ ] `render_forecast_page` stays the only builder for the forecast page.
+- [x] `render_forecast_page` stays the only builder for the forecast page.
+
+`DEFAULT_TAB_TITLE`, which nothing read, was removed. The favicon names
+stay with the pages, in `web/pages.py`.
 
 ### Step 9 — One table for errors
 
 Risk: low.
 
-- [ ] **First**, pin the current strings: the page messages and the
+- [x] **First**, pin the current strings: the page messages and the
       shorter API messages ("…unavailable right now." without "Please try
       again") are different on purpose, and tests must hold both.
-- [ ] `errors.py` gets one table: exception → page message, page status on
+- [x] `errors.py` gets one table: exception → page message, page status on
       a city page, API message, API status, log line.
-- [ ] The three handlers use it. The start page still answers `200` for a
+- [x] The three handlers use it. The start page still answers `200` for a
       failed search; a city page still answers `404` or `503`.
+
+The table is `FAILURES` in `rainalert/errors.py`, with `MISSING_CITY` for a
+request that names no city. The strings were pinned by adding the geocoder
+being down to `tools/snapshot.py` (35 responses now) before the handlers
+changed, and four tests hold the table's own rules.
 
 ### Step 10 — The routes and the app factory
 
 Risk: medium.
 
-- [ ] `rainalert/web/__init__.py`: `create_app()` builds the app with the
+- [x] `rainalert/web/__init__.py`: `create_app()` builds the app with the
       repository root as its root path, registers the context processor,
       the 404 handler and the routes.
-- [ ] `web/pages.py`, `web/api.py` and `web/site.py` each expose
+- [x] `web/pages.py`, `web/api.py` and `web/site.py` each expose
       `register(app)`; the endpoint names stay exactly as they are.
-- [ ] `app.py` becomes `app = create_app()`, the `__main__` block and the
+- [x] `app.py` becomes `app = create_app()`, the `__main__` block and the
       re-exports.
-- [ ] `docker compose up --build` serves the page and `docker compose run
+- [x] `docker compose up --build` serves the page and `docker compose run
       --rm tests` passes; `gunicorn app:app` still starts.
-- [ ] Browser suite passes, actually run, not skipped.
+- [x] Browser suite passes, actually run, not skipped.
+
+`create_app()` names the app `rainalert`, so `app.logger` is the package's
+own logger and the modules' loggers are its children. The helpers the route
+modules share (`report_failure`, `fetch_weather`, `fetch_forecast`) are in
+`web/common.py`. The re-exports were dropped here rather than in step 11:
+the tests were pointed at the owning modules in the same commit.
 
 ### Step 11 — The tests
 
 Risk: medium.
 
-- [ ] `tests/fixtures.py` holds `FORECAST_PAYLOAD`, `hourly_payload`,
+- [x] `tests/fixtures.py` holds `FORECAST_PAYLOAD`, `hourly_payload`,
       `FakeLocation` and `FakeResponse`; `test_browser.py` uses them too.
-- [ ] `test_app.py` is split into one file per module plus
+- [x] `test_app.py` is split into one file per module plus
       `test_routes_pages.py`, `test_routes_api.py`, `test_routes_site.py`
       and `test_docs.py` (the API-documentation and night-street design
       checks).
-- [ ] Each test imports from the module it tests; patches target the
+- [x] Each test imports from the module it tests; patches target the
       owning module.
-- [ ] Drop the re-exports from `app.py`; it keeps only `app`.
-- [ ] The count is still 359 offline and 80 browser tests (plus the new
+- [x] Drop the re-exports from `app.py`; it keeps only `app`.
+- [x] The count is still 359 offline and 80 browser tests (plus the new
       ones from steps 3, 6 and 9). Compare the test names before and after,
       not only the count.
-- [ ] Update the commands: `.github/workflows/ci-cd.yml`, the `Dockerfile`
+- [x] Update the commands: `.github/workflows/ci-cd.yml`, the `Dockerfile`
       test `COPY`, `docker-compose.yml`'s `tests` service.
+
+The offline suite is `tests/offline/`, twelve files: `test_rain`,
+`test_labels`, `test_parse`, `test_alerts`, `test_calendar`, `test_errors`,
+`test_upstream`, `test_config`, `test_pages`, `test_api_alert`, `test_site`,
+`test_docs`. The 368 test names were compared before and after the split:
+identical. The commands are:
+
+    python -m unittest discover -s tests/offline -t .
+    python -m unittest tests.test_browser
+    python -m unittest tests.test_api
+
+`.dockerignore` leaves `tests/test_browser.py` out of the image, and now
+ignores bytecode caches at every depth: the old top-level pattern let
+`__pycache__` folders inside packages into the image.
 
 ### Step 12 — The documents
 
 Risk: low.
 
-- [ ] `CLAUDE.md`: the Layout table, the test commands, the gotchas that
+- [x] `CLAUDE.md`: the Layout table, the test commands, the gotchas that
       name `app.py` functions (the module they now live in), and a short
       section on the dependency rule.
-- [ ] `README.md`, `DEPLOY.md`, `implementation-plan.md`: the test
+- [x] `README.md`, `DEPLOY.md`, `implementation-plan.md`: the test
       commands and the test count, all four in one change.
-- [ ] `API.md` and `openapi.yaml` need no change, because no route,
+- [x] `API.md` and `openapi.yaml` need no change, because no route,
       parameter or status code changes. `TestApiDocumentation` confirms it.
+
+`RainAlert-Ideas-for-Alerting-Users.md` named `app.py` as the home of the
+notification and the calendar too, and was updated with the others.
 
 ## 6. Later, and only if it earns it
 

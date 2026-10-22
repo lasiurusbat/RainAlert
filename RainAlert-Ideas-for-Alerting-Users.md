@@ -53,7 +53,7 @@ These features keep state in the user's browser, so the server stays stateless.
     - One limitation to carry into Tier 3: `localStorage` follows the **browser**, not the person. A reader who switches device, or opens the site in a private window, gets a blank slate — the saved city does not follow them. That is the same gap Tier 3's server-side table would close, and it is the strongest argument for having one.
 - **Web Notifications while the tab is open.** A small JS timer re-fetches every 30 minutes and fires a notification such as "Rain starts in about 1 hour". It is simple, but only works while the tab is open.
   - ✅ **Built.** A 🔔 button next to the hourly strip's title turns the notifications on, and the page polls the server every 30 minutes while it is open.
-    - The **rule is on the server**: `notification_event()` in `app.py` decides what is worth interrupting a reader for — rain in the current hour, or rain starting within the next two hours — and writes the wording. The browser asks `/api/alert` and shows what comes back, so the decision is behind the offline test suite rather than inside a string in `app.js`.
+    - The **rule is on the server**: `notification_event()` in `rainalert/domain/alerts.py` decides what is worth interrupting a reader for — rain in the current hour, or rain starting within the next two hours — and writes the wording. The browser asks `/api/alert` and shows what comes back, so the decision is behind the offline test suite rather than inside a string in `app.js`.
     - **The same news is never said twice.** Each event carries a key, and the browser remembers the keys it has shown: a poll that lands twice in the same wet hour, or two tabs open at once, do not repeat it.
     - The **reader's own threshold** is used when they have set one, and the notification says so ("Above your 40% threshold."). Without one it uses the app's umbrella threshold, and then it is the app's advice, umbrella and all — the same split as the ▲ marker, for the same reason.
     - It says **when**, not how long: "Rain likely from 15:00", with the city's own local hour, exactly like the strip above it.
@@ -65,7 +65,7 @@ These features keep state in the user's browser, so the server stays stateless.
     - **It still cannot reach a closed app.** The service worker caches files; it cannot wake the app and deliver a notification. That is the same Tier 3 gap as the browser notification, and the offline page is the honest face of it.
 - **Calendar export (.ics).** An "Add rainy days to my calendar" button that generates an `.ics` file with an event on each day over the threshold. The user's own calendar app does the alerting, with no notification infrastructure on your side.
   - ✅ **Built.** A quiet "📅 Add rainy days to my calendar" link on the caption line beside "7-day rain chance" downloads a standard iCalendar file from `/calendar.ics`, with one all-day event for every day that reaches the threshold.
-    - **The file is built on the server**, by `build_calendar()` in `app.py`, so the rule that decides which days go into it is behind the offline test suite. The browser's part is narrow: it says which threshold the reader is using, and it takes the link away when nothing reaches it — a link that would download an empty calendar is not an offer.
+    - **The file is built on the server**, by `build_calendar()` in `rainalert/calendar_ics.py`, so the rule that decides which days go into it is behind the offline test suite. The browser's part is narrow: it says which threshold the reader is using, and it takes the link away when nothing reaches it — a link that would download an empty calendar is not an offer.
     - **The reader's own threshold is used when they have set one**, and the event says so ("At or above your 40% alert threshold."). Without one it uses the app's umbrella threshold, and then it is the app's advice, umbrella and all — the same split as the ▲ marker and the notification, for the same reason.
     - **The events are all-day events**, because the forecast is a daily maximum: the file says which days are wet, and the reader's own calendar app decides when to remind them about it. The event id is derived from the city and the date, so importing the file again updates the same events instead of adding a second copy of every one of them.
     - **A day the service did not report is never in the file.** An unknown chance is not a chance of anything, so it is never counted as a wet day — and never as a dry one either.
@@ -121,7 +121,7 @@ is open can talk to the server, and a tab that is closed cannot.
 
 ## Codebase notes to keep in mind
 
-Two existing design choices in `app.py` affect any scheduled alerting.
+Two existing design choices in the app affect any scheduled alerting.
 
 - **Dates are in the city's local time.** `CLAUDE.md` documents that `timezone=auto` is deliberate. A scheduled job must respect this when deciding what "tomorrow" or "07:00" means, so store the timezone from Open-Meteo's response with each subscription.
 - **The geocoding cache is per process.** The `lru_cache` on `get_coordinates` would not be shared with a separate scheduler. Store latitude and longitude at signup rather than re-geocoding on every run, which also keeps you inside Nominatim's rate limits.

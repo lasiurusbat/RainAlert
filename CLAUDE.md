@@ -25,13 +25,14 @@ Serves on <http://127.0.0.1:5000>. `FLASK_DEBUG=1` enables the reloader and
 debugger.
 
 ```bash
-python -m unittest test_app    # offline suite, 359 tests, no network
-python -m unittest test_browser  # browser suite, 80 tests, needs Chrome
-python -m unittest test_api     # live integration tests, hits both APIs
+python -m unittest discover -s tests/offline -t .  # offline suite, 368 tests, no network
+python -m unittest tests.test_browser               # browser suite, 80 tests, needs Chrome
+python -m unittest tests.test_api                   # live integration tests, hits both APIs
 ```
 
-The offline suite is the one that gates changes. `test_api.py` requires the
-upstream services to be reachable. `test_browser.py` needs Chrome and
+The offline suite is the one that gates changes. `tests/test_api.py`
+requires the upstream services to be reachable. `tests/test_browser.py`
+needs Chrome and
 selenium (`pip install -r requirements-dev.txt`) and skips itself when
 either is missing.
 
@@ -99,7 +100,25 @@ nothing else.
 
 | Path | Purpose |
 |---|---|
-| `app.py` | The whole app: routes, geocoding, forecast fetching, formatting |
+| `app.py` | The entry point for `python app.py` and `gunicorn app:app`; it only calls `create_app()` |
+| `rainalert/config.py` | Every setting read from the environment |
+| `rainalert/errors.py` | The three failures, and `FAILURES`: what each one says and which status it answers |
+| `rainalert/domain/rain.py` | The bands, the umbrella and the alert threshold |
+| `rainalert/domain/days.py` | The one rule that names a day ("today", "Tomorrow", "on Friday") |
+| `rainalert/domain/model.py` | `Day`, `Hour` and `Forecast`: the forecast before any of it is worded |
+| `rainalert/domain/parse.py` | The Open-Meteo answer, parsed once per request |
+| `rainalert/domain/alerts.py` | The banner, the tab title, the hourly summary and the notification |
+| `rainalert/present/labels.py` | Every visible label: dates, chances, amounts, temperatures |
+| `rainalert/present/forecast_view.py` | `Day`s and `Hour`s turned into the dicts the template renders |
+| `rainalert/present/seo.py` | Slugs, the title, the description, the canonical link, the structured data |
+| `rainalert/upstream/geocoding.py` | Nominatim: a city name to coordinates, cached |
+| `rainalert/upstream/open_meteo.py` | Open-Meteo: the one forecast request per page load |
+| `rainalert/calendar_ics.py` | The iCalendar file, built with no HTTP in it |
+| `rainalert/web/__init__.py` | `create_app()`: the Flask app, its template globals and its routes |
+| `rainalert/web/pages.py` | `/`, `/city/<slug>`, `/cities`, `/release-notes` and `render_forecast_page()` |
+| `rainalert/web/api.py` | `/api/alert` and `/calendar.ics` |
+| `rainalert/web/site.py` | `robots.txt`, `sitemap.xml`, the manifest, the service worker, the 404 |
+| `rainalert/web/common.py` | What the route modules share: reporting a failure, the forecast as views |
 | `rainalert/data/cities.py` | The curated list of cities that have a page of their own |
 | `rainalert/data/releases.py` | What each release brought, for the release notes page |
 | `templates/index.html` | Single page; inline styles are out, classes live in `style.css` |
@@ -123,9 +142,12 @@ nothing else.
 | `tools/shoot.py` | Screenshots a page of the running app, for looking at the design |
 | `tools/measure.py` | Measures the page in a real browser: the vertical budget and the boxes |
 | `tools/crop.py` | Screenshots one element, for looking at a detail |
-| `test_app.py` | Offline unit tests, HTTP fully mocked |
-| `test_browser.py` | Browser tests, real headless Chrome, no network |
-| `test_api.py` | Live integration tests |
+| `tools/snapshot.py` | Saves what every route answers, both upstreams mocked, for `diff -r` before and after a refactor |
+| `tests/offline/` | The offline suite, one file per module, HTTP fully mocked |
+| `tests/fixtures.py` | The mocked upstream answers and `AppTestCase`, shared by the suites |
+| `tests/test_browser.py` | Browser tests, real headless Chrome, no network |
+| `tests/test_api.py` | Live integration tests |
+| `refactor-plan.md` | How `app.py` was split into the package, step by step |
 | `requirements-dev.txt` | Development-only dependencies (selenium) |
 | `Dockerfile` | Two-stage container image |
 | `docker-compose.yml` | Local container setup: the app and a test service |
@@ -138,8 +160,27 @@ nothing else.
 
 ## Architecture notes
 
-**Error handling is exception-based.** `app.py` defines three exceptions that
-the route translates into user-facing messages:
+**The code is in layers, and the layers only point down.** `rainalert/web`
+is Flask: the routes, the app factory, the template globals. It uses
+everything below it, and nothing imports it. `rainalert/present` turns the
+forecast into words and page data. `rainalert/domain` holds the rules - the
+bands, the naming of a day, the alerts - and imports neither Flask nor
+`requests`, so a rule can be tested without an app or a mock.
+`rainalert/upstream` holds the two clients. A new rule goes in `domain`, a
+new label in `present`, a new route in `web`; `app.py` stays the entry
+point and nothing else.
+
+- **Settings are read as `config.NAME`, at the moment they are needed**,
+  never copied out with `from rainalert.config import NAME`. A test patches
+  `rainalert.config`, and a copied name would never see the patch.
+- **The package logs under the `rainalert` logger.** `app.logger` is that
+  logger, and the modules below log to its children
+  (`logging.getLogger(__name__)`), so every line goes through Flask's
+  handler and names the module it came from: `WARNING in common:
+  Geocoding service unavailable for 'London'`.
+
+**Error handling is exception-based.** `rainalert/errors.py` defines three
+exceptions that the routes translate into user-facing messages:
 
 - `CityNotFound` — the geocoder answered normally but had no match.
 - `GeocodingUnavailable` — the geocoder was unreachable, rate-limited, or
@@ -150,11 +191,18 @@ the route translates into user-facing messages:
 single "not found" path: a network blip must not tell a user their valid city
 does not exist. Internal exception text is logged, never rendered.
 
-**Geocoding results are cached** with `lru_cache` on `get_coordinates`, keyed
+**Every failure is described once.** `FAILURES` in `rainalert/errors.py`
+gives each exception its page message, its shorter API message, its status
+code and its log line, and the page, `/api/alert` and `/calendar.ics` all
+read it. A page can offer to "try again in a moment"; the API cannot, so it
+gets the shorter sentence.
+
+**Geocoding results are cached** with `lru_cache` on `get_coordinates`
+(`rainalert/upstream/geocoding.py`), keyed
 by city name. Nominatim is rate-limited and a city name always maps to the same
 place, so caching cuts load substantially. Failures are deliberately not
 cached, so a retry re-attempts the lookup. Clear the cache in tests with
-`get_coordinates.cache_clear()`.
+`geocoding.get_coordinates.cache_clear()`; `AppTestCase` does it for you.
 
 **Timeouts are explicit and configurable.** geopy defaults to a **1 second**
 read timeout, which is short enough to fail against a healthy-but-slow
@@ -167,7 +215,7 @@ queried city's local time. A forecast for Tokyo is dated in Tokyo's days.
 Do not convert these dates to the viewer's timezone — that would be a bug.
 
 **Weekday names are always English.** They are hard-coded in `WEEKDAY_NAMES`
-(Monday first) and picked by `date.weekday()`, not taken from
+in `rainalert/domain/days.py` (Monday first) and picked by `date.weekday()`, not taken from
 `strftime("%A")` and not read from the C library's locale data. `strftime`
 follows the process-wide `LC_TIME` locale, so on a German Windows machine, or
 in a container with `LANG` set, it would render the weekday in that
@@ -176,7 +224,7 @@ it would be worse than a consistently English one. The app therefore does
 not read the browser's `Accept-Language` header at all, and the image needs
 no locale data.
 
-**Rain severity is a three-band scale** computed in `app.py` from
+**Rain severity is a three-band scale** computed in `rainalert/domain/rain.py` from
 `precipitation_probability_max`: under `SEVERITY_LOW_MAX` (30) is *low*,
 up to `SEVERITY_MODERATE_MAX` (60) is *moderate*, above that is *high*. A
 missing chance gets its own *unknown* band rather than being treated as
@@ -210,10 +258,18 @@ read as one line rather than as a label and a button.
 
 **The hourly strip sits between the banner and the week.** It
 comes from `hourly=precipitation_probability` in the same request as the
-daily fields — one request per page load, not two. `parse_hourly_days()`
-splits the hours by the day they fall on, `parse_today_hours()` picks out
-the city's local day, and `summarise_hours()` turns a day's hours into the
-one-line "Bring an umbrella" sentence.
+daily fields — one request per page load, not two. `parse_forecast()`
+(`rainalert/domain/parse.py`) reads the response **once**: it groups the
+hours by the day they fall on, gives each `Day` its hours, and picks out
+the city's local day as `Forecast.today`. `summarise_hours()` turns a day's
+hours into the one-line "Bring an umbrella" sentence.
+
+**A day is named by one rule.** `day_name(iso_date, index, form)` in
+`rainalert/domain/days.py` names the first day today and the second
+tomorrow, and every later one by its weekday, in the form each place
+needs: `panel` ("Today", "Friday"), `tab` ("today", "Friday"), `caption`
+("today", "on Friday") and `summary` ("for the rest of today", "on
+Friday"). A later day whose date cannot be read is "in 3 days", never "on ".
 
 The strip's hours are the **city's local hours**, exactly like the daily
 dates. The current hour comes from the `current` block the API returns, in
@@ -486,14 +542,15 @@ has happened yet — the image does not exist and no tag has been cut. See
 "Deployment status" above.
 
 **CI runs the tests inside the built image.** `.github/workflows/ci-cd.yml`
-builds for `linux/amd64` and runs `python -m unittest test_app` in the
+builds for `linux/amd64` and runs the offline suite
+(`python -m unittest discover -s tests/offline -t .`) in the
 container, so that what is tested is exactly what will be shipped. The image
 that passes the tests is the image that is pushed — it is not rebuilt for the
 push. The suite needs no locale data any more, so it would also pass on a
 stock runner; the reason for running it in the image is that it tests the
 shipped artefact, not the developer's machine.
 
-**The browser suite runs on the runner, not in the image.** `test_browser.py`
+**The browser suite runs on the runner, not in the image.** `tests/test_browser.py`
 drives a real headless Chrome, and the image installs no system packages on
 purpose, so Chrome cannot be in it. The suite therefore runs as a step on
 the GitHub runner, against the same source, **before** the push — so a
@@ -522,7 +579,7 @@ new build is up".
 `clean_donation_url()`, which accepts only absolute `https://` URLs without
 whitespace, quotes or angle brackets and returns `""` for anything else. A
 context processor passes it to every template as `donation_url`, reading the
-module global on each request so tests can patch `rainalert.DONATION_URL`.
+setting on each request so tests can patch `rainalert.config.DONATION_URL`.
 When it is empty no donation markup renders at all. The link appears just
 under the search button and in the footer. It is a plain link with
 `rel="noopener noreferrer"`, never an embedded widget or script.
@@ -583,7 +640,7 @@ while it is open, and the server answers with at most one event — rain in the
 current hour, or rain starting within `NOTIFICATION_LEAD_HOURS`.
 
 - **The decision is on the server, not in the script.** `notification_event()`
-  in `app.py` decides what is worth interrupting a reader for and writes the
+  in `rainalert/domain/alerts.py` decides what is worth interrupting a reader for and writes the
   wording; the browser only asks, shows and remembers. That keeps the rule
   behind the offline test suite instead of inside a string in `app.js`.
 - **The event's key is what stops a repeat.** The key is the day for the
@@ -619,7 +676,8 @@ does the alerting, so RainAlert needs no server, no account and no scheduler
 for that — which is the whole of Tier 3 handed to software the reader
 already has.
 
-- **The file is built on the server.** `build_calendar()` in `app.py` writes
+- **The file is built on the server.** `build_calendar()` in
+  `rainalert/calendar_ics.py` writes
   the whole iCalendar file, and `/calendar.ics` serves it. The browser only
   says which threshold the reader is using, so the rule that decides which
   days go in the file is behind the offline test suite and not inside a
@@ -668,7 +726,7 @@ already has.
 **The app is installable, and the two caching rules are the whole design.**
 `static/manifest.json` and `static/service-worker.js` are served from the
 **root** — `/manifest.json` and `/service-worker.js` — by two thin routes in
-`app.py`, so the manifest's scope and the worker's scope are the whole site
+`rainalert/web/site.py`, so the manifest's scope and the worker's scope are the whole site
 rather than `/static/`. The worker is also sent with `Service-Worker-Allowed: /`
 so the header cannot contradict the path. The manifest carries the three icons
 a browser needs to offer the install (192, 512 and a maskable 512, whose
@@ -723,7 +781,8 @@ because the app works without it.
   the script has run, the second keeps the export link from appearing when
   there is nothing to export.
 - **The browser suite needs Chrome and selenium, and skips without them.**
-  `test_browser.py` is not in the image: the image installs no system
+  `tests/test_browser.py` is not in the image (`.dockerignore` leaves it
+  out): the image installs no system
   packages, so there is no Chrome in it. It runs on the CI runner instead,
   where Chrome is already installed. Install the driver locally with
   `pip install -r requirements-dev.txt`. The suite skips itself when
@@ -834,7 +893,7 @@ because the app works without it.
   It includes the browser's own chrome, so the viewport comes out at
   616px instead of 768px and the page looks as if it scrolls. Set the
   viewport with `Emulation.setDeviceMetricsOverride`, the way
-  `test_browser.py` does.
+  `tests/test_browser.py` does.
 - **The hourly axis labels sit on the hour boundary, not on the bar.** Each
   label is positioned at the left edge of its own cell, so "06" is under
   the gap before the 06:00 bar rather than under the middle of it. The
@@ -891,9 +950,15 @@ because the app works without it.
 - Styling goes in `static/style.css` as classes, not inline `style`
   attributes in the template.
 - User-facing error messages are plain English sentences ending in a period.
-- Log with `app.logger`, never `print()`.
-- New user-visible strings belong in the template or in `app.py`, and the
-  UI text is English, and so are the weekday names.
+- Log with `app.logger` in a route and `logging.getLogger(__name__)` in
+  the package, never `print()`. Both end up in Flask's handler.
+- New user-visible strings belong in the template or in the `rainalert`
+  package - a label in `present/labels.py`, a sentence about the rain in
+  `domain/alerts.py`, an error in `errors.py` - and the UI text is English,
+  and so are the weekday names.
+- **A test lives with the module it tests**, in `tests/offline/`, and
+  imports that module directly. Patch a name where it is defined:
+  `rainalert.config`, `geocoding.geolocator`, `requests.get`.
 - **The tab title, the favicon, the ☔ icon and the banner are one alert.**
   They all read the same forecast and fire at the same `UMBRELLA_THRESHOLD`.
   Do not give any of them a threshold of its own — the moment two of them

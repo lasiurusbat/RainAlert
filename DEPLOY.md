@@ -160,7 +160,7 @@ pull request / push to main          push of a tag such as v0.9
   that the weekday names are hard-coded, so it would pass on a stock GitHub
   runner too. It still runs in the built image, because that is what makes
   the tested artefact and the shipped artefact the same one.
-- **The browser tests run on the runner.** `test_browser.py` drives a real
+- **The browser tests run on the runner.** `tests/test_browser.py` drives a real
   headless Chrome, and the image installs no system packages on purpose, so
   Chrome cannot be in it. The runner has Chrome already, so that suite runs
   there instead, against the same source. It runs **before** the push, so a
@@ -250,5 +250,5 @@ stamps into the footer, so the page and the running build agree.
 - **The test counts drift.** The count appears in **four** documents —
   `CLAUDE.md`, `README.md`, `DEPLOY.md` and `implementation-plan.md` — and
   they are updated together, but a test added without updating all four
-  leaves them disagreeing. The suite has 359 offline tests, 80 browser
+  leaves them disagreeing. The suite has 368 offline tests, 80 browser
   tests and 7 live integration tests.

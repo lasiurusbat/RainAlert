@@ -8,7 +8,7 @@ authentication, no account and no database.
 - **Base URL (local):** `http://127.0.0.1:5000`
 - **Base URL (production):** not live yet — see the note at the end
 - **Machine-readable spec:** [`openapi.yaml`](openapi.yaml) (OpenAPI 3.1)
-- **Implementation:** [`app.py`](app.py)
+- **Implementation:** the routes are in [`rainalert/web/`](rainalert/web/); [`app.py`](app.py) is the entry point
 
 ---
 
@@ -162,8 +162,8 @@ The forecast rows are readable in the markup, if a consumer needs them:
 
 ### The title, the description and the canonical link
 
-Every page says three things about itself, and they are decided in one place in
-`app.py`, so they cannot disagree:
+Every page says three things about itself, and they are decided in one place,
+`rainalert/present/seo.py`, so they cannot disagree:
 
 - `<title>` — the alert, and the city it is about.
 - `<meta name="description">` — the sentence a search result shows under the

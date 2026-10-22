@@ -129,22 +129,24 @@ Python 3.14.5.
 ## Running the tests
 
 ```bash
-python -m unittest test_app    # 359 offline tests, no network required
-python -m unittest test_browser  # 80 browser tests, needs Chrome
-python -m unittest test_api     # 7 live integration tests, hits both APIs
+python -m unittest discover -s tests/offline -t .  # 368 offline tests, no network required
+python -m unittest tests.test_browser               # 80 browser tests, needs Chrome
+python -m unittest tests.test_api                   # 7 live integration tests, hits both APIs
 ```
 
-`test_app.py` is the suite that gates changes. It mocks both HTTP services
+The offline suite in `tests/offline/` is the one that gates changes. It has
+one file per module of the app, and the payloads and fakes they share are
+in `tests/fixtures.py`. It mocks both HTTP services
 at the `requests` boundary, so it runs in under a second and never fails
 because an upstream is down.
 
-`test_browser.py` drives a real headless Chrome against the app, because the
+`tests/test_browser.py` drives a real headless Chrome against the app, because the
 saved city and the alert threshold live in the browser's `localStorage` and
 no HTTP test client can see them. It needs Chrome and selenium
 (`pip install -r requirements-dev.txt`), and skips itself when either is
 missing.
 
-`test_api.py` checks the real response shapes against the live services and
+`tests/test_api.py` checks the real response shapes against the live services and
 needs them to be reachable.
 
 The offline suite needs nothing from the host beyond Python itself: the
@@ -233,7 +235,8 @@ the host side if `8000` is already taken.
   lookups, since the app is I/O-bound on two keyless APIs.
 
 The image carries the HTTP test suites as well, so
-`docker run --rm rainalert python -m unittest test_app` runs the same tests
+`docker run --rm rainalert python -m unittest discover -s tests/offline -t .`
+runs the same tests
 against the same image that gets deployed. The browser suite is not in the
 image — it needs a real Chrome, and the image installs no system packages on
 purpose — so it runs on the host instead.
@@ -524,7 +527,8 @@ raises a browser notification when there is something worth saying:
 - **Rain about to start**, within the next two hours. "Rain likely from 15:00
   — 80% chance of rain in London at 15:00. Bring an umbrella."
 
-**The rule is on the server.** `notification_event()` in `app.py` decides what
+**The rule is on the server.** `notification_event()` in
+`rainalert/domain/alerts.py` decides what
 is worth interrupting a reader for, and the browser asks `/api/alert` for the
 answer. That keeps the wording and the decision in one place with tests
 behind it, instead of in a string inside `app.js`. The endpoint answers with
@@ -564,7 +568,8 @@ your own it uses the app's umbrella threshold, and then the events carry the
 app's advice, umbrella and all. The two never stand in for each other, the
 same as everywhere else on the page.
 
-**The file is built on the server.** `build_calendar()` in `app.py` writes the
+**The file is built on the server.** `build_calendar()` in
+`rainalert/calendar_ics.py` writes the
 whole file and `/calendar.ics` serves it, so the rule that decides which days
 go into it is covered by the offline test suite rather than living in a string
 inside `app.js`. The browser's part is narrow: it says which threshold you
@@ -706,9 +711,33 @@ there.
 
 ```
 RainAlert/
-├── app.py                       # the whole app: routes, geocoding, forecast, formatting
-├── cities.py                    # the curated list of cities that have a page
-├── releases.py                  # what each release brought, for the release notes
+├── app.py                       # the entry point: python app.py, gunicorn app:app
+├── rainalert/                   # the app itself
+│   ├── config.py                # every setting read from the environment
+│   ├── errors.py                # the three failures and what each one says
+│   ├── calendar_ics.py          # the iCalendar file
+│   ├── data/
+│   │   ├── cities.py            # the curated list of cities that have a page
+│   │   └── releases.py          # what each release brought, for the release notes
+│   ├── domain/                  # the rules: no Flask, no network
+│   │   ├── rain.py              # the bands, the umbrella, the alert threshold
+│   │   ├── days.py              # naming a day: today, tomorrow, on Friday
+│   │   ├── model.py             # Day, Hour, Forecast
+│   │   ├── parse.py             # the forecast service's answer, parsed once
+│   │   └── alerts.py            # the banner, the tab, the summary, the notification
+│   ├── present/                 # the words and the page data
+│   │   ├── labels.py            # dates, chances, amounts, temperatures
+│   │   ├── forecast_view.py     # the dicts the template renders
+│   │   └── seo.py               # title, description, canonical link, structured data
+│   ├── upstream/
+│   │   ├── geocoding.py         # Nominatim, cached
+│   │   └── open_meteo.py        # Open-Meteo, one request per page
+│   └── web/                     # Flask
+│       ├── __init__.py          # create_app()
+│       ├── pages.py             # the pages
+│       ├── api.py               # /api/alert and /calendar.ics
+│       ├── site.py              # robots, sitemap, manifest, service worker, 404
+│       └── common.py            # what the routes share
 ├── templates/
 │   ├── index.html               # the start page and the forecast
 │   ├── cities.html              # the index of cities
@@ -734,9 +763,11 @@ RainAlert/
 │       └── rain-alert-bg.jpg    # background photo (privately owned, see License)
 ├── docs/
 │   └── screenshot.png           # the image above
-├── test_app.py                  # offline unit tests, HTTP fully mocked
-├── test_browser.py              # browser tests, real headless Chrome
-├── test_api.py                  # live integration tests
+├── tests/
+│   ├── offline/                 # offline unit tests, one file per module, HTTP mocked
+│   ├── fixtures.py              # the mocked upstream answers, shared by the suites
+│   ├── test_browser.py          # browser tests, real headless Chrome
+│   └── test_api.py              # live integration tests
 ├── requirements.txt             # pinned runtime dependencies
 ├── requirements-dev.txt         # development-only dependencies (selenium)
 ├── tools/
@@ -744,7 +775,8 @@ RainAlert/
 │   ├── make_og_image.py         # regenerates the social card
 │   ├── shoot.py                 # screenshots a page of the running app
 │   ├── measure.py               # measures the page in a real browser
-│   └── crop.py                  # screenshots one element, for a detail
+│   ├── crop.py                  # screenshots one element, for a detail
+│   └── snapshot.py              # saves every route's answer, for diffing a refactor
 ├── Dockerfile                   # multi-stage container image
 ├── docker-compose.yml           # local container setup, app + test services
 ├── .dockerignore                # keeps the build context small
@@ -756,12 +788,17 @@ RainAlert/
 ├── DEPLOY.md                    # the deployment runbook
 ├── CLAUDE.md                    # notes for AI assistants working in this repo
 ├── implementation-plan.md       # what is built, what is next, what is deferred
+├── refactor-plan.md             # how app.py was split into the package
 └── RainAlert-Ideas-for-Alerting-Users.md
 ```
 
-`app.py` holds the entire application — routes, geocoding, forecast fetching
-and formatting — in about 1,800 lines. There is no package structure to
-navigate; a single module is the right size for an app this small.
+The app lives in the `rainalert` package, in layers that only point down:
+`web` is Flask and uses everything else; `present` turns the forecast into
+words and page data; `domain` holds the rules and imports neither Flask nor
+`requests`; `upstream` holds the two clients. `app.py` is only the entry
+point. `refactor-plan.md` records how the single 2,000-line module was split
+into these, one step at a time, with every route's answer checked byte for
+byte after each step.
 
 The install icons and the social card are generated, not drawn by hand:
 `tools/make_icons.py` and `tools/make_og_image.py` render the brand mark in
@@ -774,7 +811,7 @@ build nor CI ever has to run them.
 
 ### Geocoding
 
-`get_coordinates(city_name)` calls Nominatim with `exactly_one=True` and
+`get_coordinates(city_name)` (`rainalert/upstream/geocoding.py`) calls Nominatim with `exactly_one=True` and
 returns `(latitude, longitude, display_name)`. Results are cached with
 `functools.lru_cache`, because a city name always maps to the same place and
 Nominatim is rate-limited. Failures are deliberately *not* cached, so a retry
@@ -786,8 +823,10 @@ the user's input. Running the input through `.title()` would turn
 
 ### Forecast
 
-`fetch_forecast()` requests `precipitation_probability_max`, `temperature_2m_max`
-and `temperature_2m_min` with `timezone=auto`. The API then returns each date
+`fetch_payload()` (`rainalert/upstream/open_meteo.py`) requests the daily
+rain chance, temperatures, rain amount and rain hours, and the hourly rain
+chance, in one call with `timezone=auto`, and `parse_forecast()` turns the
+answer into `Day` and `Hour` objects once per request. The API then returns each date
 already expressed in the queried city's local time — a forecast for Tokyo is
 dated in Tokyo's days. Those dates are never converted to the viewer's
 timezone, because that would be a bug, not a feature.
@@ -891,7 +930,7 @@ the same thing as a machine-readable OpenAPI 3.1 spec.
 `/calendar.ics?city=London` answers with the calendar file. It takes the
 same two parameters as the alert endpoint — the city, and the reader's
 threshold if they have set one — and it is built by `build_calendar()` in
-`app.py`.
+`rainalert/calendar_ics.py`.
 
 The file is a plain iCalendar (RFC 5545) file: `VERSION`, `PRODID`,
 `CALSCALE`, `METHOD`, the calendar's name, and one `VEVENT` per day that
@@ -946,7 +985,8 @@ and `http://localhost` count as secure, so it works in local development.
 
 ### Weekday names
 
-The seven weekday names are hard-coded in `app.py`, Monday first, and
+The seven weekday names are hard-coded in `rainalert/domain/days.py`,
+Monday first, and
 `format_date()` picks one by `date.weekday()`.
 
 They are not taken from `strftime('%A')`, because that reads the process-wide
@@ -1036,7 +1076,8 @@ same command.
   attributes in the template.
 - **User-facing error messages are plain English sentences ending in a
   period.** The UI text is English, and so are the weekday names.
-- **Log with `app.logger`, never `print()`.**
+- **Log with `app.logger` in a route and `logging.getLogger(__name__)` in
+  the package, never `print()`.** Both go through Flask's handler.
 - **Restart the server after editing `index.html`.** Jinja caches templates
   when debug mode is off.
 - **`round()` is not what you want for temperatures.** Python uses banker's
