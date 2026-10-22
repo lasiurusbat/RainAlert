@@ -18,7 +18,7 @@ from rainalert.domain import alerts
 from rainalert.present import forecast_view
 from rainalert.upstream import geocoding
 from rainalert.present import labels
-from rainalert import calendar_ics
+from rainalert import calendar_ics, errors
 from rainalert.domain import days, parse, rain
 from rainalert.domain.model import Day, Hour
 
@@ -689,6 +689,36 @@ def remaining(hours):
     return [Hour(moment=datetime(2026, 10, 21, 12 + offset), chance=hour["chance"],
                  past=hour.get("past", False))
             for offset, hour in enumerate(hours)]
+
+
+class TestFailureTable(unittest.TestCase):
+    """Every failure is described once, for every route that can hit it."""
+
+    def test_every_message_is_a_sentence(self):
+        """User-facing messages are plain sentences ending in a period."""
+        for exc, failure in errors.FAILURES.items():
+            for message in (failure.page_message, failure.api_message):
+                with self.subTest(exc=exc.__name__, message=message):
+                    self.assertTrue(message[0].isupper())
+                    self.assertTrue(message.endswith("."))
+
+    def test_a_missing_city_is_a_404_and_an_outage_a_503(self):
+        self.assertEqual(errors.FAILURES[errors.CityNotFound].status, 404)
+        self.assertEqual(errors.FAILURES[errors.GeocodingUnavailable].status, 503)
+        self.assertEqual(errors.FAILURES[errors.WeatherUnavailable].status, 503)
+
+    def test_an_outage_never_says_the_city_is_missing(self):
+        """A network blip must not tell a reader their city does not exist."""
+        for exc in (errors.GeocodingUnavailable, errors.WeatherUnavailable):
+            failure = errors.FAILURES[exc]
+            self.assertNotIn("not found", failure.page_message)
+            self.assertNotIn("not found", failure.api_message)
+
+    def test_only_an_outage_is_logged(self):
+        """A city nobody knows is not a fault, so it is not logged."""
+        self.assertIsNone(errors.FAILURES[errors.CityNotFound].log)
+        self.assertIsNotNone(errors.FAILURES[errors.GeocodingUnavailable].log)
+        self.assertIsNotNone(errors.FAILURES[errors.WeatherUnavailable].log)
 
 
 class TestDayNames(unittest.TestCase):
@@ -1810,13 +1840,13 @@ class TestAlertEndpoint(AppTestCase):
         self.assertIn("City not found", data["error"])
 
     def test_a_geocoder_outage_is_not_reported_as_a_missing_city(self):
-        self.mock_geocode.side_effect = rainalert.GeocodingUnavailable("down")
+        self.mock_geocode.side_effect = errors.GeocodingUnavailable("down")
         response, data = self.alert("?city=London")
         self.assertEqual(response.status_code, 503)
         self.assertIn("geocoding service", data["error"])
 
     def test_a_weather_outage_is_reported(self):
-        self.mock_get.side_effect = rainalert.WeatherUnavailable("down")
+        self.mock_get.side_effect = errors.WeatherUnavailable("down")
         response, data = self.alert("?city=London")
         self.assertEqual(response.status_code, 503)
         self.assertIn("weather service", data["error"])
@@ -2058,14 +2088,14 @@ class TestCalendarExport(AppTestCase):
         self.assertIn("City not found", response.get_data(as_text=True))
 
     def test_a_geocoder_outage_is_not_reported_as_a_missing_city(self):
-        self.mock_geocode.side_effect = rainalert.GeocodingUnavailable("boom")
+        self.mock_geocode.side_effect = errors.GeocodingUnavailable("boom")
         response = self.export()
         self.assertEqual(response.status_code, 503)
         self.assertIn("geocoding service is unavailable",
                       response.get_data(as_text=True))
 
     def test_a_weather_outage_is_reported(self):
-        self.mock_get.side_effect = rainalert.WeatherUnavailable("boom")
+        self.mock_get.side_effect = errors.WeatherUnavailable("boom")
         response = self.export()
         self.assertEqual(response.status_code, 503)
         self.assertIn("weather service is unavailable",

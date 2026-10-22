@@ -20,7 +20,7 @@ from rainalert.data.releases import RELEASES
 from rainalert.domain.alerts import (clock, forecast_headline, notification_event,
                                      tab_alert)
 from rainalert.domain.rain import alert_threshold
-from rainalert.errors import CityNotFound, GeocodingUnavailable, WeatherUnavailable
+from rainalert.errors import FORECAST_ERRORS, MISSING_CITY, failure_for
 from rainalert.present.forecast_view import day_view, hour_view
 from rainalert.present.seo import (canonical_url, city_from_slug, city_path,
                                    page_description, page_meta, page_title,
@@ -46,7 +46,20 @@ FAVICON_DEFAULT = "favicon.svg"
 FAVICON_RAIN = "favicon-rain.svg"
 
 
-# --- Calendar export ---------------------------------------------------------
+# --- Failures ----------------------------------------------------------------
+def report_failure(error, city):
+    """Log a failed forecast, and say what the reader should be told.
+
+    The messages and the status codes live in one table in
+    ``rainalert/errors.py``, so the page, the alert poll and the calendar
+    export say the same thing about the same failure.
+    """
+    failure = failure_for(error)
+    if failure.log:
+        app.logger.warning(failure.log, city)
+    return failure
+
+
 def calendar_failure(message, status):
     """A plain-text answer for a request that cannot be answered.
 
@@ -141,7 +154,7 @@ def index():
     unit = temperature_unit_from_request()
     if request.method == 'POST' and not city:
         return render_forecast_page(
-            "", unit, error="Please enter a city name.")
+            "", unit, error=MISSING_CITY)
     if request.method == 'GET' and city:
         target = city_path(city)
         if target:
@@ -184,28 +197,14 @@ def render_forecast_page(city, unit, city_page=False, error=None, status=200):
             # banner, decided by the same rule, so they can never
             # disagree with it.
             alert = tab_alert(forecast.days, remaining_hours)
-        except CityNotFound:
-            error = "City not found. Please try a different name (e.g., 'Paris')."
+        except FORECAST_ERRORS as exc:
+            failure = report_failure(exc, city)
+            error = failure.page_message
             if city_page:
-                # A city's page that names a city nobody knows is a missing
-                # page, and says so with its status code. A page that says
-                # "not found" but answers 200 is a soft 404, and search
-                # engines treat it as one.
-                status = 404
-        except GeocodingUnavailable:
-            app.logger.warning("Geocoding service unavailable for %r", city)
-            error = ("The geocoding service is unavailable right now. "
-                     "Please try again in a moment.")
-            if city_page:
-                # The upstream is down, not the page: 503 says "come back
-                # later" and keeps the address out of the index for now.
-                status = 503
-        except WeatherUnavailable:
-            app.logger.warning("Forecast service unavailable for %r", city)
-            error = ("The weather service is unavailable right now. "
-                     "Please try again in a moment.")
-            if city_page:
-                status = 503
+                # A city's page that fails is a missing page or an upstream
+                # that is down, and says so with its status code. The start
+                # page answers 200: a failed search is not a missing page.
+                status = failure.status
 
     # The saved city and the personal alert threshold live in the browser's
     # localStorage, so the server has to tell the page what kind of page it
@@ -444,25 +443,15 @@ def api_alert():
     """
     city = (request.args.get('city') or '').strip()
     if not city:
-        return noindex(jsonify(
-            {"error": "Please enter a city name."})), 400
+        return noindex(jsonify({"error": MISSING_CITY})), 400
 
     threshold, personal = alert_threshold(request.args.get('threshold'))
     try:
         latitude, longitude, display_city = get_coordinates(city)
         hours = load_forecast(latitude, longitude).today
-    except CityNotFound:
-        return noindex(jsonify({
-            "error": "City not found. Please try a different name "
-                     "(e.g., 'Paris')."})), 404
-    except GeocodingUnavailable:
-        app.logger.warning("Geocoding service unavailable for %r", city)
-        return noindex(jsonify({
-            "error": "The geocoding service is unavailable right now."})), 503
-    except WeatherUnavailable:
-        app.logger.warning("Forecast service unavailable for %r", city)
-        return noindex(jsonify({
-            "error": "The weather service is unavailable right now."})), 503
+    except FORECAST_ERRORS as exc:
+        failure = report_failure(exc, city)
+        return noindex(jsonify({"error": failure.api_message})), failure.status
 
     remaining = [hour for hour in hours if not hour.past]
     now = clock(remaining[0]) if remaining else None
@@ -492,23 +481,15 @@ def calendar_export():
     """
     city = (request.args.get('city') or '').strip()
     if not city:
-        return calendar_failure("Please enter a city name.", 400)
+        return calendar_failure(MISSING_CITY, 400)
 
     threshold, personal = alert_threshold(request.args.get('threshold'))
     try:
         latitude, longitude, display_city = get_coordinates(city)
         forecast = fetch_forecast(latitude, longitude)
-    except CityNotFound:
-        return calendar_failure(
-            "City not found. Please try a different name (e.g., 'Paris').", 404)
-    except GeocodingUnavailable:
-        app.logger.warning("Geocoding service unavailable for %r", city)
-        return calendar_failure(
-            "The geocoding service is unavailable right now.", 503)
-    except WeatherUnavailable:
-        app.logger.warning("Forecast service unavailable for %r", city)
-        return calendar_failure(
-            "The weather service is unavailable right now.", 503)
+    except FORECAST_ERRORS as exc:
+        failure = report_failure(exc, city)
+        return calendar_failure(failure.api_message, failure.status)
 
     body = build_calendar(forecast, display_city, threshold, personal)
     response = Response(body, mimetype="text/calendar")

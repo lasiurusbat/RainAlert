@@ -21,6 +21,7 @@ REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, REPO)
 
 import requests  # noqa: E402
+from geopy.exc import GeocoderServiceError  # noqa: E402
 
 import app as rainalert  # noqa: E402
 from rainalert.upstream import geocoding  # noqa: E402
@@ -86,7 +87,10 @@ class FakeResponse:
         return self._payload
 
 
-# name, method, path, form, geocode result, forecast response
+# The geocoder answering with an error rather than a place.
+GEOCODER_DOWN = GeocoderServiceError("HTTP Error 503")
+
+# name, method, path, form, geocode result (or error), forecast response
 REQUESTS = [
     ("start", "GET", "/", None, FakeLocation(), FakeResponse()),
     ("start-post-empty", "POST", "/", {"city": ""}, FakeLocation(), FakeResponse()),
@@ -96,6 +100,8 @@ REQUESTS = [
     ("start-get-redirect", "GET", "/?city=London&unit=fahrenheit", None,
      FakeLocation(), FakeResponse()),
     ("start-post-not-found", "POST", "/", {"city": "Atlantis"}, None, FakeResponse()),
+    ("start-post-geocoder-down", "POST", "/", {"city": "London"},
+     GEOCODER_DOWN, FakeResponse()),
     ("start-post-weather-down", "POST", "/", {"city": "London"},
      FakeLocation(), FakeResponse(status_code=500)),
     ("city-london", "GET", "/city/london", None, FakeLocation(), FakeResponse()),
@@ -105,6 +111,8 @@ REQUESTS = [
     ("city-uncurated", "GET", "/city/st-john-s", None, FakeLocation(), FakeResponse()),
     ("city-redirect", "GET", "/city/London", None, FakeLocation(), FakeResponse()),
     ("city-not-found", "GET", "/city/atlantis", None, None, FakeResponse()),
+    ("city-geocoder-down", "GET", "/city/london", None,
+     GEOCODER_DOWN, FakeResponse()),
     ("city-weather-down", "GET", "/city/london", None,
      FakeLocation(), FakeResponse(status_code=500)),
     ("cities", "GET", "/cities", None, FakeLocation(), FakeResponse()),
@@ -119,6 +127,8 @@ REQUESTS = [
      FakeLocation(), FakeResponse()),
     ("alert-no-city", "GET", "/api/alert", None, FakeLocation(), FakeResponse()),
     ("alert-not-found", "GET", "/api/alert?city=Atlantis", None, None, FakeResponse()),
+    ("alert-geocoder-down", "GET", "/api/alert?city=London", None,
+     GEOCODER_DOWN, FakeResponse()),
     ("alert-weather-down", "GET", "/api/alert?city=London", None,
      FakeLocation(), FakeResponse(status_code=500)),
     ("calendar", "GET", "/calendar.ics?city=London", None, FakeLocation(), FakeResponse()),
@@ -126,6 +136,8 @@ REQUESTS = [
      None, FakeLocation(), FakeResponse()),
     ("calendar-no-city", "GET", "/calendar.ics", None, FakeLocation(), FakeResponse()),
     ("calendar-not-found", "GET", "/calendar.ics?city=Atlantis", None, None, FakeResponse()),
+    ("calendar-geocoder-down", "GET", "/calendar.ics?city=London", None,
+     GEOCODER_DOWN, FakeResponse()),
     ("calendar-weather-down", "GET", "/calendar.ics?city=London", None,
      FakeLocation(), FakeResponse(status_code=500)),
 ]
@@ -144,8 +156,9 @@ def main():
     client = rainalert.app.test_client()
     for name, method, path, form, location, forecast in REQUESTS:
         rainalert.get_coordinates.cache_clear()
-        with mock.patch.object(geocoding.geolocator, "geocode",
-                               return_value=location), \
+        answer = ({"side_effect": location} if isinstance(location, Exception)
+                  else {"return_value": location})
+        with mock.patch.object(geocoding.geolocator, "geocode", **answer), \
                 mock.patch.object(requests, "get",
                                   return_value=forecast):
             response = client.open(path, method=method, data=form)
