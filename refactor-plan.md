@@ -1,7 +1,7 @@
 # RainAlert refactor plan
 
-Status as of 2026-10-22: **steps 0–5 done** on the `refactor/modules`
-branch; steps 6–12 open. Checked items (`[x]`)
+Status as of 2026-10-22: **steps 0–6 done** on the `refactor/modules`
+branch; steps 7–12 open. Checked items (`[x]`)
 are finished and can be seen in the repository; unchecked items (`[ ]`) are
 open.
 
@@ -269,19 +269,32 @@ step 7.
 
 Risk: **medium**. The only step that touches logic.
 
-- [ ] `rainalert/domain/days.py`: one `day_name(iso_date, index, form)`,
+- [x] `rainalert/domain/days.py`: one `day_name(iso_date, index, form)`,
       where `form` is `caption` ("on Friday"), `tab` ("Friday"), `panel`
       ("Friday", "Today") or `summary` ("for the rest of today"). The four
       old functions become one-line wrappers, and are then removed when
       their callers move.
-- [ ] `rainalert/domain/alerts.py`: `first_alert_day(days,
+- [x] `rainalert/domain/alerts.py`: `first_alert_day(days,
       remaining_hours, threshold)` holds the "today is judged on the hours
       that are left, a finished today drops out, an unreported day is never
       dry" rule. `forecast_headline` and `tab_alert` both call it.
-- [ ] `TestForecastHeadline` and `TestTabAlert` pass unchanged; add one test
+- [x] `TestForecastHeadline` and `TestTabAlert` pass unchanged; add one test
       that feeds both functions the same week and asserts they name the
       same day.
-- [ ] Diff against the step 0 snapshots: identical.
+- [x] Diff against the step 0 snapshots: identical.
+
+Done as: `day_name(iso_date, index, form)` with the forms `panel`, `tab`,
+`caption` and `summary`; the old four functions are gone rather than kept
+as wrappers. The shared rule is `judge_days()` (today on the hours that are
+left, a finished today drops out) plus `first_wet_day()`; both
+`forecast_headline` and `tab_alert` take `Day`s and `Hour`s, and their
+tests build those through two small helpers, so the test bodies are
+unchanged. `WEEKDAY_NAMES` moved to `domain/days.py`.
+
+One behaviour changed, on purpose: a later day whose date cannot be read
+was captioned "on " (an empty weekday) in the hourly table and summary; it
+is now "in 3 days", as the banner and the tab already said. A test holds
+it.
 
 ### Step 7 — The client returns data, the view builds the page
 

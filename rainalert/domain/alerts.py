@@ -1,5 +1,5 @@
-"""What is worth telling a reader about: the hourly summary and the
-notification.
+"""What is worth telling a reader about: the banner, the tab title, the
+hourly summary and the notification.
 
 Both read :class:`~rainalert.domain.model.Hour` objects, so the rule is
 decided on the forecast itself and not on the dicts the page is rendered
@@ -7,6 +7,7 @@ from. The thresholds are read from :mod:`rainalert.config` each time.
 """
 
 from rainalert import config
+from rainalert.domain.days import day_name
 from rainalert.domain.rain import (rain_chance, round_half_up, severity_band,
                                    severity_label)
 
@@ -138,3 +139,211 @@ def notification_event(hours, threshold, city, personal=False):
                 chance, city, f"at {label}", threshold, personal),
         }
     return None
+
+
+# --- Today, and the first wet day ---------------------------------------------
+# The banner and the tab title are one alert, and this is the rule they
+# share. Today is judged on the hours that are left rather than on the daily
+# maximum: the maximum covers the whole day, so at 18:00 it still counts the
+# morning's downpour while the reader can only walk into the evening. A
+# today with no hours left drops out entirely, and a day the service did not
+# report is never counted as dry.
+
+
+def remaining_hour_chance(hours):
+    """The highest rain chance among the hours that are still to come.
+
+    ``None`` means the service reported no usable value for any of them.
+    """
+    chances = [rain_chance(hour.chance) for hour in hours or []]
+    known = [chance for chance in chances if chance is not None]
+    if not known:
+        return None
+    return max(known)
+
+
+def judge_days(days, remaining_hours=None):
+    """Each day of the week with the chance it is judged on.
+
+    Returns the judged days, as ``(index, day, chance, by_hours)`` tuples,
+    and whether today is over. ``chance`` is ``None`` for a day the service
+    did not report. ``by_hours`` says the chance is today's remaining hours
+    rather than the daily maximum, so the sentence can say which it is.
+
+    ``remaining_hours`` are today's hours that have not happened yet;
+    ``None`` means there is no hourly data, and today is judged on its daily
+    maximum like any other day.
+    """
+    judged = []
+    today_over = False
+    for index, day in enumerate(days or []):
+        chance = rain_chance(day.chance)
+        if index == 0 and remaining_hours is not None:
+            if not remaining_hours:
+                # Today is over. The reader wants to know about the days
+                # ahead, not about a day that has been and gone.
+                today_over = True
+                continue
+            remaining = remaining_hour_chance(remaining_hours)
+            if remaining is not None:
+                judged.append((index, day, remaining, True))
+                continue
+        judged.append((index, day, chance, False))
+    return judged, today_over
+
+
+def first_wet_day(judged):
+    """The first judged day at or above the umbrella threshold, or ``None``.
+
+    The same threshold puts the umbrella on a day's column, so the banner,
+    the tab and the week never disagree about whether rain is worth
+    noticing.
+    """
+    return next((entry for entry in judged
+                 if entry[2] is not None
+                 and entry[2] >= config.UMBRELLA_THRESHOLD), None)
+
+
+def _when(entry):
+    """How a sentence names a judged day."""
+    index, day, _, by_hours = entry
+    if by_hours:
+        return "for the rest of today"
+    return day_name(day.iso_date, index, "caption")
+
+
+# --- The headline ------------------------------------------------------------
+# One line above the daily list that says what the week looks like. It names
+# the first day worth mentioning: a day that reaches the umbrella threshold,
+# a day that is merely possible, or the week as a whole when no day is.
+#
+# The band name in the sentence is the same one the row in the list carries,
+# so the banner and the list never disagree about how wet a day is.
+
+
+def forecast_headline(days, remaining_hours=None):
+    """The one-line summary of the forecast, or ``None`` if there is none.
+
+    The sentence names the first day worth mentioning:
+
+    * a day at or above the umbrella threshold - "Rain likely tomorrow
+      (80%). Bring an umbrella.";
+    * a day that is merely possible - "Rain possible on Thursday (45%).";
+    * otherwise the week as a whole - "No rain likely for the next 7 days."
+
+    The band in the sentence is the day's own band, the same one its row in
+    the list carries, so the banner and the list never disagree about how
+    wet a day is. The umbrella follows the same threshold as the icon on the
+    row, and the wording follows the hourly summary above the strip.
+
+    Today is judged on the hours that are left (see :func:`judge_days`),
+    and the sentence says which figure it is using: "Rain likely for the
+    rest of today (80%)." The hourly figures and the daily figure are two
+    different quantities, and each one is labelled with which it is.
+
+    A day whose chance the service did not report is never counted as dry.
+    When the week is quiet but some days are unreported, the sentence says
+    "most of" rather than claiming the whole week is dry - and when more of
+    the week is unreported than is known to be dry, it says the chance is
+    unknown instead, because "no rain likely for most of" would be a claim
+    about days nobody reported.
+    """
+    if not days:
+        return None
+
+    judged, today_over = judge_days(days, remaining_hours)
+    known = [entry for entry in judged if entry[2] is not None]
+    wet = first_wet_day(judged)
+    possible = next((entry for entry in known
+                     if severity_band(entry[2]) == "moderate"), None)
+
+    if wet is not None:
+        band = severity_band(wet[2])
+        return {
+            "text": f"{_headline_sentence(band, _when(wet), wet[2])} Bring an umbrella.",
+            "severity": band,
+            "umbrella": True,
+        }
+
+    if possible is not None:
+        band = severity_band(possible[2])
+        return {
+            "text": _headline_sentence(band, _when(possible), possible[2]),
+            "severity": band,
+            "umbrella": False,
+        }
+
+    count = len(judged)
+    span = "the rest of the week" if today_over else f"the next {count} days"
+    unknown = count - len(known)
+    if not known:
+        return {
+            "text": f"Rain chance unknown for {span}.",
+            "severity": "unknown",
+            "umbrella": False,
+        }
+
+    if unknown > len(known):
+        # More of the week is unreported than is known to be dry, so the
+        # honest answer is that the chance is mostly unknown.
+        return {
+            "text": f"Rain chance unknown for most of {span}.",
+            "severity": "unknown",
+            "umbrella": False,
+        }
+
+    if unknown:
+        return {
+            "text": f"No rain likely for most of {span}.",
+            "severity": "low",
+            "umbrella": False,
+        }
+
+    return {
+        "text": f"No rain likely for {span}.",
+        "severity": "low",
+        "umbrella": False,
+    }
+
+
+def _headline_sentence(band, when, chance):
+    """The sentence naming one day: "Rain likely tomorrow (80%)."."""
+    sentence = (f"{severity_label(band).lower()} {when} "
+                f"({round_half_up(chance)}%).")
+    return f"{sentence[0].upper()}{sentence[1:]}"
+
+
+# --- The tab title and the favicon --------------------------------------------
+# The title and the favicon are the alert a visitor sees without looking at
+# the page: a tab left open in the background tells them at a glance whether
+# the weather changed while they were away.
+
+
+def tab_alert(days, remaining_hours=None):
+    """What the tab title and the favicon should say about a forecast.
+
+    Returns ``None`` when there is nothing worth alerting about, which is
+    the case for a dry week, for an unreported week and for an error page.
+    Otherwise it returns a dict with:
+
+    ``when``
+        how the day is named - "today", "tomorrow" or "Thursday";
+    ``chance``
+        the rain chance the alert is about.
+
+    The title itself is put together by ``page_title``, which is the only
+    place that builds one, so that the title a reader sees in the tab and
+    the title a search engine shows in its results are the same title.
+
+    The day is the banner's own first wet day (:func:`first_wet_day`), so
+    the tab and the banner can never disagree about whether rain is worth
+    noticing, or about which day it falls on.
+    """
+    wet = first_wet_day(judge_days(days, remaining_hours)[0])
+    if wet is None:
+        return None
+    index, day, chance, _ = wet
+    return {
+        "when": day_name(day.iso_date, index, "tab"),
+        "chance": chance,
+    }

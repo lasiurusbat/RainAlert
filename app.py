@@ -21,13 +21,14 @@ from rainalert import config
 from rainalert.data.cities import CITY_NAMES, CITY_SLUGS, CURATED_CITIES
 from rainalert.calendar_ics import build_calendar, calendar_days, calendar_slug
 from rainalert.data.releases import RELEASES
-from rainalert.domain.alerts import clock, notification_event, summarise_hours
+from rainalert.domain.alerts import (clock, forecast_headline, notification_event,
+                                     summarise_hours, tab_alert)
+from rainalert.domain.days import day_name
 from rainalert.domain.parse import parse_forecast
 from rainalert.domain.rain import (alert_threshold, chance_number, needs_umbrella,
-                                   rain_chance, round_half_up, severity_band,
-                                   severity_label)
+                                   rain_chance, severity_band, severity_label)
 from rainalert.errors import CityNotFound, GeocodingUnavailable, WeatherUnavailable
-from rainalert.present.labels import (WEEKDAY_NAMES, describe_rain_chance, format_date,
+from rainalert.present.labels import (describe_rain_chance, format_date,
                                       format_date_parts, format_precipitation,
                                       format_rain_chance, format_rain_chance_short,
                                       format_rain_hours, format_temperature,
@@ -51,201 +52,10 @@ HOURLY_FIELDS = "precipitation_probability"
 geolocator = Nominatim(user_agent=config.NOMINATIM_USER_AGENT, timeout=config.GEOCODER_TIMEOUT)
 
 
-# --- The headline ------------------------------------------------------------
-# One line above the daily list that says what the week looks like. It names
-# the first day worth mentioning: a day that reaches the umbrella threshold,
-# a day that is merely possible, or the week as a whole when no day is.
-#
-# The band name in the sentence is the same one the row in the list carries,
-# so the banner and the list never disagree about how wet a day is.
-
-
-def forecast_day_label(iso_date, index):
-    """How the headline names a day of the forecast.
-
-    The first two days are "today" and "tomorrow", in the city's local time -
-    the same local time the daily list is dated in, so the banner and the
-    list never call different days "today". Later days are named by their
-    weekday, the same English name the date in the list carries.
-    """
-    if index == 0:
-        return "today"
-    if index == 1:
-        return "tomorrow"
-    try:
-        parsed = date.fromisoformat(str(iso_date))
-    except (TypeError, ValueError):
-        return f"in {index} days"
-    return f"on {WEEKDAY_NAMES[parsed.weekday()]}"
-
-
-def day_panel_name(iso_date, index):
-    """How the day panel names a day: Today, Tomorrow, or the weekday.
-
-    The same rule as :func:`forecast_day_label`, in the capitalised form the
-    panel needs: the first two days have names of their own, and the rest
-    are named by their English weekday.
-    """
-    if index == 0:
-        return "Today"
-    if index == 1:
-        return "Tomorrow"
-    try:
-        parsed = date.fromisoformat(str(iso_date))
-    except (TypeError, ValueError):
-        return ""
-    return WEEKDAY_NAMES[parsed.weekday()]
-
-
-def day_phrases(index, day_name):
-    """How a sentence refers to a day of the week.
-
-    Returns two phrases: the short one, for a caption ("today", "tomorrow",
-    "on Friday"), and the one the hourly summary uses. The summary of the
-    day that is running says "for the rest of today", because only that day
-    has hours left to come; a day that is still to come is named outright.
-    """
-    if index == 0:
-        return "today", "for the rest of today"
-    if index == 1:
-        return "tomorrow", "tomorrow"
-    return f"on {day_name}", f"on {day_name}"
-
-
-def remaining_hour_chance(hours):
-    """The highest rain chance among the hours that are still to come.
-
-    ``None`` means the service reported no usable value for any of them.
-    """
-    chances = [rain_chance(hour.get("chance")) for hour in hours or []]
-    known = [chance for chance in chances if chance is not None]
-    if not known:
-        return None
-    return max(known)
-
-
-def forecast_headline(forecast, remaining_hours=None):
-    """The one-line summary of the forecast, or ``None`` if there is none.
-
-    The sentence names the first day worth mentioning:
-
-    * a day at or above the umbrella threshold - "Rain likely tomorrow
-      (80%). Bring an umbrella.";
-    * a day that is merely possible - "Rain possible on Thursday (45%).";
-    * otherwise the week as a whole - "No rain likely for the next 7 days."
-
-    The band in the sentence is the day's own band, the same one its row in
-    the list carries, so the banner and the list never disagree about how
-    wet a day is. The umbrella follows the same threshold as the icon on the
-    row, and the wording follows the hourly summary above the strip.
-
-    Today is the one day that needs care. The daily maximum covers the whole
-    day, so at 18:00 it still counts the morning's downpour, while the
-    reader can only walk into the evening. Today is therefore judged on the
-    hours that are left, and the sentence says which figure it is using:
-    "Rain likely for the rest of today (80%)." The hourly figures and the
-    daily figure are two different quantities, and each one is labelled with
-    which it is. When today is over, it is left out of the banner entirely:
-    the reader wants to know about the days ahead, not about a day that has
-    been and gone.
-
-    A day whose chance the service did not report is never counted as dry.
-    When the week is quiet but some days are unreported, the sentence says
-    "most of" rather than claiming the whole week is dry - and when more of
-    the week is unreported than is known to be dry, it says the chance is
-    unknown instead, because "no rain likely for most of" would be a claim
-    about days nobody reported.
-    """
-    if not forecast:
-        return None
-
-    today_over = False
-    days = []
-    for index, day in enumerate(forecast):
-        chance = rain_chance(day.get("chance"))
-        when = forecast_day_label(day.get("iso_date"), index)
-        if index == 0 and remaining_hours is not None:
-            # Judge today on the hours that are left, not on the whole day.
-            if not remaining_hours:
-                today_over = True
-                continue
-            remaining = remaining_hour_chance(remaining_hours)
-            if remaining is not None:
-                days.append((day, remaining, "for the rest of today"))
-                continue
-        days.append((day, chance, when))
-
-    known = [entry for entry in days if entry[1] is not None]
-    wet = next((entry for entry in known
-                 if entry[1] >= config.UMBRELLA_THRESHOLD), None)
-    possible = next((entry for entry in known
-                     if severity_band(entry[1]) == "moderate"), None)
-
-    if wet is not None:
-        day, chance, when = wet
-        band = severity_band(chance)
-        return {
-            "text": f"{_headline_sentence(band, when, chance)} Bring an umbrella.",
-            "severity": band,
-            "umbrella": True,
-        }
-
-    if possible is not None:
-        day, chance, when = possible
-        band = severity_band(chance)
-        return {
-            "text": _headline_sentence(band, when, chance),
-            "severity": band,
-            "umbrella": False,
-        }
-
-    count = len(days)
-    span = "the rest of the week" if today_over else f"the next {count} days"
-    unknown = count - len(known)
-    if not known:
-        return {
-            "text": f"Rain chance unknown for {span}.",
-            "severity": "unknown",
-            "umbrella": False,
-        }
-
-    if unknown > len(known):
-        # More of the week is unreported than is known to be dry, so the
-        # honest answer is that the chance is mostly unknown.
-        return {
-            "text": f"Rain chance unknown for most of {span}.",
-            "severity": "unknown",
-            "umbrella": False,
-        }
-
-    if unknown:
-        return {
-            "text": f"No rain likely for most of {span}.",
-            "severity": "low",
-            "umbrella": False,
-        }
-
-    return {
-        "text": f"No rain likely for {span}.",
-        "severity": "low",
-        "umbrella": False,
-    }
-
-
-def _headline_sentence(band, when, chance):
-    """The sentence naming one day: "Rain likely tomorrow (80%)."."""
-    sentence = (f"{severity_label(band).lower()} {when} "
-                f"({round_half_up(chance)}%).")
-    return f"{sentence[0].upper()}{sentence[1:]}"
-
-
 # --- The tab title and the favicon --------------------------------------------
 # The title and the favicon are the alert a visitor sees without looking at
-# the page: a tab left open in the background tells them at a glance whether
-# the weather changed while they were away.
-#
-# Both are driven by the same forecast the headline uses and by the same
-# threshold, so the tab and the banner can never disagree.
+# the page. Whether there is an alert is decided by tab_alert(), in
+# rainalert/domain/alerts.py, by the same rule as the banner.
 
 # The title says "Rain tomorrow" and not the day's date: a tab title is
 # read at a glance, and "tomorrow" is the thing a reader is asking about.
@@ -256,75 +66,6 @@ DEFAULT_TAB_TITLE = "Rain Alert"
 # The favicon that says "rain is coming", and the one that says nothing.
 FAVICON_DEFAULT = "favicon.svg"
 FAVICON_RAIN = "favicon-rain.svg"
-
-
-def tab_day_label(iso_date, index):
-    """How the tab title names a day: "today", "tomorrow" or "Thursday".
-
-    The same days the banner names, but without the banner's "on", because
-    a title reads "Rain Thursday", not "Rain on Thursday".
-    """
-    if index == 0:
-        return "today"
-    if index == 1:
-        return "tomorrow"
-    try:
-        parsed = date.fromisoformat(str(iso_date))
-    except (TypeError, ValueError):
-        return f"in {index} days"
-    return WEEKDAY_NAMES[parsed.weekday()]
-
-
-def tab_alert(forecast, remaining_hours=None):
-    """What the tab title and the favicon should say about a forecast.
-
-    Returns ``None`` when there is nothing worth alerting about, which is
-    the case for a dry week, for an unreported week and for an error page.
-    Otherwise it returns a dict with:
-
-    ``when``
-        how the day is named - "today", "tomorrow" or "Thursday";
-    ``chance``
-        the rain chance the alert is about.
-
-    The title itself is put together by :func:`page_title`, which is the
-    only place that builds one, so that the title a reader sees in the tab
-    and the title a search engine shows in its results are the same title.
-
-    The alert fires at ``UMBRELLA_THRESHOLD`` - the same threshold that
-    puts the ☔ on a row and makes the banner say "Bring an umbrella." One
-    threshold for all three means the tab, the banner and the row can never
-    disagree about whether rain is worth noticing.
-
-    Today is judged on the hours that are left, exactly as the banner
-    judges it, so the title does not say "Rain today" at 18:00 when the
-    morning's downpour has already been and gone. A day whose chance the
-    service did not report is never counted as dry, so a quiet week with an
-    unreported day is not "no rain" either - it simply has no alert.
-    """
-    if not forecast:
-        return None
-
-    for index, day in enumerate(forecast):
-        chance = rain_chance(day.get("chance"))
-        when = tab_day_label(day.get("iso_date"), index)
-        if index == 0 and remaining_hours is not None:
-            if not remaining_hours:
-                # Today is over. The reader wants to know about the days
-                # ahead, not about a day that has been and gone.
-                continue
-            remaining = remaining_hour_chance(remaining_hours)
-            if remaining is not None:
-                chance = remaining
-        if chance is None:
-            # An unreported day is not a dry day, so it is not an alert.
-            continue
-        if chance >= config.UMBRELLA_THRESHOLD:
-            return {
-                "when": when,
-                "chance": chance,
-            }
-    return None
 
 
 # --- The page's address and its metadata --------------------------------------
@@ -655,8 +396,7 @@ def day_view(day, index):
     chance = day.chance
     band = severity_band(chance)
     weekday_short, date_short = format_date_parts(day.iso_date)
-    day_name = day_panel_name(day.iso_date, index)
-    when, when_summary = day_phrases(index, day_name)
+    panel_name = day_name(day.iso_date, index, "panel")
     return {
         "date": format_date(day.iso_date),
         # The raw date, kept so the headline can name the weekday without
@@ -676,8 +416,8 @@ def day_view(day, index):
         # much rain falls in it and how long it lasts. The panel is
         # built from the same chance the column shows, so the two can
         # never disagree.
-        "day_name": day_name,
-        "day_label": f"{day_name} {date_short}".strip(),
+        "day_name": panel_name,
+        "day_label": f"{panel_name} {date_short}".strip(),
         "chance_label": (
             f"{chance_number(chance)}% chance of rain"
             if chance_number(chance) is not None
@@ -706,11 +446,12 @@ def day_view(day, index):
         "hours": [hour_view(hour) for hour in day.hours],
         # The title the strip carries while this day is the one that
         # shows, and the sentence under it.
-        "hourly_title": f"{day_name}, hour by hour",
-        "hourly_summary": (summarise_hours(day.hours, when_summary)
-                           if day.hours else ""),
+        "hourly_title": f"{panel_name}, hour by hour",
+        "hourly_summary": (summarise_hours(
+            day.hours, day_name(day.iso_date, index, "summary"))
+            if day.hours else ""),
         # How a caption names this day.
-        "day_when": when,
+        "day_when": day_name(day.iso_date, index, "caption"),
     }
 
 
@@ -814,7 +555,6 @@ def render_forecast_page(city, unit, city_page=False, error=None, status=200):
     which answers ``200`` and says what went wrong.
     """
     weather_data = None
-    hourly_data = None
     headline = None
     display_city = None
     alert = None
@@ -822,18 +562,18 @@ def render_forecast_page(city, unit, city_page=False, error=None, status=200):
     if error is None and city:
         try:
             latitude, longitude, display_city = get_coordinates(city)
-            weather_data, hourly_data = fetch_weather(
-                latitude, longitude, unit)
+            forecast = load_forecast(latitude, longitude, unit)
+            weather_data = [day_view(day, index)
+                            for index, day in enumerate(forecast.days)]
             # The umbrella advice is about the hours ahead, so the
             # headline is told which of today's hours are still to come.
-            remaining_hours = [hour for hour in (hourly_data or [])
-                               if not hour.get("past")]
-            headline = forecast_headline(
-                weather_data or [], remaining_hours)
+            remaining_hours = [hour for hour in forecast.today
+                               if not hour.past]
+            headline = forecast_headline(forecast.days, remaining_hours)
             # The tab title and the favicon are the same alert as the
-            # banner, decided by the same threshold, so they can never
+            # banner, decided by the same rule, so they can never
             # disagree with it.
-            alert = tab_alert(weather_data or [], remaining_hours)
+            alert = tab_alert(forecast.days, remaining_hours)
         except CityNotFound:
             error = "City not found. Please try a different name (e.g., 'Paris')."
             if city_page:

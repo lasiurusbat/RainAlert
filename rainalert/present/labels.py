@@ -7,18 +7,9 @@ of its own.
 
 from datetime import date
 
+from rainalert.domain.days import WEEKDAY_NAMES
 from rainalert.domain.rain import rain_chance, round_half_up
 
-
-# The seven weekday names, Monday first, matching date.weekday().
-#
-# They are hard-coded rather than taken from strftime("%A"), because
-# strftime reads the process-wide LC_TIME locale: on a German Windows
-# machine, or in a container with LANG set, it would render the weekday in
-# that language. The rest of the page is English, so a half-translated date
-# would be worse than a consistently English one.
-WEEKDAY_NAMES = ("Monday", "Tuesday", "Wednesday", "Thursday",
-                 "Friday", "Saturday", "Sunday")
 
 # The same names, shortened. The week is a row of seven narrow columns, and
 # "Wednesday" does not fit in one of them. These are hard-coded for the same

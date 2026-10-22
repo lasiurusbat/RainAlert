@@ -8,14 +8,15 @@ import json
 import os
 import re
 import unittest
-from datetime import date
+from datetime import date, datetime
 from unittest import mock
 
 import requests
 
 import app as rainalert
 from rainalert import calendar_ics
-from rainalert.domain import parse
+from rainalert.domain import days, parse, rain
+from rainalert.domain.model import Day, Hour
 
 
 FORECAST_PAYLOAD = {
@@ -666,29 +667,84 @@ class TestHourlySummary(AppTestCase):
         self.assertIn("No rain likely", summary)
 
 
+def week(chances, dates=None):
+    """The days of a forecast, one per chance, starting on 21 October."""
+    dates = dates or [f"2026-10-{21 + offset:02d}" for offset in range(len(chances))]
+    return tuple(Day(iso_date=day, chance=chance)
+                 for day, chance in zip(dates, chances))
+
+
+def remaining(hours):
+    """Today's hours that are still to come, from ``{"chance": ...}`` dicts.
+
+    ``None`` stays ``None``: no hourly data at all, which is not the same
+    as a today with no hours left.
+    """
+    if hours is None:
+        return None
+    return [Hour(moment=datetime(2026, 10, 21, 12 + offset), chance=hour["chance"],
+                 past=hour.get("past", False))
+            for offset, hour in enumerate(hours)]
+
+
+class TestDayNames(unittest.TestCase):
+    """One rule names a day, in the form each part of the page needs."""
+
+    def test_every_form_of_every_day(self):
+        expected = {
+            "panel": ("Today", "Tomorrow", "Saturday"),
+            "tab": ("today", "tomorrow", "Saturday"),
+            "caption": ("today", "tomorrow", "on Saturday"),
+            "summary": ("for the rest of today", "tomorrow", "on Saturday"),
+        }
+        dates = ("2026-10-21", "2026-10-22", "2026-10-24")
+        for form, names in expected.items():
+            for index, (iso_date, name) in enumerate(zip(dates, names)):
+                position = index if index < 2 else 3
+                with self.subTest(form=form, index=position):
+                    self.assertEqual(days.day_name(iso_date, position, form), name)
+
+    def test_an_unreadable_later_day_is_named_by_how_far_off_it_is(self):
+        """A weekday nobody knows is not a name; "on " is not a sentence."""
+        for form in ("tab", "caption", "summary"):
+            self.assertEqual(days.day_name("not a date", 3, form), "in 3 days")
+        # The panel puts the name in a heading, so it leaves it empty.
+        self.assertEqual(days.day_name("not a date", 3, "panel"), "")
+
+
+class TestOneAlert(unittest.TestCase):
+    """The banner and the tab title are one alert, decided by one rule."""
+
+    WEEKS = (
+        [0, 80, 0, 0, 0, 0, 0],
+        [100, 0, 0, 0, 0, 0, 0],
+        [10, 20, 45, 55, 0, 90, 0],
+        [None, None, 70, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0, 0],
+        [49, 50, 0, 0, 0, 0, 0],
+    )
+    HOURS = (None, [], [{"chance": 80}], [{"chance": 5}], [{"chance": None}])
+
+    def test_the_banner_and_the_tab_name_the_same_day(self):
+        for chances in self.WEEKS:
+            for hours in self.HOURS:
+                with self.subTest(chances=chances, hours=hours):
+                    headline = rainalert.forecast_headline(
+                        week(chances), remaining(hours))
+                    alert = rainalert.tab_alert(week(chances), remaining(hours))
+                    # The tab alerts exactly when the banner says to bring
+                    # an umbrella, and about the day the banner names.
+                    self.assertEqual(alert is not None, headline["umbrella"])
+                    if alert is not None:
+                        self.assertIn(alert["when"], headline["text"])
+
+
 class TestForecastHeadline(AppTestCase):
     """The one-line headline above the daily list."""
 
-    def _forecast(self, chances, days=None):
-        """A forecast list in the shape app.py builds it."""
-        dates = days or [f"2026-10-{21 + offset:02d}" for offset in range(len(chances))]
-        forecast = []
-        for day, chance in zip(dates, chances):
-            band = rainalert.severity_band(chance)
-            forecast.append({
-                "date": rainalert.format_date(day),
-                "iso_date": day,
-                "rain_label": rainalert.format_rain_chance(chance),
-                "chance": chance,
-                "severity": band,
-                "severity_label": rainalert.severity_label(band),
-                "umbrella": rainalert.needs_umbrella(chance),
-            })
-        return forecast
-
     def _headline(self, chances, days=None, hours=None):
         return rainalert.forecast_headline(
-            self._forecast(chances, days), hours)
+            week(chances, days), remaining(hours))
 
     def test_a_wet_day_names_the_day_and_the_chance(self):
         headline = self._headline([0, 80, 0, 0, 0, 0, 0])
@@ -843,20 +899,8 @@ class TestForecastHeadline(AppTestCase):
 class TestTabAlert(AppTestCase):
     """The tab title and the favicon, which are the alert itself."""
 
-    def _forecast(self, chances, days=None):
-        """A forecast list in the shape app.py builds it."""
-        dates = days or [f"2026-10-{21 + offset:02d}" for offset in range(len(chances))]
-        forecast = []
-        for day, chance in zip(dates, chances):
-            forecast.append({
-                "date": rainalert.format_date(day),
-                "iso_date": day,
-                "chance": chance,
-            })
-        return forecast
-
     def _alert(self, chances, days=None, hours=None):
-        return rainalert.tab_alert(self._forecast(chances, days), hours)
+        return rainalert.tab_alert(week(chances, days), remaining(hours))
 
     def _body_with(self, payload):
         self.mock_get.return_value = FakeResponse(payload)
@@ -865,17 +909,17 @@ class TestTabAlert(AppTestCase):
     # -- the day label --------------------------------------------------------
 
     def test_the_first_day_is_today(self):
-        self.assertEqual(rainalert.tab_day_label("2026-10-21", 0), "today")
+        self.assertEqual(days.day_name("2026-10-21", 0, "tab"), "today")
 
     def test_the_second_day_is_tomorrow(self):
-        self.assertEqual(rainalert.tab_day_label("2026-10-22", 1), "tomorrow")
+        self.assertEqual(days.day_name("2026-10-22", 1, "tab"), "tomorrow")
 
     def test_a_later_day_is_named_by_its_weekday(self):
         # 2026-10-24 is a Saturday.
-        self.assertEqual(rainalert.tab_day_label("2026-10-24", 3), "Saturday")
+        self.assertEqual(days.day_name("2026-10-24", 3, "tab"), "Saturday")
 
     def test_an_unreadable_date_still_names_the_day(self):
-        self.assertEqual(rainalert.tab_day_label("not a date", 3), "in 3 days")
+        self.assertEqual(days.day_name("not a date", 3, "tab"), "in 3 days")
 
     # -- when the alert fires -------------------------------------------------
 
@@ -1157,10 +1201,10 @@ class TestForecastParsing(unittest.TestCase):
     def test_half_rounds_up(self):
         """Temperatures ending in .5 must round up, not to even."""
         self.assertEqual(rainalert.format_temperature(8.5, 9.5), "9° / 10°")
-        self.assertEqual(rainalert.round_half_up(8.5), 9)
-        self.assertEqual(rainalert.round_half_up(9.5), 10)
+        self.assertEqual(rain.round_half_up(8.5), 9)
+        self.assertEqual(rain.round_half_up(9.5), 10)
         # Negative halves round away from zero, so -0.5C reads as -1C.
-        self.assertEqual(rainalert.round_half_up(-0.5), -1)
+        self.assertEqual(rain.round_half_up(-0.5), -1)
 
 
 class TestTemperatureUnit(AppTestCase):
