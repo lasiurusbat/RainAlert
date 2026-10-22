@@ -180,9 +180,61 @@ delete the old stub service.
 
 ## 4. Optional
 
-- Add a free uptime pinger (e.g. UptimeRobot) on `https://rainalert.live/` to
-  avoid cold starts. Free instances get 750 hours a month, enough for one
-  always-on service.
+### An uptime pinger
+
+A pinger is a service that fetches your site every few minutes and tells you
+when it stops answering. It has two jobs here: it warns you if the site goes
+down, and — because Render's free tier spins an idle service down — it keeps
+the site warm, so the first reader does not wait for a cold start.
+
+**What to point it at:** `https://rainalert.live/`, the home page. Three
+reasons, and they are all deliberate:
+
+- The home page **asks no upstream**. It renders without calling Nominatim
+  or Open-Meteo, so the check never depends on a third party and never
+  reports a false outage when Open-Meteo is having a bad hour. A city's
+  page (`/city/london`) would do both, and would fail for a reason that is
+  not the site's fault.
+- It is the **domain**, not the `*.onrender.com` address, so the check also
+  proves that the DNS and the certificate are right. A monitor pointed at
+  Render's own address would keep saying "up" while the domain was broken.
+- It is a `200` with the real page, so the monitor can check for the
+  version in the footer as well — `Version 1.0.1` — and tell "the site is
+  up" from "the new build is up". That is the same check the workflow's
+  smoke test makes, from the other side.
+
+**UptimeRobot** (uptime.robot) — the simplest one, and the free tier gives
+50 monitors with a check every 5 minutes:
+
+1. Create an account.
+2. **Add New Monitor** → **Monitor Type: HTTP(s)**.
+3. Friendly Name `RainAlert`, URL `https://rainalert.live/`, Monitoring
+   Interval **5 minutes**.
+4. Add a contact (an email address is enough) and **Save**.
+
+The free tier sends email when the monitor goes down and when it comes
+back, and keeps a few months of uptime history. It can also publish a
+public status page, which is a nice thing to link from the README.
+
+**Better Stack** (betterstack.com) — worth a look instead, because its free
+tier checks every **3 minutes** and can push to a phone. That suits a
+Render free tier better than 5 minutes does: a cold start takes about a
+minute, so a 5-minute check can easily land on a spinning-up instance and
+report a false failure. With a 3-minute interval and a generous timeout
+(30 seconds), a cold start is inside the window.
+
+**What to expect.** Render's free tier gives 750 instance hours a month, and
+a service that is pinged every 5 minutes never spins down, so it stays on
+for the whole month. Without a pinger the service sleeps after about 15
+minutes of inactivity and the next reader waits roughly a minute for it to
+come up. Either way the site answers; the pinger trades a few of those
+hours for a warm site and a warning before somebody else finds out.
+
+**What a pinger is not.** It does not replace the workflow's smoke test.
+That one proves the build that was *released* is the one answering, by
+grepping the live page for `Version <tag>`; a pinger only proves that
+something answers.
+
 - Free-tier limits: 512 MB RAM, 5 GB bandwidth, wiped filesystem on restart,
   single instance. Re-check https://render.com/docs/free before relying on them.
 
