@@ -72,10 +72,6 @@ gets none of them, because the offline suite asserts the app's own defaults.
 **The app is not live.** Checked on 2026-10-22, and every one of these is
 still true:
 
-- **The Docker Hub image does not exist.** The repository
-  `lasiurusbat/rainalert` is there, with **zero tags** — so the
-  `docker.io/lasiurusbat/rainalert:1.0` that `render.yaml` points at cannot
-  be pulled.
 - **The Render service is not serving this app.** A service named
   `rainalert` answers at <https://rainalert.onrender.com>, but its `/`
   returns the JSON `{"message": "Rain Alert API is running 🌂", "status":
@@ -88,9 +84,13 @@ still true:
   `https://` on the root does not answer at all. No Render address appears
   in the DNS at all.
 
-**The first release tag has been cut, and the run it triggered failed
-three times.** `v1.0` points at `e7e04b4` on `main`, and the tag-gated
-half of the workflow has now run, so the machinery is not untested:
+**The image is on Docker Hub.** `lasiurusbat/rainalert:1.0` was pushed on
+2026-10-22 and is the repository's first tag, so the image `render.yaml`
+names can be pulled at last.
+
+**The first release tag has been cut, and the run it triggered took four
+attempts.** `v1.0` points at `7265a18` on `main`, and the tag-gated half
+of the workflow has now run, so the machinery is not untested:
 
 - **Attempt 1 failed at the Docker Hub login.** The `DOCKERHUB_USERNAME`
   and `DOCKERHUB_TOKEN` secrets were not set, so the login step had
@@ -99,31 +99,33 @@ half of the workflow has now run, so the machinery is not untested:
   insufficient scopes`. The token existed but had the **Read** scope; a
   push needs **Read & Write**. The token was replaced on 2026-10-22.
 - **Attempt 3 failed in the browser suite**, on
-  `test_the_export_downloads_with_the_worker_in_charge`. It is a flake in
+  `test_the_export_downloads_with_the_worker_in_charge`. It was a flake in
   the test's own wait, not a fault in the app: the worker installed and
   activated, and the page was not taken over by it, so the wait for
   `navigator.serviceWorker.controller` ran out. The wait now waits for
   the registration to be *active* and loads the page once more when it is
-  not controlled yet, which is what the test actually means.
-
-CI is green in every other respect: the image builds, the offline suite
-passes inside it, and the browser suite passes on the runner.
+  not controlled yet, which is what the test actually means. A tag run is
+  pinned to the commit the tag points at, so the fix had to be pushed
+  into the tag itself — the tag was moved, and the run re-fired.
+- **Attempt 4 got the image pushed, and failed at the deploy.** The build,
+  the offline suite inside the image, the browser suite on the runner, the
+  Docker Hub login and the push were all green. The deploy job then
+  failed on `curl: (3) URL rejected: Bad hostname`, because the
+  `RENDER_DEPLOY_HOOK_URL` secret is not set: the hook URL was empty.
 
 So the app is served by `python app.py` or `docker compose up`, and by
 nothing else.
 
 ### Still to do
 
-- [ ] Watch the `v1.0` run, which was re-fired by moving the tag to the
-      commit that carries the test fix. The run builds, tests, pushes and
-      deploys in one go.
-- [ ] Confirm the Render deploy hook is set as a GitHub secret, and that
-      the free Render plan includes a hook.
+- [ ] Set `RENDER_DEPLOY_HOOK_URL` as a repository secret — the Render
+      service's deploy hook URL — and re-run the failed jobs of the `v1.0`
+      run. The image is already pushed, so the deploy job on its own is
+      all that has to run again; the tag does not have to be moved. The
+      free Render plan has to include a deploy hook for there to be one.
 - [ ] Point the domain at Render: add `rainalert.live` to the service,
       then replace the Namecheap forwarding records with the DNS records
       Render gives, and verify HTTPS.
-- [ ] Replace the `1.0` fallback in `render.yaml` if the first release is
-      not `1.0`.
 - [ ] Re-check the smoke test in the workflow: it greps the live page for
       `Version <tag>`, so it proves the new build is the one answering and
       not an old one. **It will fail on the first successful tag run** as

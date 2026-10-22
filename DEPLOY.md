@@ -4,20 +4,18 @@
 locally: the image builds, both test suites pass inside it, and a forecast
 renders with English weekday names. The CI workflow itself has run and is
 green on every push to `main`. The **tag-gated half has fired** — `v1.0`
-was cut on 2026-10-22 — and the run it triggered failed: once at the
-Docker Hub login, once at the push (the token had the Read scope, and a
-push needs Read & Write), and once in the browser suite. No image has
-been pushed and no deploy has been requested.
+was cut on 2026-10-22 — and the image it built **has been pushed to Docker
+Hub**. No deploy has been requested, because the deploy job needs the
+Render hook and the hook secret is not set.
 
 State of the world, checked on 2026-10-22:
 
-- **The first release tag exists** (`v1.0`, on `main`), so the workflow
-  has run its push-and-deploy half, and the run is to be repeated with
-  the fixed secrets. The tag does not have to be cut again.
-- **The Docker Hub repository `lasiurusbat/rainalert` exists and is
-  public, but it has zero tags** (the API answers
-  `{"count":0,...}`). `render.yaml` points at
-  `lasiurusbat/rainalert:1.0`, which does not exist.
+- **The first release tag exists** (`v1.0`, on `main`), and the workflow
+  has run its push-and-deploy half. The run is to be repeated with the
+  deploy hook set; the tag does not have to be cut again.
+- **The Docker Hub repository `lasiurusbat/rainalert` is public and has
+  one tag**: `1.0`, pushed on 2026-10-22, which is the image `render.yaml`
+  points at.
 - **A Render service named `rainalert` answers at
   <https://rainalert.onrender.com>, but it is not this app.** Its `/`
   returns the JSON `{"message": "Rain Alert API is running 🌂", "status":
@@ -201,6 +199,9 @@ pull request / push to main          push of a tag such as v1.0
 3. **GitHub:** repository -> Settings -> Secrets and variables -> Actions ->
    add `DOCKERHUB_USERNAME`, `DOCKERHUB_TOKEN`, `RENDER_DEPLOY_HOOK_URL`.
    The username is the Docker Hub account name, not an email address.
+   A missing `RENDER_DEPLOY_HOOK_URL` fails the deploy job with
+   `curl: (3) URL rejected: Bad hostname` — the hook URL was empty, and
+   curl was asked to fetch nothing.
 4. **GitHub (optional):** Settings -> Environments -> `production` -> add
    yourself as a required reviewer for a manual approval before each deploy.
 5. **GitHub (recommended):** protect `main` and require the

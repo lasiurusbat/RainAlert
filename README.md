@@ -12,9 +12,9 @@ and swaps the favicon when rain is coming.
 Both APIs are free, keyless, and need no signup. There is no database, no
 user accounts, and nothing to configure before running it.
 
-> **The site is not live yet.** `rainalert.live` does not serve this app and
-> no image has been pushed to Docker Hub. The first release tag (`v1.0`) was
-> cut, but the run it triggered never got past the push. The app runs
+> **The site is not live yet.** `rainalert.live` does not serve this app.
+> The first release tag (`v1.0`) was cut and the image it built is on
+> Docker Hub, but no deploy has been requested. The app runs
 > locally — see [Quick start](#quick-start). The deployment
 > machinery is written and committed; the one-time setup that would put it
 > online is still ahead. `DEPLOY.md` is the runbook.
@@ -1049,13 +1049,14 @@ one-time setup that would put it online has not been done — checked on
 2026-10-22:
 
 - The first release tag has been cut (`v1.0`, on `main`), so the
-  push-and-deploy half of the CI workflow has fired — and failed, three
+  push-and-deploy half of the CI workflow has fired — and failed, four
   times: once at the Docker Hub login, once at the push (the token had the
-  Read scope, and a push needs Read & Write), and once in the browser
-  suite. The run to re-run is the same tag; it does not have to be cut
+  Read scope, and a push needs Read & Write), once in the browser suite,
+  and once at the deploy hook (the `RENDER_DEPLOY_HOOK_URL` secret was
+  not set). The run to re-run is the same tag; it does not have to be cut
   again.
-- The Docker Hub repository `lasiurusbat/rainalert` exists but has **zero
-  tags**, so the image `render.yaml` names cannot be pulled.
+- The Docker Hub repository `lasiurusbat/rainalert` is public and has
+  **one tag**: `1.0`, the image `render.yaml` names.
 - A Render service answers at <https://rainalert.onrender.com>, but it
   serves a JSON stub (`{"message": "Rain Alert API is running 🌂", "status":
   "ok"}`), not this app — this app's `/` renders the HTML page.

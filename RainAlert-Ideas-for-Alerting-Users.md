@@ -12,7 +12,7 @@ Oct 21, 2026 · @Vedad
 
 RainAlert is pull-only: users must open it, type a city and read a seven-day list, so nothing in it actually alerts anyone. It is also stateless, with no accounts, database or background jobs, so most real alerting ideas need one small piece of persistence.
 
-**One thing to keep in mind while reading this document: the app is not deployed.** As of 2026-10-22 — checked again that day — there is no image on Docker Hub, and `rainalert.live` does not serve RainAlert — it runs locally, from `python app.py` or `docker compose up`. So "pull-only" currently means "pull-only by a developer on their own machine", and there are no users to alert at all. Every tier below is a design that has to survive being put online first, not a feature waiting for a user. The deployment steps are in `DEPLOY.md`.
+**One thing to keep in mind while reading this document: the app is not deployed.** As of 2026-10-22 — checked again that day — the image is on Docker Hub but no deploy has been requested, and `rainalert.live` does not serve RainAlert — it runs locally, from `python app.py` or `docker compose up`. So "pull-only" currently means "pull-only by a developer on their own machine", and there are no users to alert at all. Every tier below is a design that has to survive being put online first, not a feature waiting for a user. The deployment steps are in `DEPLOY.md`.
 
 The ideas below are grouped by cost: in-page changes first, then browser-side features, then server-pushed notifications.
 
