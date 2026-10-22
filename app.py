@@ -20,8 +20,8 @@ from flask import (Flask, Response, abort, jsonify, make_response, redirect,
 from geopy.exc import GeocoderQueryError, GeocoderServiceError, GeocoderTimedOut
 from geopy.geocoders import Nominatim
 
-from cities import CITY_NAMES, CITY_SLUGS, CURATED_CITIES
-from releases import RELEASES
+from rainalert.data.cities import CITY_NAMES, CITY_SLUGS, CURATED_CITIES
+from rainalert.data.releases import RELEASES
 
 # Load environment variables from .env file
 load_dotenv()
@@ -1836,9 +1836,9 @@ def cities_index():
 def release_notes():
     """What each release brought.
 
-    The notes are written by hand, in `releases.py`, the same way the API
-    reference is: they describe the app rather than being generated from
-    it. The page is a page like any other, with the same panel and the
+    The notes are written by hand, in `rainalert/data/releases.py`, the
+    same way the API reference is: they describe the app rather than being
+    generated from it. The page is a page like any other, with the same panel and the
     same background, and the footer links to it from everywhere else.
     """
     return render_template(

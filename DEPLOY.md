@@ -205,7 +205,7 @@ git push origin v0.9
 Watch the run under the repository's Actions tab. The first release after
 setup is `v0.8`, to match `render.yaml`, which pins `0.8`.
 
-**Cutting a release means adding an entry to `releases.py`.** The release
+**Cutting a release means adding an entry to `rainalert/data/releases.py`.** The release
 notes page at `/release-notes` is a page of the site, and it says what each
 release brought. Add the new release at the top of `RELEASES`, with the
 version the tag carries and the points that release made, and the footer of

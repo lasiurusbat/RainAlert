@@ -658,7 +658,7 @@ Five things make it work:
   would cost two upstream requests each and put a JSON blob in the results.
 
 The list of cities on `/cities` is curated and short — 92 of them, in
-`cities.py`. The geocoder is rate-limited and every address in the list is a
+`rainalert/data/cities.py`. The geocoder is rate-limited and every address in the list is a
 forecast the app has to fetch, so a short list of the cities people actually
 look up is better than an endless index.
 
@@ -697,7 +697,7 @@ from "the new build is up".
 **The changelog is a page of the site.** Next to the version, the footer
 carries a link to `/release-notes`, which says what each release brought,
 newest first, in the same night-street frame as the rest of the site. The
-content lives in `releases.py`, so cutting a release means adding an entry
+content lives in `rainalert/data/releases.py`, so cutting a release means adding an entry
 there.
 
 ---

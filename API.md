@@ -213,7 +213,7 @@ after the version of the build that is answering.
 curl "http://127.0.0.1:5000/release-notes"
 ```
 
-The notes are written by hand, in `releases.py`, the same way this document
+The notes are written by hand, in `rainalert/data/releases.py`, the same way this document
 is: they describe the app rather than being generated from it. Cutting a
 release means adding an entry there, and the version on the top entry is the
 one the build stamps into the footer, so the page and the footer never

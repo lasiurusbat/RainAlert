@@ -207,7 +207,7 @@ paths:
         it is in the sitemap, so the changelog is a page of the site rather
         than a file that only exists in the repository.
 
-        The content comes from `releases.py`, so cutting a release means
+        The content comes from `rainalert/data/releases.py`, so cutting a release means
         adding an entry there.
       responses:
         "200":

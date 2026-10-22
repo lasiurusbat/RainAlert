@@ -100,8 +100,8 @@ nothing else.
 | Path | Purpose |
 |---|---|
 | `app.py` | The whole app: routes, geocoding, forecast fetching, formatting |
-| `cities.py` | The curated list of cities that have a page of their own |
-| `releases.py` | What each release brought, for the release notes page |
+| `rainalert/data/cities.py` | The curated list of cities that have a page of their own |
+| `rainalert/data/releases.py` | What each release brought, for the release notes page |
 | `templates/index.html` | Single page; inline styles are out, classes live in `style.css` |
 | `templates/cities.html` | The index of the cities, with a link to each |
 | `templates/release_notes.html` | What each release brought |
@@ -349,7 +349,7 @@ carries a canonical link to it, and everything else is sent there.
   ("London, Greater London, England, United Kingdom"), and an address built
   from it would be `/city/paris-france` for `/city/paris`. The reader asked
   for a city, so the city is what the address carries.
-- **A curated city keeps the slug the list gives it.** `cities.py` is the
+- **A curated city keeps the slug the list gives it.** `rainalert/data/cities.py` is the
   list of the 92 cities that have a page; `CITY_NAMES` and `CITY_SLUGS` map
   between the names and the slugs, so the address in the city index, the
   address in the sitemap and the address the page claims for itself are the
@@ -405,7 +405,7 @@ forecast the app has to fetch.
 **The changelog is a page of the site, not a file in the repository.**
 `/release-notes` says what each release brought, newest first, and the
 footer of every page links to it after the version. The content lives in
-`releases.py`, so **cutting a release means adding an entry there** — the
+`rainalert/data/releases.py`, so **cutting a release means adding an entry there** — the
 version on the top entry is the one the build stamps into the footer, and
 the number of the release in preparation is the fallback tag in
 `render.yaml`.
