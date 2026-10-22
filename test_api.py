@@ -42,7 +42,7 @@ class TestLiveOpenMeteo(unittest.TestCase):
                 "daily": rainalert.DAILY_FIELDS,
                 "timezone": "auto",
             },
-            timeout=rainalert.WEATHER_TIMEOUT,
+            timeout=rainalert.config.WEATHER_TIMEOUT,
         )
         response.raise_for_status()
         daily = response.json()["daily"]
@@ -61,7 +61,7 @@ class TestLiveOpenMeteo(unittest.TestCase):
                 "current": rainalert.HOURLY_FIELDS,
                 "timezone": "auto",
             },
-            timeout=rainalert.WEATHER_TIMEOUT,
+            timeout=rainalert.config.WEATHER_TIMEOUT,
         )
         response.raise_for_status()
         payload = response.json()

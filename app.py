@@ -11,30 +11,19 @@ import unicodedata
 from datetime import date, datetime, timedelta, timezone
 from decimal import ROUND_HALF_UP, Decimal
 from functools import lru_cache
-from urllib.parse import urlsplit
 
 import requests
-from dotenv import load_dotenv
 from flask import (Flask, Response, abort, jsonify, make_response, redirect,
                    render_template, request, send_from_directory)
 from geopy.exc import GeocoderQueryError, GeocoderServiceError, GeocoderTimedOut
 from geopy.geocoders import Nominatim
 
+from rainalert import config
 from rainalert.data.cities import CITY_NAMES, CITY_SLUGS, CURATED_CITIES
 from rainalert.data.releases import RELEASES
-
-# Load environment variables from .env file
-load_dotenv()
+from rainalert.errors import CityNotFound, GeocodingUnavailable, WeatherUnavailable
 
 app = Flask(__name__)
-
-# --- Configuration -----------------------------------------------------------
-# Nominatim's usage policy asks callers to identify themselves, so the user
-# agent is configurable. The timeouts matter too: geopy defaults to a 1 second
-# read timeout, which is short enough to fail on a healthy but slow service.
-NOMINATIM_USER_AGENT = os.getenv("NOMINATIM_USER_AGENT", "RainAlert_App_v1_2026")
-GEOCODER_TIMEOUT = int(os.getenv("GEOCODER_TIMEOUT", "10"))
-WEATHER_TIMEOUT = int(os.getenv("WEATHER_TIMEOUT", "10"))
 
 FORECAST_URL = "https://api.open-meteo.com/v1/forecast"
 
@@ -49,99 +38,7 @@ DAILY_FIELDS = ("precipitation_probability_max,temperature_2m_max,"
 # Both come in the same request, so the strip costs no extra request.
 HOURLY_FIELDS = "precipitation_probability"
 
-# Rain severity bands, used to colour-code each day of the forecast. A day
-# under SEVERITY_LOW_MAX is unlikely to be wet, a day up to
-# SEVERITY_MODERATE_MAX is a real possibility, and anything above is likely.
-SEVERITY_LOW_MAX = int(os.getenv("SEVERITY_LOW_MAX", "30"))
-SEVERITY_MODERATE_MAX = int(os.getenv("SEVERITY_MODERATE_MAX", "60"))
-
-# The chance at which carrying an umbrella starts to be worth it. It sits
-# below the top band on purpose: a 55% day is not a certainty, but it is
-# enough to change what you wear.
-UMBRELLA_THRESHOLD = int(os.getenv("UMBRELLA_THRESHOLD", "50"))
-
-# The temperature scale. The forecast service converts the values itself
-# when the unit is asked for, so the app never does the arithmetic and the
-# numbers are the service's own. The default is the one the service uses.
-TEMPERATURE_UNITS = ("celsius", "fahrenheit")
-DEFAULT_TEMPERATURE_UNIT = os.getenv("TEMPERATURE_UNIT", "celsius")
-if DEFAULT_TEMPERATURE_UNIT not in TEMPERATURE_UNITS:
-    DEFAULT_TEMPERATURE_UNIT = "celsius"
-
-# --- The site's own address --------------------------------------------------
-# The public address of the site. The canonical links, the Open Graph tags
-# and the sitemap all need an absolute URL, and the app cannot know its own
-# address when it sits behind a proxy, so it is configuration.
-SITE_URL = os.getenv("SITE_URL", "https://rainalert.live").rstrip("/")
-
-# The name of the app, for the structured data and the social cards.
-APP_NAME = "Rain Alert"
-
-# Which build this is. The footer carries both, so that a reader — and the
-# person looking after the site — can see which version is answering. A
-# release build is given the number of the release and the commit it was
-# built from; a development run says "dev" and names no commit, because a
-# working tree is not a commit.
-APP_VERSION = os.getenv("APP_VERSION", "dev").strip() or "dev"
-APP_COMMIT = os.getenv("APP_COMMIT", "").strip()
-
-# The image a social card shows. It is 1200 by 630 pixels, which is the
-# size the card formats ask for.
-OG_IMAGE = f"{SITE_URL}/static/og-image.png"
-OG_IMAGE_WIDTH = "1200"
-OG_IMAGE_HEIGHT = "630"
-
-# --- Notifications -----------------------------------------------------------
-# Tier 2 on the browser side: a notification while the tab is open. The page
-# polls the /api/alert endpoint every NOTIFICATION_POLL_MINUTES and shows a
-# notification when the forecast says rain is about to start.
-#
-# The rule that decides what is worth interrupting the reader for lives here,
-# not in the browser, so it is one piece of code with offline tests behind it
-# rather than a string in a script.
-
-# How often the browser checks the forecast, in minutes.
-NOTIFICATION_POLL_MINUTES = int(os.getenv("NOTIFICATION_POLL_MINUTES", "30"))
-
-# How far ahead a rain warning is worth sending. The poll is every half
-# hour, so a two-hour lead means the reader hears about the rain between
-# half an hour and two hours before it starts.
-NOTIFICATION_LEAD_HOURS = int(os.getenv("NOTIFICATION_LEAD_HOURS", "2"))
-
-
-def clean_donation_url(value):
-    """Return ``value`` if it is a usable https link, otherwise ``""``.
-
-    The donation link is rendered into every page, so it is checked rather
-    than trusted: only absolute ``https://`` URLs are accepted. A value such
-    as ``javascript:...``, a plain ``http://`` link, a relative path, or
-    something containing whitespace, quotes, angle brackets or control
-    characters is ignored, and the link is left out. (Jinja escapes the value
-    on output as well; this keeps obviously broken input out entirely.)
-    """
-    url = (value or "").strip()
-    if not url or any(
-        character.isspace() or character in "\"'<>\\" or ord(character) < 32
-        for character in url
-    ):
-        return ""
-    try:
-        parts = urlsplit(url)
-    except ValueError:
-        return ""
-    if parts.scheme != "https" or not parts.netloc:
-        return ""
-    return url
-
-
-# Optional link to a donation page (for example Buy Me a Coffee). It is empty
-# by default, and while it is empty no donation text appears anywhere, so a
-# fresh checkout looks exactly as it always did. Only voluntary, one-off
-# donations are compatible with Open-Meteo's free, non-commercial terms, so
-# the page behind this link must not sell memberships, extras or subscriptions.
-DONATION_URL = clean_donation_url(os.getenv("DONATION_URL"))
-
-geolocator = Nominatim(user_agent=NOMINATIM_USER_AGENT, timeout=GEOCODER_TIMEOUT)
+geolocator = Nominatim(user_agent=config.NOMINATIM_USER_AGENT, timeout=config.GEOCODER_TIMEOUT)
 
 
 # --- Weekday names -----------------------------------------------------------
@@ -159,19 +56,6 @@ WEEKDAY_NAMES = ("Monday", "Tuesday", "Wednesday", "Thursday",
 # "Wednesday" does not fit in one of them. These are hard-coded for the same
 # reason the long ones are: no locale, no strftime.
 WEEKDAY_SHORT_NAMES = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
-
-
-# --- Errors ------------------------------------------------------------------
-class CityNotFound(Exception):
-    """The geocoder has no match for the requested city."""
-
-
-class GeocodingUnavailable(Exception):
-    """The geocoding service could not be reached or returned an error."""
-
-
-class WeatherUnavailable(Exception):
-    """The forecast service could not be reached or returned an error."""
 
 
 # --- Helpers -----------------------------------------------------------------
@@ -368,9 +252,9 @@ def severity_band(chance):
     probability = rain_chance(chance)
     if probability is None:
         return "unknown"
-    if probability < SEVERITY_LOW_MAX:
+    if probability < config.SEVERITY_LOW_MAX:
         return "low"
-    if probability <= SEVERITY_MODERATE_MAX:
+    if probability <= config.SEVERITY_MODERATE_MAX:
         return "moderate"
     return "high"
 
@@ -378,7 +262,7 @@ def severity_band(chance):
 def needs_umbrella(chance):
     """Whether the day is wet enough to be worth carrying an umbrella."""
     probability = rain_chance(chance)
-    return probability is not None and probability >= UMBRELLA_THRESHOLD
+    return probability is not None and probability >= config.UMBRELLA_THRESHOLD
 
 
 # --- Hourly rain for today ---------------------------------------------------
@@ -572,7 +456,7 @@ def summarise_hours(hours, when="for the rest of today"):
     window = []
     for hour in upcoming:
         probability = rain_chance(hour["chance"])
-        if probability is not None and probability >= UMBRELLA_THRESHOLD:
+        if probability is not None and probability >= config.UMBRELLA_THRESHOLD:
             window.append(hour)
         elif window:
             windows.append(window)
@@ -748,7 +632,7 @@ def forecast_headline(forecast, remaining_hours=None):
 
     known = [entry for entry in days if entry[1] is not None]
     wet = next((entry for entry in known
-                 if entry[1] >= UMBRELLA_THRESHOLD), None)
+                 if entry[1] >= config.UMBRELLA_THRESHOLD), None)
     possible = next((entry for entry in known
                      if severity_band(entry[1]) == "moderate"), None)
 
@@ -890,7 +774,7 @@ def tab_alert(forecast, remaining_hours=None):
         if chance is None:
             # An unreported day is not a dry day, so it is not an alert.
             continue
-        if chance >= UMBRELLA_THRESHOLD:
+        if chance >= config.UMBRELLA_THRESHOLD:
             return {
                 "when": when,
                 "chance": chance,
@@ -1030,7 +914,7 @@ def page_description(city=None, forecast=None, headline=None):
 
 def canonical_url(path):
     """The absolute address of a page on this site."""
-    return f"{SITE_URL}{path}"
+    return f"{config.SITE_URL}{path}"
 
 
 def structured_data(city=None, forecast=None):
@@ -1043,24 +927,24 @@ def structured_data(city=None, forecast=None):
     graph = [
         {
             "@type": "Organization",
-            "@id": f"{SITE_URL}/#organization",
-            "name": APP_NAME,
-            "url": f"{SITE_URL}/",
-            "logo": f"{SITE_URL}/static/icon-512.png",
+            "@id": f"{config.SITE_URL}/#organization",
+            "name": config.APP_NAME,
+            "url": f"{config.SITE_URL}/",
+            "logo": f"{config.SITE_URL}/static/icon-512.png",
         },
         {
             "@type": "WebSite",
-            "@id": f"{SITE_URL}/#website",
-            "name": APP_NAME,
-            "url": f"{SITE_URL}/",
+            "@id": f"{config.SITE_URL}/#website",
+            "name": config.APP_NAME,
+            "url": f"{config.SITE_URL}/",
             "description": "The 7-day rain chance for any city.",
             "inLanguage": "en",
-            "publisher": {"@id": f"{SITE_URL}/#organization"},
+            "publisher": {"@id": f"{config.SITE_URL}/#organization"},
         },
         {
             "@type": "WebApplication",
-            "name": APP_NAME,
-            "url": f"{SITE_URL}/",
+            "name": config.APP_NAME,
+            "url": f"{config.SITE_URL}/",
             "applicationCategory": "WeatherApplication",
             "operatingSystem": "Any",
             "description": page_description(),
@@ -1117,11 +1001,11 @@ def alert_threshold(personal):
     always draw the line in the same place.
     """
     if personal is None or str(personal).strip() == "":
-        return UMBRELLA_THRESHOLD, False
+        return config.UMBRELLA_THRESHOLD, False
     try:
         value = int(str(personal).strip())
     except (TypeError, ValueError):
-        return UMBRELLA_THRESHOLD, False
+        return config.UMBRELLA_THRESHOLD, False
     return max(0, min(100, value)), True
 
 
@@ -1142,7 +1026,7 @@ def notification_body(chance, city, when, threshold, personal):
         # The reader's own limit, in their own words. The umbrella is the
         # app's advice and belongs to the page, not to this notification.
         sentence += f" Above your {threshold}% threshold."
-    elif percent >= UMBRELLA_THRESHOLD:
+    elif percent >= config.UMBRELLA_THRESHOLD:
         sentence += " Bring an umbrella."
     return sentence
 
@@ -1189,7 +1073,7 @@ def notification_event(hours, threshold, city, personal=False):
         if moment is None:
             continue
         lead = (moment - current_moment).total_seconds() / 3600
-        if lead > NOTIFICATION_LEAD_HOURS:
+        if lead > config.NOTIFICATION_LEAD_HOURS:
             # Too far off to be worth saying now. A later poll catches it
             # as it comes closer, because the hours are in order.
             break
@@ -1471,10 +1355,10 @@ def fetch_weather(latitude, longitude, unit=None):
         "hourly": HOURLY_FIELDS,
         "current": HOURLY_FIELDS,
         "timezone": "auto",
-        "temperature_unit": unit or DEFAULT_TEMPERATURE_UNIT,
+        "temperature_unit": unit or config.DEFAULT_TEMPERATURE_UNIT,
     }
     try:
-        response = requests.get(FORECAST_URL, params=params, timeout=WEATHER_TIMEOUT)
+        response = requests.get(FORECAST_URL, params=params, timeout=config.WEATHER_TIMEOUT)
         response.raise_for_status()
     except requests.Timeout as exc:
         raise WeatherUnavailable("the forecast request timed out") from exc
@@ -1596,9 +1480,9 @@ def inject_site_info():
     time, so a test can switch the donation link on and off.
     """
     return {
-        "donation_url": DONATION_URL,
-        "app_version": APP_VERSION,
-        "app_commit": APP_COMMIT,
+        "donation_url": config.DONATION_URL,
+        "app_version": config.APP_VERSION,
+        "app_commit": config.APP_COMMIT,
     }
 
 
@@ -1611,9 +1495,9 @@ def temperature_unit_from_request():
     """
     source = request.form if request.method == "POST" else request.args
     unit = (source.get("unit") or "").strip().lower()
-    if unit in TEMPERATURE_UNITS:
+    if unit in config.TEMPERATURE_UNITS:
         return unit
-    return DEFAULT_TEMPERATURE_UNIT
+    return config.DEFAULT_TEMPERATURE_UNIT
 
 
 @app.route('/', methods=['GET', 'POST'])
@@ -1642,7 +1526,7 @@ def index():
     if request.method == 'GET' and city:
         target = city_path(city)
         if target:
-            if unit != DEFAULT_TEMPERATURE_UNIT:
+            if unit != config.DEFAULT_TEMPERATURE_UNIT:
                 target += f"?unit={unit}"
             return redirect(target, code=301)
     return render_forecast_page(city, unit)
@@ -1721,7 +1605,7 @@ def render_forecast_page(city, unit, city_page=False, error=None, status=200):
     # browser uses it to decide whether the export link is worth offering:
     # a link that would download an empty calendar is not an offer.
     calendar_days_count = len(
-        calendar_days(weather_data or [], UMBRELLA_THRESHOLD))
+        calendar_days(weather_data or [], config.UMBRELLA_THRESHOLD))
 
     # Whether the page carries a forecast, an error, or nothing at all. The
     # browser uses it to decide whether a search that was just submitted
@@ -1753,7 +1637,7 @@ def render_forecast_page(city, unit, city_page=False, error=None, status=200):
     # The temperature switch asks for the same page in the other scale, so
     # the links point at the page's own address and keep the unit.
     unit_links = {option: f"{canonical_path}?unit={option}"
-                  for option in TEMPERATURE_UNITS}
+                  for option in config.TEMPERATURE_UNITS}
 
     response = make_response(render_template(
         'index.html',
@@ -1765,15 +1649,15 @@ def render_forecast_page(city, unit, city_page=False, error=None, status=200):
         display_city=display_city or city,
         page_city=page_city,
         unit=unit,
-        temperature_units=TEMPERATURE_UNITS,
+        temperature_units=config.TEMPERATURE_UNITS,
         unit_links=unit_links,
         page_title=title,
         page_description=description,
         canonical_url=canonical_url(canonical_path),
         robots=robots,
-        og_image_url=OG_IMAGE,
-        og_image_width=OG_IMAGE_WIDTH,
-        og_image_height=OG_IMAGE_HEIGHT,
+        og_image_url=config.OG_IMAGE,
+        og_image_width=config.OG_IMAGE_WIDTH,
+        og_image_height=config.OG_IMAGE_HEIGHT,
         structured_data=structured_data(page_city, weather_data),
         favicon=(FAVICON_RAIN if alert else FAVICON_DEFAULT),
         autoload=autoload,
@@ -1824,9 +1708,9 @@ def cities_index():
                           "rain possible or rain likely for every day, and "
                           "today's forecast hour by hour."),
         canonical_url=canonical_url("/cities"),
-        og_image_url=OG_IMAGE,
-        og_image_width=OG_IMAGE_WIDTH,
-        og_image_height=OG_IMAGE_HEIGHT,
+        og_image_url=config.OG_IMAGE,
+        og_image_width=config.OG_IMAGE_WIDTH,
+        og_image_height=config.OG_IMAGE_HEIGHT,
         structured_data=structured_data(),
         cities=[{"slug": slug, "name": name} for slug, name in CURATED_CITIES],
     )
@@ -1848,9 +1732,9 @@ def release_notes():
                           "night street page, the calendar export, the "
                           "browser notification and the installable app."),
         canonical_url=canonical_url("/release-notes"),
-        og_image_url=OG_IMAGE,
-        og_image_width=OG_IMAGE_WIDTH,
-        og_image_height=OG_IMAGE_HEIGHT,
+        og_image_url=config.OG_IMAGE,
+        og_image_width=config.OG_IMAGE_WIDTH,
+        og_image_height=config.OG_IMAGE_HEIGHT,
         structured_data=structured_data(),
         releases=RELEASES,
     )
@@ -1924,9 +1808,9 @@ def page_not_found(error):
                           "unlikely, rain possible or rain likely for every "
                           "day, and today's forecast hour by hour."),
         canonical_url=canonical_url("/"),
-        og_image_url=OG_IMAGE,
-        og_image_width=OG_IMAGE_WIDTH,
-        og_image_height=OG_IMAGE_HEIGHT,
+        og_image_url=config.OG_IMAGE,
+        og_image_width=config.OG_IMAGE_WIDTH,
+        og_image_height=config.OG_IMAGE_HEIGHT,
         structured_data=structured_data(),
     ), 404)
     return response
@@ -1986,8 +1870,8 @@ def api_alert():
         "now": now,
         "threshold": threshold,
         "personal_threshold": personal,
-        "lead_hours": NOTIFICATION_LEAD_HOURS,
-        "poll_minutes": NOTIFICATION_POLL_MINUTES,
+        "lead_hours": config.NOTIFICATION_LEAD_HOURS,
+        "poll_minutes": config.NOTIFICATION_POLL_MINUTES,
         "event": notification_event(hours, threshold, display_city, personal),
     }))
 
