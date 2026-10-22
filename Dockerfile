@@ -50,6 +50,15 @@ ARG APP_COMMIT=
 ENV APP_VERSION=${APP_VERSION} \
     APP_COMMIT=${APP_COMMIT}
 
+# The same two numbers as labels, so that the image itself says which build
+# it is: `docker images` and the Docker Hub tag list both show the version
+# and the commit, and neither has to be read off the page.
+LABEL org.opencontainers.image.title="Rain Alert" \
+      org.opencontainers.image.description="The 7-day rain chance for any city." \
+      org.opencontainers.image.version="${APP_VERSION}" \
+      org.opencontainers.image.revision="${APP_COMMIT}" \
+      org.opencontainers.image.source="https://github.com/lasiurusbat/RainAlert"
+
 # The image installs no system packages. The weekday names are hard-coded in
 # the app, so there is no locale data to compile and nothing to install.
 COPY --from=builder /wheels /wheels
@@ -95,6 +104,16 @@ COPY --chown=rainalert:rainalert API.md openapi.yaml ./
 USER rainalert
 
 EXPOSE 8000
+
+# The app has no separate health endpoint, so the home page is the check: a
+# 200 from it means the server is up and serving. The start page asks no
+# upstream for anything, so the check never depends on a third party.
+#
+# The port comes from $PORT rather than being written down, so the check
+# still finds the server when the port is changed - which is what a host
+# like Render does with its own port.
+HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
+    CMD python -c "import os,sys,urllib.request;sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:'+os.environ.get('PORT','8000')+'/',timeout=5).status==200 else 1)"
 
 # The bind address must be 0.0.0.0. The default 127.0.0.1 would make the
 # server unreachable from outside the container.

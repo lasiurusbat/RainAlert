@@ -46,9 +46,24 @@ docker compose run --rm tests   # the two HTTP suites in the same image
 `Dockerfile` is a two-stage build; the runtime image has no compiler, runs as
 the non-root user `rainalert` (uid 1001), and serves with gunicorn on port
 8000. The image installs no system packages: the weekday names are hard-coded
-in the app, so there is no locale data to compile. `DEPLOY.md` is the
-deployment runbook, and `.github/workflows/ci-cd.yml` runs the tests inside
-the built image before any release is pushed.
+in the app, so there is no locale data to compile. It carries a health check
+(the home page, which asks no upstream, so the check never depends on a third
+party) and OCI labels with the version and the commit, so the image itself
+says which build it is. `DEPLOY.md` is the deployment runbook, and
+`.github/workflows/ci-cd.yml` runs the tests inside the built image before
+any release is pushed.
+
+**Compose builds the image from the source every time** (`pull_policy:
+build` on the shared `x-image` block). Without it, Compose reuses the local
+`rainalert:latest` whenever it exists and never rebuilds it, so
+`docker compose run --rm tests` can quietly test an old image and report the
+result of old code — it happened here, when a stale image ran 368 of the 513
+offline tests and still said `OK`.
+
+**The settings come from `.env`.** Copy `.env.example` to `.env` and edit
+that; it holds the site's address, the donation link and the app's tunables.
+Compose fills them into the app container. The test container deliberately
+gets none of them, because the offline suite asserts the app's own defaults.
 
 ## Deployment status
 
@@ -151,6 +166,7 @@ nothing else.
 | `requirements-dev.txt` | Development-only dependencies (selenium) |
 | `Dockerfile` | Two-stage container image |
 | `docker-compose.yml` | Local container setup: the app and a test service |
+| `.env.example` | The local settings `docker compose` fills into the container |
 | `render.yaml` | Render Blueprint; runs a prebuilt image, not a build (not deployed yet) |
 | `API.md` | The HTTP API reference: every route, the parameters, the status codes, the upstream services |
 | `openapi.yaml` | The same API as an OpenAPI 3.1 spec, for tools that read one |
@@ -495,9 +511,10 @@ forecast the app has to fetch.
 `/release-notes` says what each release brought, newest first, and the
 footer of every page links to it after the version. The content lives in
 `rainalert/data/releases.py`, so **cutting a release means adding an entry there** — the
-version on the top entry is the one the build stamps into the footer, and
-the number of the release in preparation is the fallback tag in
-`render.yaml`.
+version on the top entry should be the one the build stamps into the footer
+(the footer reads `APP_VERSION`, not the release notes, so the two are kept in
+step by hand), and the number of the release in preparation is the fallback
+tag in `render.yaml`.
 
 - **A release is a version, a name and a list of features.** A feature is
   a `title` and a `text`: the title is the `h3` and the text is the
@@ -830,6 +847,12 @@ because the app works without it.
   selenium or Chrome is missing, so a plain `python -m unittest` never
   fails because of it — but a skipped suite is not a passing suite, so
   check that it actually ran before trusting it.
+- **A local Docker image is never rebuilt on its own.** Compose reuses
+  `rainalert:latest` whenever it exists, so `docker compose run --rm tests`
+  can test yesterday's code and still say `OK`. The compose file now sets
+  `pull_policy: build`, so the image is rebuilt from the source every time —
+  if that ever goes missing, the symptom is a test count that does not
+  match the suite.
 - **Jinja caches templates when debug mode is off.** Restart the server after
   editing `index.html`, or run with `FLASK_DEBUG=1`.
 - **A browser caches a favicon by its URL, not by its contents.** Rewriting

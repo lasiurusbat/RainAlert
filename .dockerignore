@@ -35,9 +35,26 @@ htmlcov
 docs
 README.md
 CLAUDE.md
+DEPLOY.md
 tech-stack.md
+implementation-plan.md
+refactor-plan.md
 RainAlert-Ideas-for-Alerting-Users.md
 render.yaml
+
+# Design mockups. They are not part of the app; they are pictures of what
+# it might look like.
+design
+
+# Local artefacts that are not in the repository but sit in the working
+# directory: the before/after snapshots of tools/snapshot.py, and the
+# screenshots the tools in tools/ write.
+snapshots
+shot-*.png
+crop-*.png
+
+# The skills and settings of the editor that happens to be driving this.
+.claude
 
 # Development tools. The icon generator needs a browser, and the icons it
 # writes are committed, so nothing in the image needs it.

@@ -6,12 +6,26 @@
 #
 # The app is stateless, so there is no database service to run.
 
+# Both services run the same image, and it is built from the source in this
+# directory, so the image is defined once here and the two services cannot
+# drift apart.
+#
+# `pull_policy: build` is what makes that true in practice. Without it
+# Compose runs the local `rainalert:latest` whenever it exists, and a local
+# image is never rebuilt on its own — so "docker compose run --rm tests"
+# quietly tests a stale image and reports the result of yesterday's code.
+# It happened here: a stale `rainalert:latest` ran 368 of the 513 offline
+# tests and still said OK. Needs Compose v2.20 or later.
+x-image: &image
+  image: rainalert:latest
+  build:
+    context: .
+    dockerfile: Dockerfile
+  pull_policy: build
+
 services:
   rainalert:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    image: rainalert:latest
+    <<: *image
     container_name: rainalert
     ports:
       # host:container. Change the host side if 8000 is already in use.
@@ -29,6 +43,13 @@ services:
       # Optional donation link. Compose fills this in from the shell or from
       # the .env file next to this file; empty (the default) hides the link.
       DONATION_URL: ${DONATION_URL:-}
+      # The app's own tunables, so a container can be tuned from the .env
+      # file rather than by editing this one. The defaults are the app's own
+      # (see rainalert/config.py), so a container and a local run agree.
+      UMBRELLA_THRESHOLD: ${UMBRELLA_THRESHOLD:-50}
+      SEVERITY_LOW_MAX: ${SEVERITY_LOW_MAX:-30}
+      SEVERITY_MODERATE_MAX: ${SEVERITY_MODERATE_MAX:-60}
+      TEMPERATURE_UNIT: ${TEMPERATURE_UNIT:-celsius}
     restart: unless-stopped
     healthcheck:
       # The app has no dedicated health endpoint, so this asks for the home
@@ -51,14 +72,14 @@ services:
   # drives a real headless Chrome, and the image installs no system packages
   # on purpose, so it runs on the CI runner instead.
   tests:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    image: rainalert:latest
+    <<: *image
     profiles: ["test"]
     environment:
       NOMINATIM_USER_AGENT: RainAlert_App_v1_2026
       # SITE_URL is deliberately not set here. The offline suite asserts the
       # canonical address of the site, so it has to run against the default.
+      # The tunables are left out for the same reason: the suite asserts the
+      # app's own defaults, so a value in the .env file must not reach the
+      # container the tests run in.
     command: >
       sh -c "python -m unittest discover -s tests/offline -t . -v && python -m unittest tests.test_api -v"

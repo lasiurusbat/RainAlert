@@ -183,7 +183,8 @@ docker compose up --build       # start the app on http://localhost:8000
 docker compose down             # stop and remove the container
 ```
 
-The Compose file builds the image once and shares it between two services:
+The Compose file builds the image from the source in the repository and
+shares it between two services:
 
 - `rainalert` — the app, published on <http://localhost:8000>.
 - `tests` — a one-shot service that runs both test suites in the same image.
@@ -217,7 +218,8 @@ docker build \
 
 The container reads the same environment variables as a local run. Pass them
 with `-e`, or put them in a `.env` file next to the Compose file — Compose
-picks that file up automatically.
+picks that file up automatically. Copy `.env.example` to `.env` to start
+from the settings the app expects.
 
 ```bash
 docker run --rm -p 8000:8000 \
@@ -797,6 +799,7 @@ RainAlert/
 ├── Dockerfile                   # multi-stage container image
 ├── docker-compose.yml           # local container setup, app + test services
 ├── .dockerignore                # keeps the build context small
+├── .env.example                 # the local settings docker compose fills in
 ├── .gitignore                   # keeps local artefacts out of version control
 ├── render.yaml                  # Render deployment blueprint
 ├── .github/                     # CI workflow and Dependabot config
