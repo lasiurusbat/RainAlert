@@ -129,8 +129,8 @@ Python 3.14.5.
 ## Running the tests
 
 ```bash
-python -m unittest discover -s tests/offline -t .  # 368 offline tests, no network required
-python -m unittest tests.test_browser               # 80 browser tests, needs Chrome
+python -m unittest discover -s tests/offline -t .  # 513 offline tests, no network required
+python -m unittest tests.test_browser               # 105 browser tests, needs Chrome
 python -m unittest tests.test_api                   # 7 live integration tests, hits both APIs
 ```
 
@@ -142,9 +142,12 @@ because an upstream is down.
 
 `tests/test_browser.py` drives a real headless Chrome against the app, because the
 saved city and the alert threshold live in the browser's `localStorage` and
-no HTTP test client can see them. It needs Chrome and selenium
-(`pip install -r requirements-dev.txt`), and skips itself when either is
-missing.
+no HTTP test client can see them. It also follows the reader's way through
+the site — the city index, the 404 page, the temperature switch, the
+labelled current-hour marker, the hourly table and the donation link — and
+measures the layout, so the panel is known to fit a 768px window. It needs
+Chrome and selenium (`pip install -r requirements-dev.txt`), and skips
+itself when either is missing.
 
 `tests/test_api.py` checks the real response shapes against the live services and
 needs them to be reachable.
@@ -800,6 +803,7 @@ RainAlert/
 ├── API.md                       # the HTTP API reference
 ├── openapi.yaml                 # the HTTP API as an OpenAPI 3.1 spec
 ├── DEPLOY.md                    # the deployment runbook
+├── tech-stack.md                # what the app is built with, and why
 ├── CLAUDE.md                    # notes for AI assistants working in this repo
 ├── implementation-plan.md       # what is built, what is next, what is deferred
 ├── refactor-plan.md             # how app.py was split into the package
@@ -1131,7 +1135,8 @@ same command.
 
 `CLAUDE.md` in this repository documents the architecture, the design
 decisions behind each of these, and the gotchas that have bitten this
-codebase before.
+codebase before. `tech-stack.md` lists what the app is built with, what
+each piece does, and why it is that piece rather than the alternative.
 
 ---
 

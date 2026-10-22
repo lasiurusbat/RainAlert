@@ -35,7 +35,7 @@ a page that is missing says so with its status code.
 - [x] Geocoding cache, explicit timeouts, configuration through environment variables
 - [x] City-local dates (`timezone=auto`) and English weekday names
 - [x] Temperature rounding fix (round half up)
-- [x] Offline unit tests (368), browser tests (80) and live API tests (7)
+- [x] Offline unit tests (513), browser tests (105) and live API tests (7)
 - [x] `app.py` split into the `rainalert` package, in layers (`domain`, `present`, `upstream`, `web`), and the tests into `tests/`, one file per module (see `refactor-plan.md`)
 - [x] Comprehensive `README.md` with screenshot, `CLAUDE.md` project notes
 - [x] API reference (`API.md`) and an OpenAPI 3.1 spec (`openapi.yaml`), with tests that keep them in step with the routes
@@ -68,7 +68,7 @@ a page that is missing says so with its status code.
 ### Packaging and delivery
 - [x] Multi-stage `Dockerfile`: non-root user, no system packages, tests included in the image
 - [x] `.dockerignore`, `.gitignore`, `docker-compose.yml` (app plus a `tests` profile)
-- [x] `render.yaml`: free web service running `docker.io/lasiurusbat/rainalert:0.8`, user agent naming rainalert.live
+- [x] `render.yaml`: free web service running `docker.io/lasiurusbat/rainalert:1.0`, user agent naming rainalert.live
 - [x] `.github/workflows/ci-cd.yml`: build, test in the image, push on release tag, Render deploy hook, smoke test
 - [x] `.github/dependabot.yml`: weekly updates for Actions, pip and the Docker base image
 - [x] `DEPLOY.md` runbook (image push, Render setup, domain, pipeline, known limits)
@@ -92,14 +92,14 @@ These steps use accounts and dashboards I cannot see from the repository.
 - [ ] **(verify)** Domain: `rainalert.live` added in Render, the Namecheap URL-forwarding records replaced, DNS records added, verified, HTTPS working. Confirmed 2026-10-21: the domain is on Namecheap forwarding and answers nothing — it 302s to a `www` host whose A record is `0.0.0.0`.
 - [ ] GitHub: protect `main`, require the `build-test-push` check, optionally add a reviewer to the `production` environment
 - [ ] Review and merge (or close) the open Dependabot pull request once its checks pass
-- [ ] Cut the first release: tag `v0.8` on `main` and push it (no tag exists yet)
+- [ ] Cut the first release: tag `v1.0` on `main` and push it (no tag exists yet)
 - [ ] Watch the first release run, fix anything small it turns up. The workflow itself is green on every push to `main`; only the tag-gated half — the push and the deploy — has never run. The smoke test will fail until the domain is attached.
 - [ ] Open the live site, search a city, confirm forecast and English weekday names
 - [ ] Confirm the canonical link, the social card and the sitemap all point at `https://rainalert.live` (the `SITE_URL` default), and that `/city/atlantis` answers `404`
 - [ ] Submit `https://rainalert.live/sitemap.xml` in Google Search Console and Bing Webmaster Tools
 - [ ] Optional: free uptime pinger on `https://rainalert.live/` to avoid the one-minute cold start
 
-## 4. Attribution and donations (built, ships in v0.8)
+## 4. Attribution and donations (built, ships in v1.0)
 
 Buy Me a Coffee fits the free Open-Meteo terms only if it stays voluntary
 one-off donations. Do not use its memberships, shop or paid-extras features:
@@ -127,8 +127,8 @@ those would make the site commercial.
 - [x] Layout checked in a real browser: with the link and credits the page needs 753px of height. It fits the 768px reference window with no scrollbar and no sideways overflow at 1366x768 and 1920x1080. At 1280x720 it scrolls by 33px (10px of that is the credits, 23px the donation line).
 - [x] Tests: 16 new (URL validation, link absent when empty, present when set, absent on error and empty pages, `rel`/`target`, attribution always present). Offline suite: 110 tests passing.
 - [x] Set the donation URL in `render.yaml`, document the setting in `README.md`, `CLAUDE.md` and `DEPLOY.md`
-- [ ] Commit these changes (together with the other uncommitted work in the folder) before tagging `v0.8`
-- [ ] Confirm the link and the credits on the live site after the `v0.8` release (this replaces the separate `v0.9` release)
+- [ ] Commit these changes (together with the other uncommitted work in the folder) before tagging `v1.0`
+- [ ] Confirm the link and the credits on the live site after the `v1.0` release (this replaces the separate `v0.9` release)
 
 ## 5. Alert features
 
@@ -160,6 +160,7 @@ Decide first, because it affects hosting and licensing:
 
 - [x] The app version is on the page — the footer of every page carries it, along with the commit it was built from — so the pipeline's smoke test can confirm the new release is the one answering without a separate health endpoint
 - [x] `RainAlert-Ideas-for-Alerting-Users.md` is already tracked in git (it was in the initial commit) and is annotated in place with what has been built, so the remaining question is only whether to keep it as a living design record or retire it once the ideas are done
+- [x] Every feature has both a unit test and an end-to-end test. The offline suite covers every function body in the package (the only lines it cannot reach are decorators and module-level statements, which run at import), and the browser suite covers the reader-facing half: the city index, the 404 page, the temperature switch, the now-marker, the hourly table and the donation link
 - [ ] Keep `render.yaml` tag in step with each release (a hook deploy may not update the service's stored default image)
 - [ ] Re-read Render's free-tier terms before the site grows; Render describes the free tier as not meant for production
 - [ ] Re-check free-tier limits and Action versions every few months (Dependabot covers the Action versions)
@@ -172,8 +173,8 @@ Decide first, because it affects hosting and licensing:
 
 ## 8. Open questions
 
-1. ~~Is the Docker Hub image already pushed, and is the Render service created?~~ Answered 2026-10-21: neither exists yet. Order of work: Docker Hub repo and token, GitHub secrets, first image (via `v0.8` tag), then the Render Blueprint, then the domain.
+1. ~~Is the Docker Hub image already pushed, and is the Render service created?~~ Answered 2026-10-21: neither exists yet. Order of work: Docker Hub repo and token, GitHub secrets, first image (via `v1.0` tag), then the Render Blueprint, then the domain.
 2. Does the free Render plan offer a deploy hook for this service?
 3. ~~What is the Buy Me a Coffee URL, and what wording do you want?~~ Answered: <https://buymeacoffee.com/rainalert>, wording above.
-4. ~~Ship the donation link in `v0.8` or `v0.9`?~~ Answered: `v0.8`. Built and tested.
+4. ~~Ship the donation link in `v0.8` or `v0.9`?~~ Answered: `v1.0`. Built and tested.
 5. Which alert channel comes first: ntfy.sh, Telegram or email?

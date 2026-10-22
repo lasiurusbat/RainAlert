@@ -250,5 +250,5 @@ stamps into the footer, so the page and the running build agree.
 - **The test counts drift.** The count appears in **four** documents —
   `CLAUDE.md`, `README.md`, `DEPLOY.md` and `implementation-plan.md` — and
   they are updated together, but a test added without updating all four
-  leaves them disagreeing. The suite has 368 offline tests, 80 browser
+  leaves them disagreeing. The suite has 513 offline tests, 105 browser
   tests and 7 live integration tests.

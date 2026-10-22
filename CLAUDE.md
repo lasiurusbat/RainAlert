@@ -25,8 +25,8 @@ Serves on <http://127.0.0.1:5000>. `FLASK_DEBUG=1` enables the reloader and
 debugger.
 
 ```bash
-python -m unittest discover -s tests/offline -t .  # offline suite, 368 tests, no network
-python -m unittest tests.test_browser               # browser suite, 80 tests, needs Chrome
+python -m unittest discover -s tests/offline -t .  # offline suite, 513 tests, no network
+python -m unittest tests.test_browser               # browser suite, 105 tests, needs Chrome
 python -m unittest tests.test_api                   # live integration tests, hits both APIs
 ```
 
@@ -59,7 +59,7 @@ still true:
   and deploys on a `v*` tag, so nothing has ever been released.
 - **The Docker Hub image does not exist.** The repository
   `lasiurusbat/rainalert` is there, with **zero tags** — so the
-  `docker.io/lasiurusbat/rainalert:0.8` that `render.yaml` points at cannot
+  `docker.io/lasiurusbat/rainalert:1.0` that `render.yaml` points at cannot
   be pulled.
 - **The Render service is not serving this app.** A service named
   `rainalert` answers at <https://rainalert.onrender.com>, but its `/`
@@ -81,15 +81,15 @@ nothing else.
 
 ### Still to do
 
-- [ ] Cut the first release tag (`git tag v0.8 && git push origin v0.8`),
+- [ ] Cut the first release tag (`git tag v1.0 && git push origin v1.0`),
       which builds, tests, pushes and deploys in one workflow run.
 - [ ] Confirm the Docker Hub credentials and the Render deploy hook are set
       as GitHub secrets, and that the free Render plan includes a hook.
 - [ ] Point the domain at Render: add `rainalert.live` to the service,
       then replace the Namecheap forwarding records with the DNS records
       Render gives, and verify HTTPS.
-- [ ] Replace the `0.8` fallback in `render.yaml` if the first release is
-      not `0.8`.
+- [ ] Replace the `1.0` fallback in `render.yaml` if the first release is
+      not `1.0`.
 - [ ] Re-check the smoke test in the workflow: it greps the live page for
       `Version <tag>`, so it proves the new build is the one answering and
       not an old one. **It will fail on the first tag run** as long as the
@@ -155,6 +155,7 @@ nothing else.
 | `API.md` | The HTTP API reference: every route, the parameters, the status codes, the upstream services |
 | `openapi.yaml` | The same API as an OpenAPI 3.1 spec, for tools that read one |
 | `DEPLOY.md` | Deployment runbook: Render setup, domain, CI/CD, releases |
+| `tech-stack.md` | What the app is built with, what each piece does, and why it is that piece |
 | `implementation-plan.md` | What is built, what is next, and the go-live checklist |
 | `RainAlert-Ideas-for-Alerting-Users.md` | The alerting tiers as proposed, each annotated with what was built |
 | `.github/workflows/ci-cd.yml` | CI on every PR and push; release on a git tag |
@@ -434,6 +435,29 @@ page both stay `200`, because a failed *search* is not a missing *page*.
 `templates/404.html` is the real 404 page, with a search form on it, and
 it says `noindex, follow`.
 
+**A broken answer is a `503`, and a missing feature is not.** The forecast
+service is a third party, so its answer is checked before it is used.
+`_is_a_forecast()` in `rainalert/upstream/open_meteo.py` decides whether
+the answer is shaped like a forecast at all: a list, a string, an error page
+served as JSON, or a `daily` block that is not an object, or a `daily` field
+that is there but is not a list, is a **broken answer** and becomes a
+`WeatherUnavailable` — the reader is told to come back in a moment, rather
+than shown an empty week. A `daily` block that is simply **absent** is not
+broken: the service answered and had no forecast to give, so the page says
+so and stays up.
+
+The **hourly block is not checked** by the validator. The hours are an
+addition to the forecast, so a missing or unreadable strip is a missing
+feature, not a broken forecast: the week survives it, the strip goes away,
+and a warning is logged.
+
+**An address of nothing in it is a `404`, not a redirect.** A slug made
+only of punctuation (`/city/---`) stands for no city: there is no name
+behind it, and a city with no address of its own has no page either. The
+address has to exist before the page does, so `city_from_slug()` returns
+`""` for such a slug and `city_page()` answers `404` rather than redirecting
+to an empty address.
+
 **The title, the description, the canonical link, the Open Graph tags and
 the JSON-LD are decided in one place.** `render_forecast_page()` renders
 every page of the site — the start page, a city's page, an error page — and
@@ -475,6 +499,11 @@ version on the top entry is the one the build stamps into the footer, and
 the number of the release in preparation is the fallback tag in
 `render.yaml`.
 
+- **A release is a version, a name and a list of features.** A feature is
+  a `title` and a `text`: the title is the `h3` and the text is the
+  paragraph under it, so the page reads as a set of things the app does
+  rather than as a wall of prose. The version is the `h2` and the
+  release's name is the line under it.
 - **The page is the same night street as the rest of the site.** Same
   background photograph, same panel over it, same frame. It is a page of
   the site, so it looks like one.
@@ -543,7 +572,7 @@ search form carries the unit in a hidden field, so a new search keeps the
 scale the reader chose.
 
 **Deployment runs a prebuilt image, not a build.** `render.yaml` uses
-`runtime: image` pointing at `docker.io/lasiurusbat/rainalert:0.8`. Render
+`runtime: image` pointing at `docker.io/lasiurusbat/rainalert:1.0`. Render
 pulls that image; it never runs the `Dockerfile`. A release is therefore a
 pushed image tag, not a merged commit. The old `runtime: python` shape,
 where Render ran `pip install` and gunicorn itself, is gone. None of this
@@ -940,6 +969,16 @@ because the app works without it.
   resolved). When the forecast endpoint fails, the app correctly shows "The
   weather service is unavailable right now" — that is the app behaving
   properly, not a regression.
+- **A broken answer and a missing answer are different.** An answer that is
+  not shaped like a forecast is a `503`; a `daily` block that is simply
+  absent is a `200` with "No forecast data available". A daily *field* that
+  is there but is not a list is a broken answer, so it is a `503` and not a
+  `200` with an empty week. The hourly block is never checked this way: a
+  broken strip takes the strip away and leaves the week.
+- **`_is_a_forecast()` accepts a tuple as well as a list.** The daily arrays
+  are lists in the service's answer, but the offline tests build them as
+  tuples, and a validator that is stricter than the tests turns a working
+  fixture into a `503`.
 - **A service worker's scope is the path it is served from.** Served from
   `/static/service-worker.js` it would control `/static/` and nothing else,
   and the page at `/` would never be under its control. The
