@@ -28,7 +28,7 @@ Serves on <http://127.0.0.1:5000>. `FLASK_DEBUG=1` enables the reloader and
 debugger.
 
 ```bash
-python -m unittest discover -s tests/offline -t .  # offline suite, 513 tests, no network
+python -m unittest discover -s tests/offline -t .  # offline suite, 520 tests, no network
 python -m unittest tests.test_browser               # browser suite, 105 tests, needs Chrome
 python -m unittest tests.test_api                   # live integration tests, hits both APIs
 ```
@@ -60,7 +60,7 @@ any release is pushed.
 build` on the shared `x-image` block). Without it, Compose reuses the local
 `rainalert:latest` whenever it exists and never rebuilds it, so
 `docker compose run --rm tests` can quietly test an old image and report the
-result of old code — it happened here, when a stale image ran 368 of the 513
+result of old code — it happened here, when a stale image ran 368 of the 520
 offline tests and still said `OK`.
 
 **The settings come from `.env`.** Copy `.env.example` to `.env` and edit
@@ -200,7 +200,7 @@ it is what makes a release a release.
 | `Dockerfile` | Two-stage container image |
 | `docker-compose.yml` | Local container setup: the app and a test service |
 | `.env.example` | The local settings `docker compose` fills into the container |
-| `render.yaml` | Render Blueprint; runs a prebuilt image, not a build (not deployed yet) |
+| `render.yaml` | Render Blueprint; runs a prebuilt image, not a build (the service that is live) |
 | `API.md` | The HTTP API reference: every route, the parameters, the status codes, the upstream services |
 | `openapi.yaml` | The same API as an OpenAPI 3.1 spec, for tools that read one |
 | `README.md` | The front door: what the app is, how to run it, and the rest of the documents |
@@ -489,6 +489,19 @@ page both stay `200`, because a failed *search* is not a missing *page*.
 `templates/404.html` is the real 404 page, with a search form on it, and
 it says `noindex, follow`.
 
+**A missing page says so in its head as well.** A city the geocoder does
+not know has no page, and the page that answers `404` used to carry the
+title and the description of a working one — "7-day rain chance for
+Nowhereville" — which is a promise the site cannot keep, in the tab a
+reader sees and in the social card a shared link carries. A missing page
+now takes the same words as the site's own 404 page ("Page not found -
+Rain Alert") and the site's own description, and it **claims no address of
+its own**: its canonical link points at the site, like the other 404s. A
+page that is only *broken* is not missing — a `503` keeps the city's own
+title and address, because the city is there and the page will come back.
+`NOT_FOUND_TITLE` and `NOT_FOUND_DESCRIPTION` in `rainalert/present/seo.py`
+are the one place those words are written down.
+
 **A broken answer is a `503`, and a missing feature is not.** The forecast
 service is a third party, so its answer is checked before it is used.
 `_is_a_forecast()` in `rainalert/upstream/open_meteo.py` decides whether
@@ -659,9 +672,10 @@ commit already on `main`, builds and tests the image, pushes it to Docker
 Hub as the version without the `v`, and calls Render's deploy hook with an
 `imgURL` parameter naming that exact tag. Pull requests never push and never
 deploy, so the secrets are only touched on a tag run. **`v1.0` has been
-pushed**, so the push half of the workflow has run; the deploy half has
-not, because the hook secret is not set and the service was deployed by
-hand instead.
+pushed and the whole path has run green**, so a release is a tag and a push
+and nothing else: the build, the offline suite inside the image, the browser
+suite on the runner, the Docker Hub login, the push, the hook and the smoke
+test on the live domain.
 
 **Every page says which build is answering.** `APP_VERSION` and `APP_COMMIT`
 are read from the environment and passed to every template as `app_version`
@@ -940,7 +954,9 @@ because the app works without it.
   for every error page. The title is never a bare "Rain Alert" either:
   without an alert it reads "7-day rain chance for London - Rain Alert" on
   a city's page and "Rain Alert - 7-day rain chance for any city" on the
-  start page, so every page says what it is about.
+  start page, so every page says what it is about. A page that is **not
+  there** is the one exception, and it says exactly that: "Page not found
+  - Rain Alert", the same words the site's own 404 page uses.
 - **A city page is a `404` or a `503`, not a page with a message on it.**
   A `200` that says "not found" is a soft 404. The start page is different:
   a failed *search* there is not a missing *page*, so it stays `200`.

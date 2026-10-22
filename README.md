@@ -127,7 +127,7 @@ Python 3.14.5.
 ## Running the tests
 
 ```bash
-python -m unittest discover -s tests/offline -t .  # 513 offline tests, no network required
+python -m unittest discover -s tests/offline -t .  # 520 offline tests, no network required
 python -m unittest tests.test_browser               # 105 browser tests, needs Chrome
 python -m unittest tests.test_api                   # 7 live integration tests, hits both APIs
 ```

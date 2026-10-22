@@ -8,7 +8,8 @@ from flask import (Response, current_app, make_response, render_template,
                    send_from_directory)
 
 from rainalert.data.cities import CURATED_CITIES
-from rainalert.present.seo import canonical_url, page_meta
+from rainalert.present.seo import (NOT_FOUND_DESCRIPTION, NOT_FOUND_TITLE,
+                                   canonical_url, page_meta)
 
 
 def robots():
@@ -71,11 +72,7 @@ def page_not_found(error):
     """
     response = make_response(render_template(
         '404.html',
-        **page_meta("Page not found - Rain Alert",
-                    ("The 7-day rain chance for any city: rain "
-                     "unlikely, rain possible or rain likely for every "
-                     "day, and today's forecast hour by hour."),
-                    "/"),
+        **page_meta(NOT_FOUND_TITLE, NOT_FOUND_DESCRIPTION, "/"),
     ), 404)
     return response
 

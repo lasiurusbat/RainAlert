@@ -235,6 +235,39 @@ class TestSearchEngineOptimisation(AppTestCase):
         self.assertEqual(response.status_code, 404)
         self.assertIn("City not found", response.get_data(as_text=True))
 
+    def test_an_unknown_city_does_not_promise_a_forecast(self):
+        """The title and the description of a missing page must not name a
+        forecast for a city that is not there.
+
+        The title is what a reader sees in the tab and what a shared link
+        carries, so a 404 that reads like a working page is a lie the site
+        tells twice: once in the tab and once in the social card.
+        """
+        self.mock_geocode.return_value = None
+        body = self.body("/city/nowhereville")
+        self.assertIn("<title>Page not found - Rain Alert</title>", body)
+        self.assertNotIn("7-day rain chance for Nowhereville", body)
+        self.assertNotIn("The 7-day rain chance for Nowhereville", body)
+
+    def test_an_unknown_city_claims_no_address_of_its_own(self):
+        """The page for a city that is not there is the site's 404 page as
+        well, and it points at the site the way that page does."""
+        self.mock_geocode.return_value = None
+        body = self.body("/city/nowhereville")
+        self.assertIn(
+            '<link rel="canonical" href="https://rainalert.live/">', body)
+
+    def test_a_city_that_is_only_broken_keeps_its_own_page(self):
+        """A 503 is not a missing page: the city is there, and the address
+        and the title stay its own, because the page will come back."""
+        self.mock_get.side_effect = requests.ConnectionError("down")
+        body = self.body("/city/london")
+        self.assertIn("<title>7-day rain chance for London - Rain Alert</title>",
+                      body)
+        self.assertIn(
+            '<link rel="canonical" href="https://rainalert.live/city/london">',
+            body)
+
     def test_an_upstream_that_is_down_is_a_503(self):
         """The page is fine, the moment is not."""
         self.mock_get.side_effect = requests.ConnectionError("down")

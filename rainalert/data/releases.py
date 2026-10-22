@@ -15,6 +15,22 @@ promises a forecast the service does not give.
 
 RELEASES = [
     {
+        "version": "1.0.1",
+        "name": "A page that is not there says so",
+        "features": [
+            {
+                "title": "A missing page no longer promises a forecast",
+                "text": "A city the geocoder does not know has no page, and "
+                        "the page now says so in its title, its description "
+                        "and its address - the same words the site's own 404 "
+                        "page uses - instead of promising a 7-day rain "
+                        "chance for a place that is not there. A shared link "
+                        "to a city that does not exist no longer shows a "
+                        "forecast in the tab.",
+            },
+        ],
+    },
+    {
         "version": "1.0",
         "name": "The 7-day rain chance for any city",
         "features": [

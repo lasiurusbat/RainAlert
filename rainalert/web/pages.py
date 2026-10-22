@@ -148,17 +148,26 @@ def render_forecast_page(city, unit, city_page=False, error=None, status=200):
     else:
         search_status = "none"
 
+    # A page that is **missing** is a page that is not there. A city the
+    # geocoder does not know has no page, so the page says so in its title
+    # and its description instead of promising a forecast for a place that
+    # is not there, and it does not claim an address of its own - the same
+    # as the site's own 404 page. A page that is only *broken* (a 503) is
+    # not missing: the city is there, and its address stays its own.
+    missing = status == 404
+
     # The address this page claims for itself. A forecast has an address of
     # its own, so that a city is one page and not many; the start page is
-    # the site itself.
-    canonical_path = city_path(city) if city else "/"
+    # the site itself, and so is a page that is not there.
+    canonical_path = "/" if missing else (city_path(city) if city else "/")
 
     # The name the page calls the city by: the city on its own, without the
     # state and the country the geocoder adds.
     page_city = short_city_name(city, display_city)
 
-    title = page_title(page_city, alert)
-    description = page_description(page_city, weather_data, headline)
+    title = page_title(page_city, alert, found=not missing)
+    description = page_description(page_city, weather_data, headline,
+                                   found=not missing)
     # A page with an error on it is not worth indexing: there is no
     # forecast on it, and indexing it would fill the results with pages
     # that say nothing.

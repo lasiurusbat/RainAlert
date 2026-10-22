@@ -175,6 +175,21 @@ class TestPageTitle(unittest.TestCase):
                 self.assertTrue(seo.page_title("London", alert).endswith(
                     " - Rain Alert"))
 
+    def test_a_page_that_is_missing_says_so(self):
+        """A city nobody knows has no page, and the title must not promise
+        a forecast for it.
+
+        The title is what a reader sees in the tab and what a shared link
+        carries, so a missing page that reads like a working one is a lie
+        the site tells twice.
+        """
+        self.assertEqual(seo.page_title("Nowhereville", found=False),
+                         "Page not found - Rain Alert")
+
+    def test_a_missing_page_says_the_same_as_the_sites_own_404(self):
+        self.assertEqual(seo.page_title("Nowhereville", found=False),
+                         seo.NOT_FOUND_TITLE)
+
 
 class TestPageDescription(unittest.TestCase):
     """The description is the sentence a search result shows."""
@@ -196,6 +211,22 @@ class TestPageDescription(unittest.TestCase):
 
     def test_the_description_is_a_sentence(self):
         self.assertTrue(seo.page_description().endswith("."))
+
+    def test_a_missing_page_describes_the_site_and_not_the_city(self):
+        """There is no forecast to describe, so the description must not
+        promise one for a city that is not there."""
+        description = seo.page_description("Nowhereville", found=False)
+        self.assertNotIn("Nowhereville", description)
+        self.assertEqual(description, seo.NOT_FOUND_DESCRIPTION)
+
+    def test_a_missing_page_ignores_a_forecast_it_cannot_have(self):
+        """The city is not there, so there is no week to describe either."""
+        headline = {"text": "Rain likely tomorrow (80%).", "severity": "high",
+                    "umbrella": True}
+        description = seo.page_description("Nowhereville", [1, 2, 3], headline,
+                                           found=False)
+        self.assertNotIn("Nowhereville", description)
+        self.assertNotIn("Rain likely tomorrow", description)
 
 
 class TestCanonicalUrl(unittest.TestCase):

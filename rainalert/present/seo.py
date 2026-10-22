@@ -21,6 +21,15 @@ TAB_TITLE_PREFIX = "Rain"
 
 TAB_TITLE_SUFFIX = "Rain Alert"
 
+# What a page that is not there says about itself. A city the geocoder does
+# not know has no page, and the site's own 404 page has the same words, so
+# the two kinds of missing page read alike.
+NOT_FOUND_TITLE = f"Page not found - {TAB_TITLE_SUFFIX}"
+
+NOT_FOUND_DESCRIPTION = ("The 7-day rain chance for any city: rain "
+                         "unlikely, rain possible or rain likely for every "
+                         "day, and today's forecast hour by hour.")
+
 
 def city_slug(value):
     """A URL-safe slug for a city name: "Sao Paulo" -> "sao-paulo".
@@ -104,7 +113,7 @@ def short_city_name(city, display_city=None):
     return name
 
 
-def page_title(city, alert=None):
+def page_title(city, alert=None, found=True):
     """The title of the page.
 
     The title is the alert: it names the first wet day, and the favicon
@@ -113,7 +122,14 @@ def page_title(city, alert=None):
     search engine - nothing about which city the page is about. The app's
     name stays a suffix, in the usual "page - site" order, so that a reader
     with a row of tabs open can still tell which one is Rain Alert.
+
+    A page that is **missing** says so in its title. A city the geocoder
+    does not know has no page, and a title that promises its 7-day rain
+    chance is a promise the site cannot keep - and a title is what a
+    reader sees in the tab, and what a shared link carries.
     """
+    if not found:
+        return NOT_FOUND_TITLE
     if alert:
         when = alert["when"]
         if city:
@@ -126,13 +142,18 @@ def page_title(city, alert=None):
     return f"{TAB_TITLE_SUFFIX} - 7-day rain chance for any city"
 
 
-def page_description(city=None, forecast=None, headline=None):
+def page_description(city=None, forecast=None, headline=None, found=True):
     """The description of the page: the sentence under the title in a search
     result.
 
     On a city's page it is the headline the page already shows, so that the
     snippet in the search results says the same thing as the page does.
+
+    A page that is **missing** describes the site rather than the city it
+    was asked for, because there is no forecast to describe.
     """
+    if not found:
+        return NOT_FOUND_DESCRIPTION
     if city and forecast:
         sentence = (f"The chance of rain in {city} for the next 7 days, "
                     f"hour by hour for today.")
