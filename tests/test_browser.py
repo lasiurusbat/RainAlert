@@ -271,32 +271,60 @@ class BrowserServerMixin:
 
     # -- helpers ---------------------------------------------------------------
 
-    def wait_for(self, script, timeout=10):
+    def wait_for(self, script, timeout=10, message=None):
         """Wait until a JavaScript expression is true."""
         WebDriverWait(self.driver, timeout).until(
-            lambda driver: driver.execute_script(script))
+            lambda driver: driver.execute_script(script), message or "")
 
-    def wait_for_async(self, script, timeout=15):
+    def wait_for_async(self, script, timeout=15, message=None):
         """Wait until a promise in the page reports something true.
 
         The script has to call the callback it is given, with the value it
         wants the wait to look at.
         """
         WebDriverWait(self.driver, timeout).until(
-            lambda driver: driver.execute_async_script(script))
+            lambda driver: driver.execute_async_script(script), message or "")
 
-    def wait_for_the_worker(self):
-        """Wait until the service worker is registered and in charge."""
+    def wait_for_the_worker(self, timeout=45):
+        """Wait until the service worker is active and in charge of the page.
+
+        Two different things have to happen, and they are waited for
+        separately.
+
+        The worker has to be **active**. It fetches the whole shell before
+        it activates, and that is the slow part on a cold machine, so the
+        timeout here is generous on purpose: a slow runner is not a broken
+        worker.
+
+        And the page has to be **controlled** by it. ``clients.claim()``
+        takes charge of the pages that are open at the moment it runs, and
+        the page that registered the worker may have been navigated since
+        - a page navigated after the claim is not controlled until it is
+        loaded again. So the page is loaded once more when it is not
+        controlled yet: a page loaded while an active worker is in scope
+        is controlled by it, whatever ``claim()`` did or did not manage.
+
+        Waiting for the controller alone is not enough. The worker was
+        installed, activated and never took charge of the page, and the
+        wait timed out on a runner that had just moved to a new image.
+        """
         self.wait_for_async("""
             var done = arguments[arguments.length - 1];
             navigator.serviceWorker.getRegistration('/').then(function (reg) {
-                done(!!reg);
+                done(!!(reg && reg.active));
             }, function () { done(false); });
-        """)
+        """, timeout=timeout,
+           message="the service worker did not become active")
+
+        if not self.driver.execute_script(
+                "return !!navigator.serviceWorker.controller;"):
+            self.driver.get(self.base + "/")
+
         self.wait_for_async("""
             var done = arguments[arguments.length - 1];
             done(!!navigator.serviceWorker.controller);
-        """)
+        """, timeout=timeout,
+           message="the service worker did not take charge of the page")
 
     def cached_urls(self):
         """The URLs the service worker has in its cache."""
