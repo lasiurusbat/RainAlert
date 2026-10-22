@@ -1198,22 +1198,21 @@ button:focus-visible {
     text-decoration-thickness: 2px;
 }
 
-/* The data credits (Open-Meteo requires attribution) are a second, smaller
-   line under the copyright notice. */
+/* The data credits (Open-Meteo requires attribution) are a second line
+   under the copyright notice. */
 .credits {
     display: block;
     margin-top: 0.15rem;
-    font-size: 0.7rem;
+    font-size: 0.8rem;
 }
 
-/* Which build this is, under the credits. It is a third line of the same
-   kind as the credits: the same size, the same weight, the same plain
-   treatment. It answers "which version is this?", and that is a line of
-   the footer, not a caption. */
+/* Which build this is, under the credits. It is the same size as the
+   copyright line above it: it answers "which version is this?", and that
+   is a line of the footer, not a caption. */
 .build-info {
     display: block;
     margin-top: 0.15rem;
-    font-size: 0.7rem;
+    font-size: 0.8rem;
 }
 
 /* The release notes link, after the build. The separator is a pipe rather
