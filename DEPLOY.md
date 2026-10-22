@@ -142,6 +142,16 @@ page:
   [Google Search Console](https://search.google.com/search-console) and in
   [Bing Webmaster Tools](https://www.bing.com/webmasters). Both are free
   and both want the sitemap, not a verification tag in the markup.
+- Check that the footer carries the **Buy me a coffee** link. The link is
+  rendered only when the service runs with the `DONATION_URL` environment
+  variable, and the Blueprint in `render.yaml` is where that variable comes
+  from. A live page without the link means the service is not running with
+  the Blueprint's environment variables — check the service's **Environment**
+  tab. Only the donation link shows it: the other four variables in that
+  block are set to the same values as the app's own defaults, so a missing
+  `NOMINATIM_USER_AGENT` cannot be seen on the page at all. Setting the
+  variable restarts the service, and no new image is needed, because the
+  image reads it at start-up.
 - Confirm that a city's address the geocoder does not know answers `404`
   and not `200`. A page that says "not found" but answers `200` is a soft
   404, and search engines treat it as one. **Do not use a made-up name
