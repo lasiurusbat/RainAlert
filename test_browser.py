@@ -279,7 +279,7 @@ class BrowserServerMixin:
         cls.driver.quit()
 
     def setUp(self):
-        rainalert.get_coordinates.cache_clear()
+        geocoding.get_coordinates.cache_clear()
         # The mocks are class-wide, so a test that breaks the geocoder has
         # to put it back before the next one runs.
         self.mock_geocode.return_value = FakeLocation()

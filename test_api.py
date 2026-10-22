@@ -13,6 +13,10 @@ import unittest
 import requests
 
 import app as rainalert
+from rainalert import config
+from rainalert import errors
+from rainalert.upstream import geocoding
+from rainalert.web import common
 from rainalert.upstream import open_meteo
 
 
@@ -20,13 +24,13 @@ class TestLiveOpenMeteo(unittest.TestCase):
     """Checks the shape of the real Open-Meteo response."""
 
     def setUp(self):
-        rainalert.get_coordinates.cache_clear()
+        geocoding.get_coordinates.cache_clear()
 
     def test_forecast_request_succeeds_for_london(self):
-        latitude, longitude, label = rainalert.get_coordinates("London")
+        latitude, longitude, label = geocoding.get_coordinates("London")
         self.assertTrue(label)
 
-        forecast = rainalert.fetch_forecast(latitude, longitude)
+        forecast = common.fetch_forecast(latitude, longitude)
         self.assertGreater(len(forecast), 0)
         for day in forecast:
             self.assertIn("date", day)
@@ -43,7 +47,7 @@ class TestLiveOpenMeteo(unittest.TestCase):
                 "daily": open_meteo.DAILY_FIELDS,
                 "timezone": "auto",
             },
-            timeout=rainalert.config.WEATHER_TIMEOUT,
+            timeout=config.WEATHER_TIMEOUT,
         )
         response.raise_for_status()
         daily = response.json()["daily"]
@@ -62,7 +66,7 @@ class TestLiveOpenMeteo(unittest.TestCase):
                 "current": open_meteo.HOURLY_FIELDS,
                 "timezone": "auto",
             },
-            timeout=rainalert.config.WEATHER_TIMEOUT,
+            timeout=config.WEATHER_TIMEOUT,
         )
         response.raise_for_status()
         payload = response.json()
@@ -78,8 +82,8 @@ class TestLiveOpenMeteo(unittest.TestCase):
 
     def test_the_live_hourly_strip_renders(self):
         """The strip is built from a real response, not just a mock."""
-        latitude, longitude, _ = rainalert.get_coordinates("London")
-        forecast, hours = rainalert.fetch_weather(latitude, longitude)
+        latitude, longitude, _ = geocoding.get_coordinates("London")
+        forecast, hours = common.fetch_weather(latitude, longitude)
         self.assertGreater(len(forecast), 0)
         self.assertGreater(len(hours), 0)
         for hour in hours:
@@ -90,15 +94,15 @@ class TestLiveOpenMeteo(unittest.TestCase):
 
     def test_city_with_no_forecast_still_resolves(self):
         """A resolvable city returns coordinates even if data is sparse."""
-        latitude, longitude, _ = rainalert.get_coordinates("Reykjavik")
+        latitude, longitude, _ = geocoding.get_coordinates("Reykjavik")
         self.assertIsInstance(latitude, float)
         self.assertIsInstance(longitude, float)
 
 
 class TestLiveUnknownCity(unittest.TestCase):
     def test_unknown_city_raises_city_not_found(self):
-        with self.assertRaises(rainalert.CityNotFound):
-            rainalert.get_coordinates("Xqzxvwplkjhg")
+        with self.assertRaises(errors.CityNotFound):
+            geocoding.get_coordinates("Xqzxvwplkjhg")
 
 
 class TestLiveCalendarExport(unittest.TestCase):
@@ -110,7 +114,7 @@ class TestLiveCalendarExport(unittest.TestCase):
     """
 
     def setUp(self):
-        rainalert.get_coordinates.cache_clear()
+        geocoding.get_coordinates.cache_clear()
         self.client = rainalert.app.test_client()
 
     def test_the_export_is_a_calendar_file(self):

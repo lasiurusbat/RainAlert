@@ -155,7 +155,7 @@ def main():
     os.makedirs(out, exist_ok=True)
     client = rainalert.app.test_client()
     for name, method, path, form, location, forecast in REQUESTS:
-        rainalert.get_coordinates.cache_clear()
+        geocoding.get_coordinates.cache_clear()
         answer = ({"side_effect": location} if isinstance(location, Exception)
                   else {"return_value": location})
         with mock.patch.object(geocoding.geolocator, "geocode", **answer), \

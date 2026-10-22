@@ -14,6 +14,10 @@ from unittest import mock
 import requests
 
 import app as rainalert
+from rainalert import config
+from rainalert.data import cities
+from rainalert.data import releases
+from rainalert.present import seo
 from rainalert.domain import alerts
 from rainalert.present import forecast_view
 from rainalert.upstream import geocoding
@@ -86,7 +90,7 @@ class AppTestCase(unittest.TestCase):
     """Base class that mocks both upstream services."""
 
     def setUp(self):
-        rainalert.get_coordinates.cache_clear()
+        geocoding.get_coordinates.cache_clear()
         self.geocode_patcher = mock.patch.object(
             geocoding.geolocator, "geocode", return_value=FakeLocation()
         )
@@ -330,8 +334,8 @@ class TestRainSeverity(AppTestCase):
         self.assertEqual(rain.severity_band("not a number"), "unknown")
 
     def test_bands_are_configurable(self):
-        with mock.patch.object(rainalert.config, "SEVERITY_LOW_MAX", 10):
-            with mock.patch.object(rainalert.config, "SEVERITY_MODERATE_MAX", 40):
+        with mock.patch.object(config, "SEVERITY_LOW_MAX", 10):
+            with mock.patch.object(config, "SEVERITY_MODERATE_MAX", 40):
                 self.assertEqual(rain.severity_band(5), "low")
                 self.assertEqual(rain.severity_band(20), "moderate")
                 self.assertEqual(rain.severity_band(80), "high")
@@ -763,9 +767,9 @@ class TestOneAlert(unittest.TestCase):
         for chances in self.WEEKS:
             for hours in self.HOURS:
                 with self.subTest(chances=chances, hours=hours):
-                    headline = rainalert.forecast_headline(
+                    headline = alerts.forecast_headline(
                         week(chances), remaining(hours))
-                    alert = rainalert.tab_alert(week(chances), remaining(hours))
+                    alert = alerts.tab_alert(week(chances), remaining(hours))
                     # The tab alerts exactly when the banner says to bring
                     # an umbrella, and about the day the banner names.
                     self.assertEqual(alert is not None, headline["umbrella"])
@@ -777,7 +781,7 @@ class TestForecastHeadline(AppTestCase):
     """The one-line headline above the daily list."""
 
     def _headline(self, chances, days=None, hours=None):
-        return rainalert.forecast_headline(
+        return alerts.forecast_headline(
             week(chances, days), remaining(hours))
 
     def test_a_wet_day_names_the_day_and_the_chance(self):
@@ -885,7 +889,7 @@ class TestForecastHeadline(AppTestCase):
         self.assertIn("Bring an umbrella", headline["text"])
 
     def test_an_empty_forecast_has_no_headline(self):
-        self.assertIsNone(rainalert.forecast_headline([]))
+        self.assertIsNone(alerts.forecast_headline([]))
 
     def test_the_sentence_ends_in_a_period(self):
         for chances in ([0, 80, 0], [0, 45, 0], [0, 5, 0], [None, None]):
@@ -934,7 +938,7 @@ class TestTabAlert(AppTestCase):
     """The tab title and the favicon, which are the alert itself."""
 
     def _alert(self, chances, days=None, hours=None):
-        return rainalert.tab_alert(week(chances, days), remaining(hours))
+        return alerts.tab_alert(week(chances, days), remaining(hours))
 
     def _body_with(self, payload):
         self.mock_get.return_value = FakeResponse(payload)
@@ -965,14 +969,14 @@ class TestTabAlert(AppTestCase):
 
     def test_the_title_names_the_day(self):
         alert = self._alert([0, 80, 0, 0, 0, 0, 0])
-        self.assertEqual(rainalert.page_title(None, alert),
+        self.assertEqual(seo.page_title(None, alert),
                          "Rain tomorrow - Rain Alert")
 
     def test_the_title_names_the_city_as_well(self):
         """A title that says only "Rain tomorrow" says nothing about which
         city the page is about."""
         alert = self._alert([0, 80, 0, 0, 0, 0, 0])
-        self.assertEqual(rainalert.page_title("London", alert),
+        self.assertEqual(seo.page_title("London", alert),
                          "Rain tomorrow in London - Rain Alert")
 
     def test_a_dry_week_does_not_alert(self):
@@ -999,7 +1003,7 @@ class TestTabAlert(AppTestCase):
         self.assertEqual(alert["when"], "tomorrow")
 
     def test_an_empty_forecast_does_not_alert(self):
-        self.assertIsNone(rainalert.tab_alert([]))
+        self.assertIsNone(alerts.tab_alert([]))
 
     # -- today is judged on the hours that are left ----------------------------
 
@@ -1135,7 +1139,7 @@ class TestHourlyParsing(unittest.TestCase):
     def test_a_page_parses_the_hours_once(self):
         """The hours are grouped once per request, and today is picked
         out of the groups rather than parsed a second time."""
-        rainalert.get_coordinates.cache_clear()
+        geocoding.get_coordinates.cache_clear()
         with mock.patch.object(geocoding.geolocator, "geocode",
                                return_value=FakeLocation()), \
                 mock.patch.object(requests, "get",
@@ -1327,16 +1331,16 @@ class TestCleanDonationUrl(unittest.TestCase):
     """The donation link goes into every page, so it is validated."""
 
     def test_accepts_an_https_link(self):
-        self.assertEqual(rainalert.config.clean_donation_url(DONATION_URL), DONATION_URL)
+        self.assertEqual(config.clean_donation_url(DONATION_URL), DONATION_URL)
 
     def test_trims_surrounding_whitespace(self):
         self.assertEqual(
-            rainalert.config.clean_donation_url(f"  {DONATION_URL}\n"), DONATION_URL)
+            config.clean_donation_url(f"  {DONATION_URL}\n"), DONATION_URL)
 
     def test_empty_and_missing_values_mean_no_link(self):
         for value in ("", "   ", None):
             with self.subTest(value=value):
-                self.assertEqual(rainalert.config.clean_donation_url(value), "")
+                self.assertEqual(config.clean_donation_url(value), "")
 
     def test_rejects_anything_that_is_not_an_absolute_https_link(self):
         for value in (
@@ -1352,7 +1356,7 @@ class TestCleanDonationUrl(unittest.TestCase):
             "https://[broken",
         ):
             with self.subTest(value=value):
-                self.assertEqual(rainalert.config.clean_donation_url(value), "")
+                self.assertEqual(config.clean_donation_url(value), "")
 
 
 class TestDonationLink(AppTestCase):
@@ -1362,20 +1366,20 @@ class TestDonationLink(AppTestCase):
         return self.client.post("/", data={"city": city}).get_data(as_text=True)
 
     def test_no_link_by_default(self):
-        with mock.patch.object(rainalert.config, "DONATION_URL", ""):
+        with mock.patch.object(config, "DONATION_URL", ""):
             for body in (self.client.get("/").get_data(as_text=True), self.post()):
                 self.assertNotIn("buymeacoffee", body)
                 self.assertNotIn("Buy me a coffee", body)
                 self.assertNotIn('class="donate"', body)
 
     def test_start_page_has_the_line_and_the_footer_link(self):
-        with mock.patch.object(rainalert.config, "DONATION_URL", DONATION_URL):
+        with mock.patch.object(config, "DONATION_URL", DONATION_URL):
             body = self.client.get("/").get_data(as_text=True)
         self.assertEqual(body.count(DONATION_HREF), 2)
         self.assertIn('class="donate"', body)
 
     def test_forecast_page_has_the_line_under_the_button_and_the_footer_link(self):
-        with mock.patch.object(rainalert.config, "DONATION_URL", DONATION_URL):
+        with mock.patch.object(config, "DONATION_URL", DONATION_URL):
             body = self.post()
         self.assertEqual(body.count(DONATION_HREF), 2)
         self.assertIn("Saved you from getting wet?", body)
@@ -1387,7 +1391,7 @@ class TestDonationLink(AppTestCase):
         self.assertLess(body.index('class="donate"'), body.index("<footer"))
 
     def test_link_opens_safely_in_a_new_tab(self):
-        with mock.patch.object(rainalert.config, "DONATION_URL", DONATION_URL):
+        with mock.patch.object(config, "DONATION_URL", DONATION_URL):
             body = self.post()
         anchors = [
             part.split(">", 1)[0] for part in body.split("<a ")
@@ -1399,12 +1403,12 @@ class TestDonationLink(AppTestCase):
             self.assertIn('rel="noopener noreferrer"', anchor)
 
     def test_link_is_announced_as_a_donation_that_opens_a_new_tab(self):
-        with mock.patch.object(rainalert.config, "DONATION_URL", DONATION_URL):
+        with mock.patch.object(config, "DONATION_URL", DONATION_URL):
             body = self.post()
         self.assertIn("(donation, opens in a new tab)", body)
 
     def test_the_line_is_on_error_pages_too(self):
-        with mock.patch.object(rainalert.config, "DONATION_URL", DONATION_URL):
+        with mock.patch.object(config, "DONATION_URL", DONATION_URL):
             empty = self.client.post("/", data={"city": ""}).get_data(as_text=True)
             self.mock_geocode.return_value = None
             missing = self.post("Nowhereville")
@@ -1414,14 +1418,14 @@ class TestDonationLink(AppTestCase):
 
     def test_the_line_is_shown_when_there_is_no_forecast(self):
         self.mock_get.return_value = FakeResponse({"daily": {}})
-        with mock.patch.object(rainalert.config, "DONATION_URL", DONATION_URL):
+        with mock.patch.object(config, "DONATION_URL", DONATION_URL):
             body = self.post()
         self.assertIn("No forecast data available", body)
         self.assertIn('class="donate"', body)
 
     def test_an_unsafe_value_in_the_environment_is_ignored(self):
-        self.assertEqual(rainalert.config.clean_donation_url("javascript:alert(1)"), "")
-        with mock.patch.object(rainalert.config, "DONATION_URL", ""):
+        self.assertEqual(config.clean_donation_url("javascript:alert(1)"), "")
+        with mock.patch.object(config, "DONATION_URL", ""):
             self.assertNotIn("javascript:", self.post())
 
 
@@ -1439,19 +1443,19 @@ class TestBuildInfo(AppTestCase):
         return body[start:body.index("</footer>")]
 
     def test_the_version_is_in_the_footer(self):
-        with mock.patch.object(rainalert.config, "APP_VERSION", "0.8"):
+        with mock.patch.object(config, "APP_VERSION", "0.8"):
             body = self.client.get("/").get_data(as_text=True)
         self.assertIn("Version 0.8", self.footer(body))
 
     def test_the_commit_is_in_the_footer_when_there_is_one(self):
-        with mock.patch.object(rainalert.config, "APP_VERSION", "0.8"), \
-                mock.patch.object(rainalert.config, "APP_COMMIT", "1a2b3c4"):
+        with mock.patch.object(config, "APP_VERSION", "0.8"), \
+                mock.patch.object(config, "APP_COMMIT", "1a2b3c4"):
             body = self.client.get("/").get_data(as_text=True)
         self.assertIn("Version 0.8 · build 1a2b3c4", self.footer(body))
 
     def test_no_commit_means_no_build_note(self):
-        with mock.patch.object(rainalert.config, "APP_VERSION", "0.8"), \
-                mock.patch.object(rainalert.config, "APP_COMMIT", ""):
+        with mock.patch.object(config, "APP_VERSION", "0.8"), \
+                mock.patch.object(config, "APP_COMMIT", ""):
             body = self.client.get("/").get_data(as_text=True)
         self.assertIn("Version 0.8", self.footer(body))
         # The word "build" is only in the markup's class name, so it is the
@@ -1459,15 +1463,15 @@ class TestBuildInfo(AppTestCase):
         self.assertNotIn("· build", self.footer(body))
 
     def test_a_development_build_says_so(self):
-        with mock.patch.object(rainalert.config, "APP_VERSION", "dev"), \
-                mock.patch.object(rainalert.config, "APP_COMMIT", ""):
+        with mock.patch.object(config, "APP_VERSION", "dev"), \
+                mock.patch.object(config, "APP_COMMIT", ""):
             body = self.client.get("/").get_data(as_text=True)
         self.assertIn("Version dev", self.footer(body))
 
     def test_the_version_is_on_every_page(self):
         """The forecast page, the city index and the 404 all carry it."""
-        with mock.patch.object(rainalert.config, "APP_VERSION", "0.8"), \
-                mock.patch.object(rainalert.config, "APP_COMMIT", "1a2b3c4"):
+        with mock.patch.object(config, "APP_VERSION", "0.8"), \
+                mock.patch.object(config, "APP_COMMIT", "1a2b3c4"):
             forecast = self.client.post(
                 "/", data={"city": "London"}).get_data(as_text=True)
             cities = self.client.get("/cities").get_data(as_text=True)
@@ -1477,7 +1481,7 @@ class TestBuildInfo(AppTestCase):
 
     def test_the_version_is_below_the_credits(self):
         """It sits under the data credits, where the eye goes last."""
-        with mock.patch.object(rainalert.config, "APP_VERSION", "0.8"):
+        with mock.patch.object(config, "APP_VERSION", "0.8"):
             body = self.client.get("/").get_data(as_text=True)
         self.assertLess(body.index("OpenStreetMap"), body.index("Version 0.8"))
 
@@ -1525,24 +1529,24 @@ class TestReleaseNotes(AppTestCase):
 
     def test_the_page_carries_every_release(self):
         body = self.client.get("/release-notes").get_data(as_text=True)
-        for release in rainalert.RELEASES:
+        for release in releases.RELEASES:
             self.assertIn(release["version"], body)
             self.assertIn(release["name"], body)
 
     def test_the_releases_are_newest_first(self):
-        versions = [release["version"] for release in rainalert.RELEASES]
+        versions = [release["version"] for release in releases.RELEASES]
         self.assertEqual(versions, sorted(versions, reverse=True))
 
     def test_every_release_says_something(self):
         """A release with no points is a heading and nothing else."""
-        for release in rainalert.RELEASES:
+        for release in releases.RELEASES:
             self.assertTrue(release["points"], release["version"])
             for point in release["points"]:
                 self.assertTrue(point.strip(), release["version"])
 
     def test_the_page_says_which_build_is_answering(self):
         """The notes and the footer agree about the running build."""
-        with mock.patch.object(rainalert.config, "APP_VERSION", "0.8"):
+        with mock.patch.object(config, "APP_VERSION", "0.8"):
             body = self.client.get("/release-notes").get_data(as_text=True)
         self.assertIn("Version 0.8", self.footer(body))
         self.assertIn('<span class="notes-version">0.8</span>', body)
@@ -1690,33 +1694,33 @@ class TestAlertThreshold(unittest.TestCase):
     """Which rain chance is worth a notification."""
 
     def test_without_one_the_apps_own_threshold_is_used(self):
-        threshold, personal = rainalert.alert_threshold(None)
-        self.assertEqual(threshold, rainalert.config.UMBRELLA_THRESHOLD)
+        threshold, personal = rain.alert_threshold(None)
+        self.assertEqual(threshold, config.UMBRELLA_THRESHOLD)
         self.assertFalse(personal)
 
     def test_an_empty_threshold_is_the_apps_own(self):
-        threshold, personal = rainalert.alert_threshold("  ")
-        self.assertEqual(threshold, rainalert.config.UMBRELLA_THRESHOLD)
+        threshold, personal = rain.alert_threshold("  ")
+        self.assertEqual(threshold, config.UMBRELLA_THRESHOLD)
         self.assertFalse(personal)
 
     def test_the_readers_own_threshold_is_used_when_there_is_one(self):
-        threshold, personal = rainalert.alert_threshold(40)
+        threshold, personal = rain.alert_threshold(40)
         self.assertEqual(threshold, 40)
         self.assertTrue(personal)
 
     def test_a_threshold_of_zero_is_not_taken_for_missing(self):
         """Zero is a limit like any other, not an absent one."""
-        threshold, personal = rainalert.alert_threshold(0)
+        threshold, personal = rain.alert_threshold(0)
         self.assertEqual(threshold, 0)
         self.assertTrue(personal)
 
     def test_a_nonsense_threshold_falls_back_to_the_apps_own(self):
-        threshold, personal = rainalert.alert_threshold("wet")
-        self.assertEqual(threshold, rainalert.config.UMBRELLA_THRESHOLD)
+        threshold, personal = rain.alert_threshold("wet")
+        self.assertEqual(threshold, config.UMBRELLA_THRESHOLD)
         self.assertFalse(personal)
 
     def test_a_threshold_is_capped_at_a_hundred(self):
-        threshold, _ = rainalert.alert_threshold(150)
+        threshold, _ = rain.alert_threshold(150)
         self.assertEqual(threshold, 100)
 
 
@@ -1728,16 +1732,16 @@ class TestNotificationEvent(unittest.TestCase):
         payload = hourly_payload(chances, now=now)
         hours = parse.parse_forecast(payload).today
         if threshold is None:
-            threshold = rainalert.config.UMBRELLA_THRESHOLD
-        return rainalert.notification_event(
+            threshold = config.UMBRELLA_THRESHOLD
+        return alerts.notification_event(
             hours, threshold, city, personal)
 
     def test_nothing_to_say_about_a_dry_day(self):
         self.assertIsNone(self.event([0] * 24))
 
     def test_nothing_to_say_without_hourly_data(self):
-        self.assertIsNone(rainalert.notification_event(
-            [], rainalert.config.UMBRELLA_THRESHOLD, "London"))
+        self.assertIsNone(alerts.notification_event(
+            [], config.UMBRELLA_THRESHOLD, "London"))
 
     def test_rain_in_the_current_hour_is_worth_saying(self):
         event = self.event([0] * 9 + [80] + [0] * 14)
@@ -1767,8 +1771,8 @@ class TestNotificationEvent(unittest.TestCase):
         payload = hourly_payload(
             [0] * 10 + [None] + [0] * 13, now="2026-10-21T09:00")
         hours = parse.parse_forecast(payload).today
-        self.assertIsNone(rainalert.notification_event(
-            hours, rainalert.config.UMBRELLA_THRESHOLD, "London"))
+        self.assertIsNone(alerts.notification_event(
+            hours, config.UMBRELLA_THRESHOLD, "London"))
 
     def test_the_readers_own_threshold_decides_what_counts(self):
         """A 20% hour is nothing to the app and something to the reader."""
@@ -1819,8 +1823,8 @@ class TestAlertEndpoint(AppTestCase):
 
     def test_it_tells_the_browser_how_often_to_poll(self):
         _, data = self.alert("?city=London")
-        self.assertEqual(data["poll_minutes"], rainalert.config.NOTIFICATION_POLL_MINUTES)
-        self.assertEqual(data["lead_hours"], rainalert.config.NOTIFICATION_LEAD_HOURS)
+        self.assertEqual(data["poll_minutes"], config.NOTIFICATION_POLL_MINUTES)
+        self.assertEqual(data["lead_hours"], config.NOTIFICATION_LEAD_HOURS)
 
     def test_the_readers_own_threshold_is_used_when_it_is_sent(self):
         _, data = self.alert("?city=London&threshold=90")
@@ -1830,7 +1834,7 @@ class TestAlertEndpoint(AppTestCase):
 
     def test_without_a_threshold_the_apps_own_is_used(self):
         _, data = self.alert("?city=London")
-        self.assertEqual(data["threshold"], rainalert.config.UMBRELLA_THRESHOLD)
+        self.assertEqual(data["threshold"], config.UMBRELLA_THRESHOLD)
         self.assertFalse(data["personal_threshold"])
 
     def test_an_unknown_city_is_reported(self):
@@ -2300,22 +2304,22 @@ class TestAttribution(AppTestCase):
         self.assertIn("OpenStreetMap", body)
 
     def test_credits_are_on_the_start_page(self):
-        with mock.patch.object(rainalert.config, "DONATION_URL", ""):
+        with mock.patch.object(config, "DONATION_URL", ""):
             self.assert_credits(self.client.get("/").get_data(as_text=True))
 
     def test_credits_are_on_the_forecast_page(self):
-        with mock.patch.object(rainalert.config, "DONATION_URL", ""):
+        with mock.patch.object(config, "DONATION_URL", ""):
             body = self.client.post("/", data={"city": "London"}).get_data(as_text=True)
         self.assert_credits(body)
 
     def test_credits_are_on_error_pages(self):
-        with mock.patch.object(rainalert.config, "DONATION_URL", ""):
+        with mock.patch.object(config, "DONATION_URL", ""):
             body = self.client.post("/", data={"city": ""}).get_data(as_text=True)
         self.assertIn('class="error"', body)
         self.assert_credits(body)
 
     def test_credits_are_in_the_footer_and_open_safely(self):
-        with mock.patch.object(rainalert.config, "DONATION_URL", ""):
+        with mock.patch.object(config, "DONATION_URL", ""):
             body = self.client.get("/").get_data(as_text=True)
         footer = body[body.index("<footer"):body.index("</footer>")]
         self.assertIn("open-meteo.com", footer)
@@ -2592,7 +2596,7 @@ class TestSearchEngineOptimisation(AppTestCase):
 
     def test_the_sitemap_names_every_curated_city(self):
         body = self.body("/sitemap.xml")
-        for slug, _name in rainalert.CURATED_CITIES:
+        for slug, _name in cities.CURATED_CITIES:
             self.assertIn(f"<loc>https://rainalert.live/city/{slug}</loc>",
                           body)
 
@@ -2740,16 +2744,16 @@ class TestApiDocumentation(unittest.TestCase):
         """The reference quotes the defaults, so they have to be the ones
         the app actually uses."""
         reference = self.read("API.md")
-        self.assertIn(f"`UMBRELLA_THRESHOLD` | `{rainalert.config.UMBRELLA_THRESHOLD}`",
+        self.assertIn(f"`UMBRELLA_THRESHOLD` | `{config.UMBRELLA_THRESHOLD}`",
                       reference)
         self.assertIn(f"`NOTIFICATION_POLL_MINUTES` | "
-                      f"`{rainalert.config.NOTIFICATION_POLL_MINUTES}`", reference)
+                      f"`{config.NOTIFICATION_POLL_MINUTES}`", reference)
         self.assertIn(f"`NOTIFICATION_LEAD_HOURS` | "
-                      f"`{rainalert.config.NOTIFICATION_LEAD_HOURS}`", reference)
-        self.assertIn(f"`SEVERITY_LOW_MAX` | `{rainalert.config.SEVERITY_LOW_MAX}`",
+                      f"`{config.NOTIFICATION_LEAD_HOURS}`", reference)
+        self.assertIn(f"`SEVERITY_LOW_MAX` | `{config.SEVERITY_LOW_MAX}`",
                       reference)
         self.assertIn(f"`SEVERITY_MODERATE_MAX` | "
-                      f"`{rainalert.config.SEVERITY_MODERATE_MAX}`", reference)
+                      f"`{config.SEVERITY_MODERATE_MAX}`", reference)
 
     def test_the_documented_thresholds_are_the_real_ones(self):
         """The reference states the bands in words, and so does the app.
@@ -2759,10 +2763,10 @@ class TestApiDocumentation(unittest.TestCase):
         that depended on where the wrap fell would be a nuisance.
         """
         reference = " ".join(self.read("API.md").split())
-        self.assertIn(f"default **{rainalert.config.UMBRELLA_THRESHOLD}**", reference)
-        self.assertIn(f"default **{rainalert.config.NOTIFICATION_POLL_MINUTES}**",
+        self.assertIn(f"default **{config.UMBRELLA_THRESHOLD}**", reference)
+        self.assertIn(f"default **{config.NOTIFICATION_POLL_MINUTES}**",
                       reference)
-        self.assertIn(f"default **{rainalert.config.NOTIFICATION_LEAD_HOURS}**",
+        self.assertIn(f"default **{config.NOTIFICATION_LEAD_HOURS}**",
                       reference)
 
 
