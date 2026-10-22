@@ -14,6 +14,7 @@ from unittest import mock
 import requests
 
 import app as rainalert
+from rainalert import calendar_ics
 
 
 FORECAST_PAYLOAD = {
@@ -1827,31 +1828,50 @@ class TestCalendarFile(unittest.TestCase):
 
     def test_the_text_of_a_value_is_escaped(self):
         """A comma would otherwise split the value in two."""
-        self.assertEqual(rainalert.calendar_escape("a,b"), "a\\,b")
-        self.assertEqual(rainalert.calendar_escape("a;b"), "a\\;b")
-        self.assertEqual(rainalert.calendar_escape("a\\b"), "a\\\\b")
-        self.assertEqual(rainalert.calendar_escape("a\nb"), "a\\nb")
+        self.assertEqual(calendar_ics.calendar_escape("a,b"), "a\\,b")
+        self.assertEqual(calendar_ics.calendar_escape("a;b"), "a\\;b")
+        self.assertEqual(calendar_ics.calendar_escape("a\\b"), "a\\\\b")
+        self.assertEqual(calendar_ics.calendar_escape("a\nb"), "a\\nb")
 
     def test_a_long_line_is_folded(self):
         """A content line may not be longer than 75 octets."""
-        folded = rainalert.calendar_fold("x" * 200)
+        folded = calendar_ics.calendar_fold("x" * 200)
         for line in folded.split("\r\n"):
             self.assertLessEqual(len(line.encode("utf-8")), 75)
         self.assertTrue(folded.split("\r\n")[1].startswith(" "))
 
     def test_a_short_line_is_left_alone(self):
-        self.assertEqual(rainalert.calendar_fold("SUMMARY:Rain"), "SUMMARY:Rain")
+        self.assertEqual(calendar_ics.calendar_fold("SUMMARY:Rain"), "SUMMARY:Rain")
 
     def test_a_name_with_an_umlaut_is_not_cut_in_half(self):
         """The length is counted in octets, not in characters."""
-        folded = rainalert.calendar_fold("SUMMARY:München" * 10)
+        folded = calendar_ics.calendar_fold("SUMMARY:München" * 10)
         for line in folded.split("\r\n"):
             self.assertLessEqual(len(line.encode("utf-8")), 75)
         self.assertIn("München", folded)
 
+    def test_the_event_ids_never_change(self):
+        """Importing the file again has to update the same events.
+
+        The id is built from ``calendar_slug``, which does not fold accents
+        the way the address slug does. That difference is load-bearing: an
+        id that changed would make a reader's calendar add a second copy of
+        every event instead of updating the first.
+        """
+        forecast = [{"iso_date": "2026-10-21", "chance": 80,
+                     "chance_number": 80, "severity": "high",
+                     "date": "Wednesday 21.10.2026"}]
+        for city, uid in (
+                ("São Paulo", "rainalert-s-o-paulo-20261021@rainalert.live"),
+                ("Washington, D.C.",
+                 "rainalert-washington-d-c-20261021@rainalert.live"),
+                ("London", "rainalert-london-20261021@rainalert.live")):
+            body = calendar_ics.build_calendar(forecast, city, 50)
+            self.assertIn(f"UID:{uid}\r\n", body)
+
     def test_a_date_becomes_an_icalendar_date(self):
-        self.assertEqual(rainalert.calendar_day("2026-10-21"), "20261021")
-        self.assertEqual(rainalert.calendar_next_day("2026-10-21"), "20261022")
+        self.assertEqual(calendar_ics.calendar_day("2026-10-21"), "20261021")
+        self.assertEqual(calendar_ics.calendar_next_day("2026-10-21"), "20261022")
 
     def test_the_day_after_a_month_is_the_first_of_the_next(self):
         """The end of an all-day event is the start of the next day.
@@ -1859,28 +1879,28 @@ class TestCalendarFile(unittest.TestCase):
         A month or a year has to roll over, and a leap day has to be
         counted, or the event covers the wrong days.
         """
-        self.assertEqual(rainalert.calendar_next_day("2026-10-31"), "20261101")
-        self.assertEqual(rainalert.calendar_next_day("2026-12-31"), "20270101")
-        self.assertEqual(rainalert.calendar_next_day("2028-02-28"), "20280229")
-        self.assertEqual(rainalert.calendar_next_day("2026-02-28"), "20260301")
+        self.assertEqual(calendar_ics.calendar_next_day("2026-10-31"), "20261101")
+        self.assertEqual(calendar_ics.calendar_next_day("2026-12-31"), "20270101")
+        self.assertEqual(calendar_ics.calendar_next_day("2028-02-28"), "20280229")
+        self.assertEqual(calendar_ics.calendar_next_day("2026-02-28"), "20260301")
 
     def test_an_unreadable_date_is_left_out(self):
-        self.assertEqual(rainalert.calendar_day("not a date"), "")
-        self.assertEqual(rainalert.calendar_next_day("not a date"), "")
+        self.assertEqual(calendar_ics.calendar_day("not a date"), "")
+        self.assertEqual(calendar_ics.calendar_next_day("not a date"), "")
 
     def test_the_file_name_is_safe(self):
-        self.assertEqual(rainalert.calendar_slug("London, England"), "london-england")
-        self.assertEqual(rainalert.calendar_slug("../../etc/passwd"), "etc-passwd")
-        self.assertEqual(rainalert.calendar_slug(""), "forecast")
+        self.assertEqual(calendar_ics.calendar_slug("London, England"), "london-england")
+        self.assertEqual(calendar_ics.calendar_slug("../../etc/passwd"), "etc-passwd")
+        self.assertEqual(calendar_ics.calendar_slug(""), "forecast")
 
     def test_the_calendar_has_a_header_and_a_footer(self):
-        text = rainalert.build_calendar([], "London", 50)
+        text = calendar_ics.build_calendar([], "London", 50)
         self.assertTrue(text.startswith("BEGIN:VCALENDAR\r\n"))
         self.assertTrue(text.endswith("END:VCALENDAR\r\n"))
 
     def test_the_lines_end_with_carriage_returns(self):
         """A calendar file is read line by line, and the lines end in CRLF."""
-        text = rainalert.build_calendar([], "London", 50)
+        text = calendar_ics.build_calendar([], "London", 50)
         self.assertIn("\r\n", text)
         self.assertNotIn("\n\n", text)
         for line in text.split("\r\n")[:-1]:
@@ -1893,7 +1913,7 @@ class TestCalendarFile(unittest.TestCase):
         out of what the page says, so a long city name can make any of
         them long.
         """
-        text = rainalert.build_calendar(
+        text = calendar_ics.build_calendar(
             [{"iso_date": "2026-10-21", "date": "Wednesday 21.10.2026",
               "chance": 80, "chance_number": 80, "severity": "high"}],
             "München, Bayern, Deutschland", 50)
