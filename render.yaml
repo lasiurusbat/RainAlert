@@ -15,7 +15,11 @@
 #       name: <credential name>
 services:
   - type: web
-    name: rainalert
+    # The live service's name. It is not plain "rainalert" because an older
+    # service already held that name when this Blueprint was applied, and
+    # Render made this one "rainalert-1-0". The domain points at this
+    # service, so renaming it would mean changing the DNS as well.
+    name: rainalert-1-0
     runtime: image
     plan: free
     image:

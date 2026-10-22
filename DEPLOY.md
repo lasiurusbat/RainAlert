@@ -1,35 +1,32 @@
 # Deploying RainAlert to Render (free) at rainalert.live
 
-**The site is live, on a Render address rather than on its own domain.**
-The Docker half has been exercised for real: the image builds, both test
-suites pass inside it, and a forecast renders with English weekday names.
-The CI workflow itself has run and is green on every push to `main`. The
-**tag-gated half has fired** — `v1.0` was cut on 2026-10-22 — and the
-image it built **has been pushed to Docker Hub**. The service was deployed
-by hand, because the deploy hook secret was not set.
+**The site is live at <https://rainalert.live/>.** The Docker half has been
+exercised for real: the image builds, both test suites pass inside it, and
+a forecast renders with English weekday names. The CI workflow itself has
+run and is green on every push to `main`. The **tag-gated half has fired**
+— `v1.0` was cut on 2026-10-22 — the image it built **has been pushed to
+Docker Hub**, and the deploy hook has put it on the service.
 
 State of the world, checked on 2026-10-22:
 
-- **The first release tag exists** (`v1.0`, on `main`), and the workflow
-  has run its push-and-deploy half. The run is to be repeated with the
-  deploy hook set; the tag does not have to be cut again.
+- **The first release tag exists** (`v1.0`, on `main`), and the workflow's
+  push-and-deploy half has run **green**, on its fifth attempt. The
+  earlier four failed at the Docker Hub login, the Docker Hub push, the
+  browser suite and the deploy hook, in that order; the causes are in
+  "Known limits" below.
 - **The Docker Hub repository `lasiurusbat/rainalert` is public and has
   one tag**: `1.0`, pushed on 2026-10-22, which is the image `render.yaml`
   points at.
-- **The app answers at <https://rainalert-1-0.onrender.com/>** — the real
-  page, on the `1.0` image, with the footer reading "Version 1.0 · build
-  7265a18". The service took the name `rainalert-1-0` because
-  `rainalert` was already taken.
+- **The app answers at <https://rainalert.live/>** — the real page, on the
+  `1.0` image, with the footer reading "Version 1.0 · build 7265a18".
+  `http://` redirects to `https://`.
+- **The service is named `rainalert-1-0`**, because an older service
+  already held the name `rainalert`.
 - **A Render service named `rainalert` answers at
   <https://rainalert.onrender.com>, and it is not this app.** Its `/`
   returns the JSON `{"message": "Rain Alert API is running 🌂", "status":
   "ok"}`; this app's `/` renders the HTML page. It is a minimal service
   that happens to share the name, and it should be deleted.
-- **`rainalert.live` is on Namecheap URL forwarding and answers nothing.**
-  `http://rainalert.live/` answers `302` with `X-Served-By: Namecheap
-  URL Forward` and points at `http://www.rainalert.live/`, whose A record
-  is `0.0.0.0` — so the second hop answers nothing, and `https://` on the
-  root does not answer at all. No Render address is in the DNS.
 
 The order matters: the image has to exist on Docker Hub before Render can
 pull it, and the domain has to be attached before the workflow's smoke test
@@ -145,12 +142,20 @@ page:
   [Google Search Console](https://search.google.com/search-console) and in
   [Bing Webmaster Tools](https://www.bing.com/webmasters). Both are free
   and both want the sitemap, not a verification tag in the markup.
-- Confirm that `https://rainalert.live/city/atlantis` answers `404` and not
-  `200`. A page that says "not found" but answers `200` is a soft 404, and
-  search engines treat it as one.
+- Confirm that a city's address the geocoder does not know answers `404`
+  and not `200`. A page that says "not found" but answers `200` is a soft
+  404, and search engines treat it as one. **Do not use a made-up name
+  for this check that happens to be a real place**: `/city/atlantis`
+  answers `200`, correctly — there is an Atlantis in New Jersey, and the
+  geocoder finds it. A name no geocoder has, such as `/city/zzzqxkvv`,
+  answers `404`.
 - Confirm that `https://rainalert.live/city/---` answers `404` too. An
   address made only of punctuation stands for no city, so there is no
   page there and no redirect to one.
+
+All of the above were checked on 2026-10-22, on the live domain, and all
+of it behaves as written. The only thing left is to submit the sitemap to
+the two search engines, and to delete the old stub service.
 
 ## 4. Optional
 
@@ -278,17 +283,29 @@ and the forecast is right, and only the styles are old. The rule is
 
 ### Known limits
 
-- **Not run yet.** The image builds and the tests pass inside it locally,
-  and the CI workflow runs green on every push to `main`, but the tag-gated
-  half — the push and the deploy — has never executed. Expect to fix small
-  things on the first release, and use a throwaway tag for it. The image
-  `lasiurusbat/rainalert:1.0` does not exist on Docker Hub yet, so section 1
-  is still ahead.
-- **The smoke test will fail on the first release.** It hits
-  `https://rainalert.live/`, which still answers nothing while the domain
-  is on Namecheap forwarding. The deploy can succeed and the run still ends
-  red. Attach the domain first, or read the failed smoke test as "the
-  domain is not attached yet" rather than "the deploy broke".
+- **The first release took five attempts**, and the causes are worth
+  knowing, because each one is a step of the pipeline rather than a fault
+  in the app: the Docker Hub secrets were not set (attempt 1), the token
+  had the Read scope and a push needs Read & Write (attempt 2), the
+  browser suite flaked on a service-worker wait that was waiting for the
+  wrong thing (attempt 3), and the deploy hook secret was not set
+  (attempt 4). Attempt 5 was green from end to end.
+- **The smoke test is a real check, and it can fail honestly.** It hits
+  `https://rainalert.live/` and greps the answer for `Version <tag>`, so
+  it proves the new build is the one answering and not an old one. On the
+  first release it could not pass, because the domain was still on
+  Namecheap forwarding and answered nothing; the deploy had succeeded and
+  the run still ended red. If it fails now, read it as "the domain is not
+  answering with the new build" — look at the live footer — rather than
+  "the deploy broke".
+- **A resolver can still hold the old forwarding record.** The domain used
+  to be on Namecheap URL forwarding, and a local resolver can keep
+  answering with the forwarder's address long after the records changed.
+  The connection then times out, which looks exactly like the site being
+  gone. Ask a public resolver what the domain is
+  (`nslookup rainalert.live 1.1.1.1`) before believing that; a CNAME to
+  `rainalert-1-0.onrender.com` and `216.24.57.16` are the right answers.
+  `ipconfig /flushdns` clears the local cache.
 - **Action versions are not verified as the latest.** The workflow uses
   `actions/checkout@v4`, `docker/setup-buildx-action@v3`,
   `docker/build-push-action@v6` and `docker/login-action@v3`.

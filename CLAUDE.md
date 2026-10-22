@@ -8,14 +8,13 @@ Enter a city name → geocoded to coordinates via **Nominatim** (OpenStreetMap) 
 Both APIs are free, keyless, and need no signup. There is no database and no
 user account system.
 
-**The app is deployed, but not on its own domain.** It answers at
-<https://rainalert-1-0.onrender.com/> — the real page, on the `1.0` image
-— and the image is on Docker Hub. The domain `rainalert.live` is still on
-Namecheap forwarding and points nowhere, so the site is reachable but not
-at the address it claims. The first release tag (`v1.0`) was cut on
-2026-10-22 and the image it built was pushed; the deploy was done by hand
-because the workflow's deploy hook was never set. `DEPLOY.md` is the
-runbook, and the "Still to do" section below is the list of what is
+**The app is deployed and live at <https://rainalert.live/>.** It runs
+from the `1.0` image on Docker Hub, on a Render service, and the domain
+is attached to it: `http://` redirects to `https://`, and every route
+answers. The first release tag (`v1.0`) was cut on 2026-10-22, the image
+it built was pushed, and the workflow's deploy hook has deployed it. It
+also runs locally, from `python app.py` or `docker compose up`. `DEPLOY.md`
+is the runbook, and the "Still to do" section below is the list of what is
 actually ahead.
 
 ## Running it
@@ -71,35 +70,35 @@ gets none of them, because the offline suite asserts the app's own defaults.
 
 ## Deployment status
 
-**The app is live, on a Render address rather than on the domain.**
-Checked on 2026-10-22:
+**The app is live at <https://rainalert.live/>.** Checked on 2026-10-22:
 
-- **The app answers at <https://rainalert-1-0.onrender.com/>.** It serves
-  the real page — the start page, and a city's page with a live forecast
-  from both upstreams — and its footer reads "Version 1.0 · build
-  7265a18", which is the commit the `v1.0` tag points at. The service was
-  created from the Blueprint and took the name `rainalert-1-0` because
-  `rainalert` was already taken.
+- **The domain is attached to the service and answers.** `rainalert.live`
+  is a CNAME to `rainalert-1-0.onrender.com` and on to
+  `gcp-us-west1-1.origin.onrender.com`, resolving to `216.24.57.16` and
+  `216.24.57.18`. `http://` answers `301` to `https://`; `https://` answers
+  `200` with the real page, and a city's page with a live forecast from
+  both upstreams. The footer reads "Version 1.0 · build 7265a18", which is
+  the commit the `v1.0` tag points at, so the build that is answering is
+  the build that was released.
+- **Every route answers on the live domain**: the start page, `/cities`,
+  `/release-notes`, `/robots.txt`, `/sitemap.xml`, `/manifest.json`,
+  `/service-worker.js`, `/api/alert`, `/calendar.ics`, a city's page, and
+  a `404` for an address that is not on the site. Each page's canonical
+  link is its own address under `https://rainalert.live/`, which is what
+  `SITE_URL` says.
 - **The image is on Docker Hub.** `lasiurusbat/rainalert:1.0` was pushed
   on 2026-10-22 and is the repository's first tag.
+- **The service is named `rainalert-1-0`**, because an older service
+  already held the name `rainalert`.
 - **The old stub service is still there.** A service named `rainalert`
   answers at <https://rainalert.onrender.com> and returns the JSON
   `{"message": "Rain Alert API is running 🌂", "status": "ok"}`. It is not
   this app, it never was, and it should be deleted so that the two
   addresses cannot be confused.
-- **`rainalert.live` still points nowhere useful.** The domain is at
-  Namecheap with URL forwarding: `http://rainalert.live/` answers `302`
-  from the Namecheap forwarder and points at `http://www.rainalert.live/`,
-  whose own A record is `0.0.0.0` — so the second hop answers nothing,
-  and `https://` on the root does not answer at all. No Render address
-  appears in the DNS at all. **The live page's canonical link and its
-  `og:url` already point at `https://rainalert.live/`**, because that is
-  what `SITE_URL` says, so the domain has to move before the site is
-  right in every other way too.
 
-**The first release tag has been cut, and the run it triggered took four
-attempts.** `v1.0` points at `7265a18` on `main`, and the tag-gated half
-of the workflow has now run, so the machinery is not untested:
+**The first release ran, and it took five attempts.** `v1.0` points at
+`7265a18` on `main`, and the tag-gated half of the workflow has now run
+green, so the machinery is not untested:
 
 - **Attempt 1 failed at the Docker Hub login.** The `DOCKERHUB_USERNAME`
   and `DOCKERHUB_TOKEN` secrets were not set, so the login step had
@@ -122,34 +121,27 @@ of the workflow has now run, so the machinery is not untested:
   failed on `curl: (3) URL rejected: Bad hostname`, because the
   `RENDER_DEPLOY_HOOK_URL` secret is not set: the hook URL was empty. The
   service was deployed by hand instead.
+- **Attempt 5 is green, end to end.** The hook secret was set — from the
+  service that runs the image, since a hook is per-service — and the
+  deploy job was re-run. It called the hook with the image URL, Render
+  pulled and started the image, and the smoke test found "Version 1.0" on
+  the live domain. The deploy job's smoke test greps the live page for
+  `Version <tag>`, so it proves the new build is the one answering and not
+  an old one.
 
 **Changing the image in Render does not deploy anything.** An image-backed
 service is never redeployed automatically, because auto-deploy only
 applies to Git-connected services. Saving a new image URL in the service's
 settings changes what the *next* deploy will pull and nothing else. The
 deploy is a separate action: **Deploys → Manual Deploy → Deploy latest
-reference**, or the deploy hook.
+reference**, or the deploy hook. The hook is what the workflow calls, and
+it is what makes a release a release.
 
 ### Still to do
 
-- [ ] Take the deploy hook from the **new** service
-      (`rainalert-1-0`), not from the old stub, and set it as the
-      `RENDER_DEPLOY_HOOK_URL` repository secret. It is in the service's
-      Settings, under "Deploy hook". The `v1.0` deploy job can then be
-      re-run — the image is already pushed, so only that job has to run
-      again, and the tag does not have to be moved.
 - [ ] Delete the old stub service `rainalert`, so that
       `rainalert.onrender.com` stops answering with JSON and only one
-      service answers under that name.
-- [ ] Point the domain at Render: add `rainalert.live` to the **new**
-      service, then replace the Namecheap forwarding records with the DNS
-      records Render gives, and verify HTTPS. The live page's canonical
-      link already claims that address.
-- [ ] Re-check the smoke test in the workflow: it greps the live page for
-      `Version <tag>`, so it proves the new build is the one answering and
-      not an old one. **It will fail while the domain is still on
-      Namecheap forwarding**, so the release ends red even when the deploy
-      itself worked.
+      service answers under that name. Nothing depends on it.
 
 ## Layout
 
@@ -1060,11 +1052,17 @@ because the app works without it.
 - **`rainalert.onrender.com` is not this app.** It answers with a JSON
   `{"message": "Rain Alert API is running", "status": "ok"}`; this app's `/`
   renders HTML. Do not read a 200 from that URL as "the site is up" — check
-  for the HTML page, or a `Forecast for …` heading.
-- **The domain is on Namecheap URL forwarding, not on Render.** The
-  forwarding 302s to a `www` host whose A record is `0.0.0.0`, so the site
-  does not answer at all. DNS has to be changed before the domain works,
-  and the workflow's smoke test fails until it is.
+  for the HTML page, or a `Forecast for …` heading. The app's own address
+  is `https://rainalert.live/`.
+- **A resolver that still holds the old forwarding record will say the
+  site is down when it is not.** The domain used to be on Namecheap URL
+  forwarding, and a local resolver can keep answering with the forwarder's
+  address for a long time after the records have changed — the connection
+  then times out, which looks exactly like the site being gone. Ask a
+  public resolver what the domain is (`nslookup rainalert.live 1.1.1.1`)
+  before believing that the site has gone down; a CNAME to
+  `rainalert-1-0.onrender.com` and `216.24.57.16` are the right answers.
+  `ipconfig /flushdns` clears the local cache.
 - **Open-Meteo has gone down before** (TCP 443 unreachable while DNS still
   resolved). When the forecast endpoint fails, the app correctly shows "The
   weather service is unavailable right now" — that is the app behaving

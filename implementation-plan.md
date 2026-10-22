@@ -5,17 +5,18 @@ the repository. Unchecked items (`[ ]`) are open. Items marked **(verify)** may
 already be done, but nothing in the repository proves it, so they stay open
 until confirmed.
 
-Live site: <https://rainalert.live> — **planned, not live.** Image:
-`lasiurusbat/rainalert` (repository exists, no tags). Repository:
+Live site: <https://rainalert.live> — **live**, on the `1.0` image. Image:
+`lasiurusbat/rainalert` (one tag, `1.0`). Repository:
 <https://github.com/lasiurusbat/RainAlert>.
 
 ## 1. Where we are
 
 The app works locally, is containerised, has a CI/CD pipeline and Dependabot
-committed and pushed to GitHub, and has a deployment runbook. No release tag
-exists yet, no image has been pushed, and the domain answers nothing, so
-**the app is local-only** — it reaches nobody who is not already looking at
-the page. Tier 1 of the alert ideas is complete: the page colour-codes rain
+committed and pushed to GitHub, and has a deployment runbook. The first
+release tag exists (`v1.0`), the image it built is on Docker Hub, the
+deploy hook has put it on Render, and the domain is attached — so **the
+app is online** and its address is the one it claims. Tier 1 of the alert
+ideas is complete: the page colour-codes rain
 risk, shows an hour-by-hour strip for today with a "bring an umbrella"
 summary, leads with a one-line headline, and renames the browser tab and
 swaps the favicon when rain is coming. Tier 2 is also built: the reader's
@@ -86,11 +87,11 @@ These steps use accounts and dashboards I cannot see from the repository.
 
 - [x] Docker Hub: create an access token with Read & Write scope. Done 2026-10-22: the `lasiurusbat/rainalert` repository is public and has **one tag**, `1.0`, pushed by the `v1.0` run.
 - [ ] **(verify)** GitHub secrets set: `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN` are set; `RENDER_DEPLOY_HOOK_URL` is not.
-- [x] Render: the app answers at <https://rainalert-1-0.onrender.com/> on the `1.0` image, with the footer reading "Version 1.0 · build 7265a18". It took that name because `rainalert` was taken.
+- [x] Render: the app answers at <https://rainalert.live/> on the `1.0` image, with the footer reading "Version 1.0 · build 7265a18". The service is named `rainalert-1-0` because an older service already held the name `rainalert`.
 - [ ] Delete the old stub service `rainalert` at <https://rainalert.onrender.com>, which serves a JSON stub (`{"message": "Rain Alert API is running", "status": "ok"}`) rather than this app.
 - [ ] Take the deploy hook from the **new** service and add it as the `RENDER_DEPLOY_HOOK_URL` secret, so the workflow can deploy by itself. Render's own docs list deploy hooks on the free Hobby plan, so there is one to copy.
 - [x] Note the order: the image must exist on Docker Hub before Render can pull it, or the first deploy fails. It did.
-- [ ] **(verify)** Domain: `rainalert.live` added in Render, the Namecheap URL-forwarding records replaced, DNS records added, verified, HTTPS working. Confirmed 2026-10-22: the domain is on Namecheap forwarding and answers nothing — it 302s to a `www` host whose A record is `0.0.0.0`.
+- [x] **(verify)** Domain: `rainalert.live` added in Render, the Namecheap URL-forwarding records replaced, DNS records added, HTTPS working. Confirmed 2026-10-22: the domain is a CNAME to `rainalert-1-0.onrender.com`, `http://` answers `301` to `https://`, and every route on the live address answers.
 - [ ] GitHub: protect `main`, require the `build-test-push` check, optionally add a reviewer to the `production` environment
 - [ ] Review and merge (or close) the open Dependabot pull request once its checks pass
 - [x] Cut the first release: tag `v1.0` on `main` and push it. Done 2026-10-22.

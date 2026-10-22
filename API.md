@@ -6,7 +6,7 @@ of HTML pages and two install-related files. Everything is keyless, there is no
 authentication, no account and no database.
 
 - **Base URL (local):** `http://127.0.0.1:5000`
-- **Base URL (production):** not live yet — see the note at the end
+- **Base URL (production):** `https://rainalert.live`
 - **Machine-readable spec:** [`openapi.yaml`](openapi.yaml) (OpenAPI 3.1)
 - **Implementation:** the routes are in [`rainalert/web/`](rainalert/web/); [`app.py`](app.py) is the entry point
 
@@ -533,12 +533,12 @@ The forecast.
 
 ## Deployment status
 
-**The API is not live.** `rainalert.live` does not serve this app: the domain
-is on Namecheap URL forwarding, and no deploy has been requested even
-though the image is on Docker Hub. Every URL
-above is a local one. `DEPLOY.md`
-is the runbook, and the release is the step that makes any of it
-public.
+**The API is live** at `https://rainalert.live`. Every URL above can be
+asked of that address — the API endpoints, the calendar export, and the
+pages. `https://rainalert.live/api/alert?city=Berlin` answers with the
+alert JSON, and the same paths on a local run answer the same way.
 
 Note that `https://rainalert.onrender.com` is **not** this app — it answers
-with a JSON stub. A `200` from that URL is not "the site is up".
+with a JSON stub. A `200` from that URL is not "the site is up". The
+app's own address is `https://rainalert.live/`, and `DEPLOY.md` is the
+runbook.
