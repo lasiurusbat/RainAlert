@@ -3,21 +3,19 @@
 These tests hit the network, so they are skipped unless the upstream is
 reachable. Run them explicitly with::
 
-    python -m unittest test_api -v
+    python -m unittest tests.test_api -v
 
-The offline unit tests in ``test_app.py`` are the ones that gate changes.
+The offline suite in ``tests/offline/`` is the one that gates changes.
 """
 
 import unittest
 
 import requests
 
-import app as rainalert
-from rainalert import config
-from rainalert import errors
-from rainalert.upstream import geocoding
+from app import app
+from rainalert import config, errors
+from rainalert.upstream import geocoding, open_meteo
 from rainalert.web import common
-from rainalert.upstream import open_meteo
 
 
 class TestLiveOpenMeteo(unittest.TestCase):
@@ -115,7 +113,7 @@ class TestLiveCalendarExport(unittest.TestCase):
 
     def setUp(self):
         geocoding.get_coordinates.cache_clear()
-        self.client = rainalert.app.test_client()
+        self.client = app.test_client()
 
     def test_the_export_is_a_calendar_file(self):
         response = self.client.get("/calendar.ics?city=London&threshold=0")

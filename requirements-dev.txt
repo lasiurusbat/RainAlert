@@ -6,7 +6,7 @@
 # dependencies and installs no system packages.
 #
 #   pip install -r requirements-dev.txt
-#   python -m unittest test_browser
+#   python -m unittest tests.test_browser
 #
 # The suite skips itself when selenium or Chrome is missing, so this file is
 # optional: it is only needed to actually run the browser tests.

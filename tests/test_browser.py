@@ -3,13 +3,13 @@
 The saved city and the personal alert threshold live in the browser's
 localStorage, so the HTTP test client cannot see them. These tests drive
 headless Chrome against the real app, with the upstream services mocked at
-the HTTP boundary exactly as test_app.py does, so they need no network
+the HTTP boundary exactly as the offline suite does, so they need no network
 either.
 
 They need Chrome and the selenium package. Neither is in the container
 image, so the whole suite skips when either is missing:
 
-    python -m unittest test_browser
+    python -m unittest tests.test_browser
 
 A skipped suite is a suite that tested nothing, and it still reports
 success. That is fine on a developer machine, where a missing Chrome is
@@ -47,8 +47,9 @@ REQUIRE_BROWSER = os.environ.get("RAINALERT_REQUIRE_BROWSER", "").lower() in {
 import requests
 from werkzeug.serving import WSGIRequestHandler, make_server
 
-import app as rainalert
+from app import app
 from rainalert.upstream import geocoding
+from tests.fixtures import FakeLocation, FakeResponse
 
 
 # A week with a wet start, a dry middle and one day the service reports no
@@ -155,12 +156,6 @@ FULL_PAYLOAD = {
 }
 
 
-class FakeLocation:
-    latitude = 51.5074
-    longitude = -0.1278
-    raw = {"display_name": "London, England, UK"}
-
-
 # A forecast with rain in the next hour: the hour after the current one
 # (09:00) is at 80%, so there is something worth telling the reader about.
 WET_PAYLOAD = {
@@ -178,21 +173,6 @@ WET_PAYLOAD = {
     "current": {"time": "2026-10-21T09:00"},
     "utc_offset_seconds": 3600,
 }
-
-
-class FakeResponse:
-    def __init__(self, payload=None, status_code=200):
-        self._payload = payload if payload is not None else FORECAST_PAYLOAD
-        self.status_code = status_code
-        self.text = ""
-
-    def raise_for_status(self):
-        if self.status_code >= 400:
-            import requests
-            raise requests.HTTPError(f"HTTP {self.status_code}", response=self)
-
-    def json(self):
-        return self._payload
 
 
 #: Every connection the recording handler has taken, whichever server
@@ -260,11 +240,11 @@ class BrowserServerMixin:
         cls.geocode_patcher = mock.patch.object(
             geocoding.geolocator, "geocode", return_value=FakeLocation())
         cls.get_patcher = mock.patch.object(
-            requests, "get", return_value=FakeResponse())
+            requests, "get", return_value=FakeResponse(FORECAST_PAYLOAD))
         cls.mock_geocode = cls.geocode_patcher.start()
         cls.mock_get = cls.get_patcher.start()
 
-        cls.server = make_server("127.0.0.1", 0, rainalert.app, threaded=True,
+        cls.server = make_server("127.0.0.1", 0, app, threaded=True,
                                  request_handler=cls.request_handler)
         cls.port = cls.server.server_port
         cls.base = f"http://127.0.0.1:{cls.port}"
@@ -283,7 +263,7 @@ class BrowserServerMixin:
         # The mocks are class-wide, so a test that breaks the geocoder has
         # to put it back before the next one runs.
         self.mock_geocode.return_value = FakeLocation()
-        self.mock_get.return_value = FakeResponse()
+        self.mock_get.return_value = FakeResponse(FORECAST_PAYLOAD)
         self.driver.get(self.base + "/")
         self.driver.execute_script(
             "window.localStorage.clear(); window.sessionStorage.clear();")
@@ -1051,7 +1031,7 @@ class OfflineBrowserTestCase(BrowserServerMixin, unittest.TestCase):
     @classmethod
     def bring_the_server_back(cls):
         cls.server = make_server(
-            "127.0.0.1", cls.port, rainalert.app, threaded=True,
+            "127.0.0.1", cls.port, app, threaded=True,
             request_handler=cls.request_handler)
         cls.thread = threading.Thread(
             target=cls.server.serve_forever, daemon=True)

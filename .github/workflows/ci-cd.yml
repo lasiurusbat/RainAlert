@@ -86,7 +86,7 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Run offline tests in the image
-        run: docker run --rm "$IMAGE:${{ steps.version.outputs.version }}" python -m unittest test_app -v
+        run: docker run --rm "$IMAGE:${{ steps.version.outputs.version }}" python -m unittest discover -s tests/offline -t . -v
 
       # The browser suite drives a real headless Chrome, so it cannot run in
       # the image: the image installs no system packages, on purpose. The
@@ -108,7 +108,7 @@ jobs:
           # nothing must not pass the gate. This turns a missing browser
           # into a failure.
           RAINALERT_REQUIRE_BROWSER: "1"
-        run: python -m unittest test_browser -v
+        run: python -m unittest tests.test_browser -v
 
       - name: Log in to Docker Hub
         if: startsWith(github.ref, 'refs/tags/v')

@@ -80,11 +80,12 @@ COPY --chown=rainalert:rainalert templates ./templates
 COPY --chown=rainalert:rainalert static ./static
 
 # The two HTTP test suites come along so that "docker compose run --rm tests"
-# exercises exactly the image that gets deployed. They are about 20 KB
-# together. The browser suite is deliberately not here: it drives a real
+# exercises exactly the image that gets deployed: the offline suite in
+# tests/offline/ and the live one in tests/test_api.py. The browser suite is
+# deliberately not here (.dockerignore leaves it out): it drives a real
 # headless Chrome, and the image installs no system packages on purpose, so
 # it runs on the CI runner instead.
-COPY --chown=rainalert:rainalert test_app.py test_api.py ./
+COPY --chown=rainalert:rainalert tests ./tests
 
 # The API reference and its OpenAPI spec come along for the same reason: the
 # offline suite checks them against the routes the app actually serves, and

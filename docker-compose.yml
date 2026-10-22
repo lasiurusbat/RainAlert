@@ -61,4 +61,4 @@ services:
       # SITE_URL is deliberately not set here. The offline suite asserts the
       # canonical address of the site, so it has to run against the default.
     command: >
-      sh -c "python -m unittest test_app -v && python -m unittest test_api -v"
+      sh -c "python -m unittest discover -s tests/offline -t . -v && python -m unittest tests.test_api -v"

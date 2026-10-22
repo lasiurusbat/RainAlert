@@ -7,7 +7,9 @@
 
 # The test suites are copied into the image so that
 # "docker compose run --rm tests" can run them against the deployed image,
-# so they are deliberately NOT ignored here.
+# so they are deliberately NOT ignored here - except the browser suite,
+# which needs a Chrome the image does not have.
+tests/test_browser.py
 
 # Local configuration and secrets
 .env
@@ -20,8 +22,8 @@ venv
 env
 
 # Python bytecode and caches
-__pycache__
-*.py[cod]
+**/__pycache__
+**/*.py[cod]
 *.egg-info
 .pytest_cache
 .mypy_cache
