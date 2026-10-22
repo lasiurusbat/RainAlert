@@ -130,7 +130,7 @@ Python 3.14.5.
 
 ```bash
 python -m unittest test_app    # 359 offline tests, no network required
-python -m unittest test_browser  # 79 browser tests, needs Chrome
+python -m unittest test_browser  # 80 browser tests, needs Chrome
 python -m unittest test_api     # 7 live integration tests, hits both APIs
 ```
 

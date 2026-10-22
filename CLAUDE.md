@@ -26,7 +26,7 @@ debugger.
 
 ```bash
 python -m unittest test_app    # offline suite, 359 tests, no network
-python -m unittest test_browser  # browser suite, 79 tests, needs Chrome
+python -m unittest test_browser  # browser suite, 80 tests, needs Chrome
 python -m unittest test_api     # live integration tests, hits both APIs
 ```
 
@@ -795,9 +795,17 @@ because the app works without it.
   graph jumps when the reader picks a day whose sentence is longer.
 - **The value row has to fit twenty-four numbers across the panel.** The
   sign is left off for that reason, and the type is set at the narrowest
-  width of the family (62) at `0.55rem`. Set the percent sign back and
+  width of the family (62) at `0.77rem`. Set the percent sign back and
   the numbers collide; the sign lives in the sentence above, the tooltip
-  and the table below.
+  and the table below. The size is bounded from above by the same row: a
+  column of the widest panel is about 17px, and a hundred at `0.77rem`
+  is about 15px wide, so the numbers keep a gap between them — but at
+  `0.96rem` the row grows wider than the card and the numbers run
+  together. A browser test holds that line, at three widths.
+- **The label of the current hour is wider than its column.** It is
+  written under its own value, and it hangs over the columns beside it.
+  In the first and the last column it is pinned to the edge it cannot
+  hang over, or it would stick out of the card.
 - **A flex row of an icon and its words aligns on the icon, not on the
   words.** An inline SVG is a replaced element, so its baseline is its
   bottom margin edge, and the first flex item is what decides the

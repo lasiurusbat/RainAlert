@@ -133,6 +133,26 @@ WEEK_HOURLY_PAYLOAD = {
 }
 
 
+# A week where every hour is at a hundred. Three digits in every column
+# of the value row is the widest that row ever gets, so this is the case
+# the size of the numbers has to fit.
+FULL_PAYLOAD = {
+    "daily": {
+        "time": ["2026-10-21", "2026-10-22", "2026-10-23", "2026-10-24",
+                 "2026-10-25", "2026-10-26", "2026-10-27"],
+        "precipitation_probability_max": [100, 100, 40, 15, 5, 60, None],
+        "temperature_2m_max": [11.1, 14.0, 16.7, 12.0, 10.0, 9.0, 8.0],
+        "temperature_2m_min": [8.5, 8.6, 10.3, 7.0, 6.0, 5.0, 4.0],
+    },
+    "hourly": {
+        "time": [f"2026-10-21T{hour:02d}:00" for hour in range(24)],
+        "precipitation_probability": [100] * 24,
+    },
+    "current": {"time": "2026-10-21T09:00"},
+    "utc_offset_seconds": 3600,
+}
+
+
 class FakeLocation:
     latitude = 51.5074
     longitude = -0.1278
@@ -1127,8 +1147,10 @@ class NightStreetLayoutTestCase(BrowserServerMixin, unittest.TestCase):
     columns, and the numbers have to sit over their own bars.
     """
 
-    def open_the_forecast(self, width=1366, height=768):
+    def open_the_forecast(self, width=1366, height=768, payload=None):
         self.set_viewport(width, height)
+        if payload is not None:
+            self.mock_get.return_value = FakeResponse(payload=payload)
         self.driver.get(self.base + "/?city=London")
         self.wait_for("return document.querySelector('.weather-list') !== null;")
         # The script turns each column into a button, so the page is only
@@ -1214,6 +1236,58 @@ class NightStreetLayoutTestCase(BrowserServerMixin, unittest.TestCase):
         self.assertEqual(len(offsets), 24)
         for offset in offsets:
             self.assertLessEqual(abs(offset), 2, offset)
+
+    def test_the_widest_numbers_still_fit_the_row(self):
+        """Twenty-four hours of three digits have to fit the card, and the
+        numbers of two neighbouring columns must not touch.
+
+        The numbers of the row are the one thing in the chart that cannot
+        be made smaller when it does not fit: twenty-four of them are
+        written across the panel, so the size of the type is bounded by
+        the width of a column.
+        """
+        for width in (1366, 560, 400):
+            self.open_the_forecast(width=width, height=780,
+                                   payload=FULL_PAYLOAD)
+            report = self.driver.execute_script("""
+                var strip = document.querySelector('.day-strip.is-active');
+                var cells = Array.prototype.slice.call(
+                    strip.querySelectorAll('.hour-value'));
+                var texts = cells.map(function (cell) {
+                    var node = Array.prototype.filter.call(
+                        cell.childNodes, function (n) {
+                            return n.nodeType === 3 && n.textContent.trim();
+                        })[0];
+                    if (!node) { return null; }
+                    var range = document.createRange();
+                    range.selectNodeContents(node);
+                    var r = range.getBoundingClientRect();
+                    return {left: r.left, right: r.right,
+                            text: node.textContent.trim()};
+                }).filter(Boolean);
+                var gap = Infinity;
+                for (var i = 1; i < texts.length; i++) {
+                    gap = Math.min(gap, texts[i].left - texts[i - 1].right);
+                }
+                var card = document.querySelector('.hourly');
+                var style = getComputedStyle(card);
+                var box = card.getBoundingClientRect();
+                return {
+                    gap: gap,
+                    count: texts.length,
+                    widest: Math.max.apply(null, texts.map(function (t) {
+                        return t.right - t.left;
+                    })),
+                    rowRight: strip.querySelector('.hourly-values')
+                            .getBoundingClientRect().right,
+                    cardRight: box.right - parseFloat(style.paddingRight) -
+                               parseFloat(style.borderRightWidth)
+                };
+            """)
+            self.assertEqual(report["count"], 24, report)
+            self.assertGreaterEqual(report["gap"], 1, report)
+            self.assertLessEqual(report["rowRight"], report["cardRight"] + 0.5,
+                                 report)
 
     def test_the_panel_is_dark(self):
         """The page is a night panel over the photograph."""

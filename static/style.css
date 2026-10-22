@@ -791,11 +791,12 @@ button:focus-visible {
 /* The value row. It is the same row of cells as the strip below it, so
    every number sits over its own bar. The type is set at the narrowest
    width of the family, because twenty-four columns of three digits have
-   to fit across the panel. */
+   to fit across the panel: at 0.77rem a hundred is about 15px wide, which
+   is what one of those columns has to spare. */
 .hourly-values {
     display: flex;
     gap: 2px;
-    height: 0.65rem;
+    height: 0.93rem;
     margin-top: 0.45rem;
 }
 
@@ -804,7 +805,7 @@ button:focus-visible {
     flex: 1 1 0;
     min-width: 0;
     text-align: center;
-    font-size: 0.55rem;
+    font-size: 0.77rem;
     line-height: 1.2;
     font-variation-settings: 'wdth' 62, 'wght' 600;
     letter-spacing: -0.02em;
@@ -814,7 +815,9 @@ button:focus-visible {
 }
 
 /* The label of the current hour. It is written under its own value, in
-   the gap above the strip, so the rule below it says which hour is now. */
+   the gap above the strip, so the rule below it says which hour is now.
+   It is wider than its column, so in the first and the last column it
+   is pinned to the edge it cannot hang over. */
 .now-label {
     position: absolute;
     top: 100%;
@@ -822,11 +825,22 @@ button:focus-visible {
     transform: translateX(-50%);
     margin-top: 1px;
     color: var(--paper);
-    font-size: 0.5rem;
+    font-size: 0.7rem;
     line-height: 1;
     font-variation-settings: 'wdth' 74, 'wght' 600;
     letter-spacing: 0.03em;
     white-space: nowrap;
+}
+
+.hour-value:first-child .now-label {
+    left: 0;
+    transform: none;
+}
+
+.hour-value:last-child .now-label {
+    left: auto;
+    right: 0;
+    transform: none;
 }
 
 /* The strip is a flex row of equal columns and the row of values and the
@@ -965,8 +979,8 @@ button:focus-visible {
     position: relative;
     flex: 1 1 0;
     min-width: 0;
-    height: 0.75rem;
-    font-size: 0.53rem;
+    height: 1.08rem;
+    font-size: 0.74rem;
     color: var(--dim);
     font-variant-numeric: tabular-nums;
 }
