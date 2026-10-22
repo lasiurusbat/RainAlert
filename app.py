@@ -9,7 +9,6 @@ import os
 import re
 import unicodedata
 from datetime import date, datetime, timedelta, timezone
-from decimal import ROUND_HALF_UP, Decimal
 from functools import lru_cache
 
 import requests
@@ -21,7 +20,14 @@ from geopy.geocoders import Nominatim
 from rainalert import config
 from rainalert.data.cities import CITY_NAMES, CITY_SLUGS, CURATED_CITIES
 from rainalert.data.releases import RELEASES
+from rainalert.domain.rain import (alert_threshold, chance_number, needs_umbrella,
+                                   rain_chance, round_half_up, severity_band)
 from rainalert.errors import CityNotFound, GeocodingUnavailable, WeatherUnavailable
+from rainalert.present.labels import (WEEKDAY_NAMES, describe_rain_chance, format_date,
+                                      format_date_parts, format_precipitation,
+                                      format_rain_chance, format_rain_chance_short,
+                                      format_rain_hours, format_temperature,
+                                      hour_height_step, severity_label)
 
 app = Flask(__name__)
 
@@ -41,241 +47,11 @@ HOURLY_FIELDS = "precipitation_probability"
 geolocator = Nominatim(user_agent=config.NOMINATIM_USER_AGENT, timeout=config.GEOCODER_TIMEOUT)
 
 
-# --- Weekday names -----------------------------------------------------------
-# The seven weekday names, Monday first, matching date.weekday().
-#
-# They are hard-coded rather than taken from strftime("%A"), because
-# strftime reads the process-wide LC_TIME locale: on a German Windows
-# machine, or in a container with LANG set, it would render the weekday in
-# that language. The rest of the page is English, so a half-translated date
-# would be worse than a consistently English one.
-WEEKDAY_NAMES = ("Monday", "Tuesday", "Wednesday", "Thursday",
-                 "Friday", "Saturday", "Sunday")
-
-# The same names, shortened. The week is a row of seven narrow columns, and
-# "Wednesday" does not fit in one of them. These are hard-coded for the same
-# reason the long ones are: no locale, no strftime.
-WEEKDAY_SHORT_NAMES = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
-
-
-# --- Helpers -----------------------------------------------------------------
-def round_half_up(value):
-    """Round to the nearest integer, with .5 going up.
-
-    Python's built-in ``round`` uses banker's rounding, so ``round(8.5)`` is 8
-    and ``round(9.5)`` is 10. For temperatures, where halves are common, that
-    reads as an off-by-one error.
-    """
-    return int(Decimal(str(value)).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
-
-
-def format_date(value):
-    """Format an ISO date as ``Wednesday 21.10.2026``.
-
-    The forecast API returns plain ``YYYY-MM-DD`` dates already expressed in
-    the queried location's local time, so there is no timezone to convert.
-
-    The weekday name comes from :data:`WEEKDAY_NAMES`, so it is always
-    English.
-    """
-    try:
-        parsed = date.fromisoformat(str(value))
-    except (TypeError, ValueError):
-        return str(value)
-    weekday = WEEKDAY_NAMES[parsed.weekday()]
-    return f"{weekday} {parsed.strftime('%d.%m.%Y')}"
-
-
-def format_date_parts(value):
-    """The short forms of a date, for the week that is a row of columns.
-
-    Returns the abbreviated weekday ("Thu") and the day and month
-    ("22.10"). The long form stays in :func:`format_date`, and the page
-    carries it for screen readers, so nothing is lost by shortening what
-    is on the page.
-    """
-    try:
-        parsed = date.fromisoformat(str(value))
-    except (TypeError, ValueError):
-        return "", ""
-    return (WEEKDAY_SHORT_NAMES[parsed.weekday()],
-            parsed.strftime("%d.%m"))
-
-
-def format_rain_chance(value):
-    """The rain chance as a short label for a row or a table cell.
-
-    The rows say "chance of rain" once, in the column header, so this is
-    just the number. The full phrase is what a screen reader needs, and
-    that is :func:`describe_rain_chance`.
-
-    A value the service did not report is "unknown" rather than "0%", so
-    it can never be mistaken for a dry day.
-    """
-    if value is None:
-        return "unknown"
-    try:
-        return f"{round_half_up(float(value))}%"
-    except (TypeError, ValueError):
-        return "unknown"
-
-
-def format_rain_chance_short(value):
-    """The rain chance as a bare number, for the hourly strip.
-
-    The strip has one narrow column per hour of the day, and "100%" does
-    not fit in one of them while "100" does. The unit is stated by the
-    sentence above the strip and by the table below it.
-
-    A value the service did not report is a question mark, not a zero.
-    """
-    if value is None:
-        return "?"
-    try:
-        return f"{round_half_up(float(value))}"
-    except (TypeError, ValueError):
-        return "?"
-
-
-def describe_rain_chance(value):
-    """The rain chance as a full phrase, for screen readers and tooltips.
-
-    The visible rows carry only the number, so this is the wording that
-    stands on its own.
-    """
-    if value is None:
-        return "chance of rain unknown"
-    try:
-        return f"{round_half_up(float(value))}% chance of rain"
-    except (TypeError, ValueError):
-        return "chance of rain unknown"
-
-
-def format_precipitation(value):
-    """The day's rain in millimetres, as a short label.
-
-    The service reports the day's total in millimetres, and the panel shows
-    it with one decimal, because a difference between 4 mm and 5 mm is the
-    difference between a drizzle and a shower.
-
-    A day with nothing in it says nothing at all. The figure is only
-    interesting when there is rain in it, and "0 mm" beside a chance of
-    rain would read as a contradiction: the two come from different parts
-    of the model, and a day can be likely to rain and still come out at
-    nothing measurable.
-    """
-    if value is None:
-        return ""
-    try:
-        millimetres = float(value)
-    except (TypeError, ValueError):
-        return ""
-    if millimetres <= 0:
-        return ""
-    return f"{millimetres:.1f} mm"
-
-
-def format_rain_hours(value):
-    """How long the rain lasts, as a short label.
-
-    The service reports the number of hours with precipitation, and the
-    figure is shown only when there is rain to last. A day the model
-    expects none says nothing here, for the same reason as the
-    millimetres do.
-    """
-    if value is None:
-        return ""
-    try:
-        hours = float(value)
-    except (TypeError, ValueError):
-        return ""
-    if hours <= 0:
-        return ""
-    return f"{round_half_up(hours)} h of rain"
-
-
-def format_temperature(high, low, unit="celsius"):
-    """Compact high/low temperature label, or an empty string when unknown.
-
-    The unit letter is not appended: the row shows "12° / 9°" and the
-    switch beside the legend says which scale those numbers are in. That
-    keeps the row narrow, and the two would be redundant anyway.
-    """
-    parts = []
-    for value in (high, low):
-        if value is None:
-            continue
-        try:
-            parts.append(f"{round_half_up(float(value))}°")
-        except (TypeError, ValueError):
-            continue
-    return " / ".join(parts)
-
-
-def rain_chance(value):
-    """The rain probability as a number, or ``None`` when it is unknown.
-
-    The API occasionally reports a missing value as ``null``; the bands below
-    need a number, so unknown chances get their own neutral band rather than
-    being silently treated as zero.
-    """
-    if value is None:
-        return None
-    try:
-        return float(value)
-    except (TypeError, ValueError):
-        return None
-
-
-def chance_number(value):
-    """The rain chance as the whole number the page shows, or ``None``.
-
-    This is the number the reader sees next to the date, and it is the number
-    a personal alert threshold is compared against, so the two can never
-    disagree: a row shown as "45%" is 45 here, not 44.6. A value the service
-    did not report is ``None``, so it is never counted as a dry day.
-    """
-    probability = rain_chance(value)
-    if probability is None:
-        return None
-    return round_half_up(probability)
-
-
-def severity_band(chance):
-    """Classify a rain chance into a severity band.
-
-    Returns one of ``"low"``, ``"moderate"``, ``"high"`` or ``"unknown"``,
-    which the template turns into a CSS class. The bands are the ones set out
-    in the ideas document: under 30% is unlikely to be wet, 30-60% is a real
-    possibility, and above 60% is likely.
-    """
-    probability = rain_chance(chance)
-    if probability is None:
-        return "unknown"
-    if probability < config.SEVERITY_LOW_MAX:
-        return "low"
-    if probability <= config.SEVERITY_MODERATE_MAX:
-        return "moderate"
-    return "high"
-
-
-def needs_umbrella(chance):
-    """Whether the day is wet enough to be worth carrying an umbrella."""
-    probability = rain_chance(chance)
-    return probability is not None and probability >= config.UMBRELLA_THRESHOLD
-
-
 # --- Hourly rain for today ---------------------------------------------------
 # The strip shows the city's local day, one column per hour. The hours run
 # 00 to 23 in the city's own timezone - the same local time the daily
 # forecast is dated in - so "today" means the same thing in both lists.
 HOURS_PER_DAY = 24
-
-# The bar height in the strip, in percent per step. The height is bucketed
-# into steps so it can live in the stylesheet as a class rather than as an
-# inline style; the exact percentage travels in the tooltip and in the
-# screen-reader text.
-HOUR_HEIGHT_STEP = 5
 
 
 def parse_hour_timestamp(value):
@@ -284,20 +60,6 @@ def parse_hour_timestamp(value):
         return datetime.strptime(str(value).strip(), "%Y-%m-%dT%H:%M")
     except (TypeError, ValueError):
         return None
-
-
-def hour_height_step(chance, step=HOUR_HEIGHT_STEP):
-    """The bar height for an hourly rain chance, in percent.
-
-    The height is bucketed into steps so that it lives in the stylesheet as a
-    class. The exact percentage is still available in the tooltip and in the
-    screen-reader text, so nothing is lost by rounding the bar.
-    """
-    probability = rain_chance(chance)
-    if probability is None:
-        return 0
-    steps = round_half_up(probability / step)
-    return max(0, min(100, steps * step))
 
 
 def local_now(payload):
@@ -485,25 +247,6 @@ def summarise_hours(hours, when="for the rest of today"):
         sentence += ", and at other times too"
 
     return f"{sentence[0].upper()}{sentence[1:]}. Bring an umbrella."
-
-
-def severity_label(band):
-    """A short human-readable name for a severity band.
-
-    The three bands read as a scale - unlikely, possible, likely - rather
-    than as absolute claims. A day with a 25% chance is not "dry", it is
-    just unlikely to be wet, and saying otherwise would mislead.
-
-    The labels are deliberately short: they appear on the same line as the
-    date, and a long label would push the forecast row onto a second line
-    and make the whole list taller than the viewport.
-    """
-    return {
-        "low": "Rain unlikely",
-        "moderate": "Rain possible",
-        "high": "Rain likely",
-        "unknown": "Unknown",
-    }.get(band, "Unknown")
 
 
 # --- The headline ------------------------------------------------------------
@@ -986,27 +729,6 @@ def structured_data(city=None, forecast=None):
 # Each event carries a key. The browser keeps the keys of the events it has
 # already shown, so the same rain is never announced twice, and a poll that
 # lands in the same wet hour has nothing new to say.
-
-
-def alert_threshold(personal):
-    """The rain chance at which an alert is worth giving.
-
-    The reader's own threshold is used when they have set one - it answers
-    their question, not the app's. Without one, the app's umbrella threshold
-    is used, which is the advice the rest of the page gives.
-
-    The second value says which of the two it is, so the alert can say so:
-    the reader's own limit and the app's advice never stand in for each
-    other. A notification and a calendar export both use this, so the two
-    always draw the line in the same place.
-    """
-    if personal is None or str(personal).strip() == "":
-        return config.UMBRELLA_THRESHOLD, False
-    try:
-        value = int(str(personal).strip())
-    except (TypeError, ValueError):
-        return config.UMBRELLA_THRESHOLD, False
-    return max(0, min(100, value)), True
 
 
 def hour_moment(hour):
