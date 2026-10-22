@@ -9,10 +9,11 @@ Both APIs are free, keyless, and need no signup. There is no database and no
 user account system.
 
 **The app is deployed and live at <https://rainalert.live/>.** It runs
-from the `1.0` image on Docker Hub, on a Render service, and the domain
+from the `1.0.1` image on Docker Hub, on a Render service, and the domain
 is attached to it: `http://` redirects to `https://`, and every route
-answers. The first release tag (`v1.0`) was cut on 2026-10-22, the image
-it built was pushed, and the workflow's deploy hook has deployed it. It
+answers. Two release tags have been cut — `v1.0` on 2026-10-22 and
+`v1.0.1` on 2026-10-23 — the images they built were pushed, and the
+workflow's deploy hook has deployed them. It
 also runs locally, from `python app.py` or `docker compose up`. `DEPLOY.md`
 is the runbook, and the "Still to do" section below is the list of what is
 actually ahead.
@@ -70,15 +71,15 @@ gets none of them, because the offline suite asserts the app's own defaults.
 
 ## Deployment status
 
-**The app is live at <https://rainalert.live/>.** Checked on 2026-10-22:
+**The app is live at <https://rainalert.live/>.** Checked on 2026-10-23:
 
 - **The domain is attached to the service and answers.** `rainalert.live`
   is a CNAME to `rainalert-1-0.onrender.com` and on to
   `gcp-us-west1-1.origin.onrender.com`, resolving to `216.24.57.16` and
   `216.24.57.18`. `http://` answers `301` to `https://`; `https://` answers
   `200` with the real page, and a city's page with a live forecast from
-  both upstreams. The footer reads "Version 1.0 · build 7265a18", which is
-  the commit the `v1.0` tag points at, so the build that is answering is
+  both upstreams. The footer reads "Version 1.0.1 · build e045be4", which is
+  the commit the `v1.0.1` tag points at, so the build that is answering is
   the build that was released.
 - **Every route answers on the live domain**: the start page, `/cities`,
   `/release-notes`, `/robots.txt`, `/sitemap.xml`, `/manifest.json`,
@@ -86,8 +87,13 @@ gets none of them, because the offline suite asserts the app's own defaults.
   a `404` for an address that is not on the site. Each page's canonical
   link is its own address under `https://rainalert.live/`, which is what
   `SITE_URL` says.
-- **The image is on Docker Hub.** `lasiurusbat/rainalert:1.0` was pushed
-  on 2026-10-22 and is the repository's first tag.
+- **The image is on Docker Hub.** `lasiurusbat/rainalert` has two tags:
+  `1.0`, pushed on 2026-10-22, and `1.0.1`, pushed on 2026-10-23 by the
+  second release run. The second one is what the live service is running.
+- **The donation link is on the live page.** The service runs with
+  `DONATION_URL` set, so "Buy me a coffee" appears under the search and
+  in the footer of every page. The variable is read at start-up, so
+  changing it needs a restart of the service and no new image.
 - **The service is named `rainalert-1-0`**, because an older service
   already held the name `rainalert`.
 - **The old stub service is still there.** A service named `rainalert`
@@ -128,6 +134,14 @@ green, so the machinery is not untested:
   the live domain. The deploy job's smoke test greps the live page for
   `Version <tag>`, so it proves the new build is the one answering and not
   an old one.
+
+**The second release ran green on the first attempt.** `v1.0.1` points at
+`e045be4` on `main` and was cut on 2026-10-23. Every step was green the
+first time: the build, the offline suite inside the image, the browser
+suite on the runner, the Docker Hub login, the push, the deploy hook and
+the smoke test, which found "Version 1.0.1" on the live domain. The five
+attempts above were the cost of finding out which secrets were missing,
+not a property of the pipeline.
 
 **Changing the image in Render does not deploy anything.** An image-backed
 service is never redeployed automatically, because auto-deploy only
@@ -644,7 +658,7 @@ search form carries the unit in a hidden field, so a new search keeps the
 scale the reader chose.
 
 **Deployment runs a prebuilt image, not a build.** `render.yaml` uses
-`runtime: image` pointing at `docker.io/lasiurusbat/rainalert:1.0`. Render
+`runtime: image` pointing at `docker.io/lasiurusbat/rainalert:1.0.1`. Render
 pulls that image; it never runs the `Dockerfile`. A release is therefore a
 pushed image tag, not a merged commit. The old `runtime: python` shape,
 where Render ran `pip install` and gunicorn itself, is gone — that is the
@@ -671,11 +685,11 @@ suite still runs in the image, because that one can be.
 commit already on `main`, builds and tests the image, pushes it to Docker
 Hub as the version without the `v`, and calls Render's deploy hook with an
 `imgURL` parameter naming that exact tag. Pull requests never push and never
-deploy, so the secrets are only touched on a tag run. **`v1.0` has been
-pushed and the whole path has run green**, so a release is a tag and a push
-and nothing else: the build, the offline suite inside the image, the browser
-suite on the runner, the Docker Hub login, the push, the hook and the smoke
-test on the live domain.
+deploy, so the secrets are only touched on a tag run. **`v1.0` and `v1.0.1`
+have both been pushed and the whole path has run green**, so a release is a
+tag and a push and nothing else: the build, the offline suite inside the
+image, the browser suite on the runner, the Docker Hub login, the push, the
+hook and the smoke test on the live domain.
 
 **Every page says which build is answering.** `APP_VERSION` and `APP_COMMIT`
 are read from the environment and passed to every template as `app_version`

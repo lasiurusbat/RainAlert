@@ -3,23 +3,29 @@
 **The site is live at <https://rainalert.live/>.** The Docker half has been
 exercised for real: the image builds, both test suites pass inside it, and
 a forecast renders with English weekday names. The CI workflow itself has
-run and is green on every push to `main`. The **tag-gated half has fired**
-— `v1.0` was cut on 2026-10-22 — the image it built **has been pushed to
-Docker Hub**, and the deploy hook has put it on the service.
+run and is green on every push to `main`. The **tag-gated half has fired
+twice** — `v1.0` on 2026-10-22 and `v1.0.1` on 2026-10-23 — the images
+they built **have been pushed to Docker Hub**, and the deploy hook has put
+them on the service.
 
-State of the world, checked on 2026-10-22:
+State of the world, checked on 2026-10-23:
 
-- **The first release tag exists** (`v1.0`, on `main`), and the workflow's
-  push-and-deploy half has run **green**, on its fifth attempt. The
-  earlier four failed at the Docker Hub login, the Docker Hub push, the
+- **Two release tags exist** (`v1.0` and `v1.0.1`, both on `main`), and the
+  workflow's push-and-deploy half has run **green** for both. The first
+  needed five attempts; the second was green the first time. The four
+  early failures were at the Docker Hub login, the Docker Hub push, the
   browser suite and the deploy hook, in that order; the causes are in
   "Known limits" below.
 - **The Docker Hub repository `lasiurusbat/rainalert` is public and has
-  one tag**: `1.0`, pushed on 2026-10-22, which is the image `render.yaml`
+  two tags**: `1.0` (pushed 2026-10-22) and `1.0.1` (pushed 2026-10-23),
+  which is the image the live service is running and the one `render.yaml`
   points at.
 - **The app answers at <https://rainalert.live/>** — the real page, on the
-  `1.0` image, with the footer reading "Version 1.0 · build 7265a18".
+  `1.0.1` image, with the footer reading "Version 1.0.1 · build e045be4".
   `http://` redirects to `https://`.
+- **The donation link is live.** The service runs with `DONATION_URL` set,
+  so "Buy me a coffee" appears under the search and in the footer of every
+  page.
 - **The service is named `rainalert-1-0`**, because an older service
   already held the name `rainalert`.
 - **A Render service named `rainalert` answers at
@@ -40,14 +46,16 @@ and these commands are only a fallback.
 
 ```bash
 docker build --platform linux/amd64 \
-  --build-arg APP_VERSION=1.0 --build-arg APP_COMMIT=$(git rev-parse --short HEAD) \
-  -t lasiurusbat/rainalert:1.0 .
+  --build-arg APP_VERSION=1.0.1 --build-arg APP_COMMIT=$(git rev-parse --short HEAD) \
+  -t lasiurusbat/rainalert:1.0.1 .
 docker login
-docker push lasiurusbat/rainalert:1.0
+docker push lasiurusbat/rainalert:1.0.1
 ```
 
 Render runs `linux/amd64`. Use a new tag for every release (0.9, 1.0, ...)
-rather than `latest`, so it is clear which version is live. If the Docker Hub
+rather than `latest`, so it is clear which version is live — and never
+re-push an existing tag, because a tag that is already on Docker Hub is a
+release that is already out. If the Docker Hub
 repository is private, add a registry credential in Render (Workspace
 Settings) and reference it under `image:` in `render.yaml` (see the comment
 there).
@@ -163,9 +171,12 @@ page:
   address made only of punctuation stands for no city, so there is no
   page there and no redirect to one.
 
-All of the above were checked on 2026-10-22, on the live domain, and all
-of it behaves as written. The only thing left is to submit the sitemap to
-the two search engines, and to delete the old stub service.
+All of the above were checked on 2026-10-22 and again on 2026-10-23, on
+the live domain, and all of it behaves as written — the donation link
+included, and the missing city's page now answers `404` with the title
+"Page not found - Rain Alert" and the site's own canonical link. The only
+thing left is to submit the sitemap to the two search engines, and to
+delete the old stub service.
 
 ## 4. Optional
 
@@ -179,22 +190,24 @@ the two search engines, and to delete the old stub service.
 
 The workflow is `.github/workflows/ci-cd.yml`. The build-and-test half runs
 on every push to `main` and is green. The tag-gated half — the push and
-the deploy — fired on `v1.0` and failed at the push; the deploy half has
-never run.
+the deploy — has fired for `v1.0` and `v1.0.1` and is green for both: the
+build, the offline suite inside the image, the browser suite on the
+runner, the Docker Hub login, the push, the deploy hook and the smoke test
+on the live domain.
 
 ```
-pull request / push to main          push of a tag such as v1.0
+pull request / push to main          push of a tag such as v1.0.1
         |                                      |
   build image (linux/amd64)             build image (linux/amd64)
   run unit tests inside it              run unit tests inside it
   run browser tests on the runner       run browser tests on the runner
         |                               verify the tag is on main
-      done                              docker push lasiurusbat/rainalert:1.0
+      done                              docker push lasiurusbat/rainalert:1.0.1
                                                 |
                                         Render deploy hook with that tag
                                                 |
                                         smoke test: does the live page
-                                        carry "Version 1.0"?
+                                        carry "Version 1.0.1"?
 ```
 
 ### Design decisions
@@ -250,12 +263,14 @@ pull request / push to main          push of a tag such as v1.0
 
 ```bash
 git switch main && git pull
-git tag v1.0
-git push origin v1.0
+git tag v1.0.1
+git push origin v1.0.1
 ```
 
-Watch the run under the repository's Actions tab. The first release after
-setup is `v1.0`, to match `render.yaml`, which pins `1.0`.
+Watch the run under the repository's Actions tab. The tag's number is the
+image's number without the `v`, and it is what the smoke test looks for on
+the live page. The tag in `render.yaml` is the fallback for a manual
+deploy and should be moved to the same number in the same change.
 
 **A failed run cannot be fixed with "Re-run failed jobs".** The release run
 is pinned to the commit the tag points at, so the button replays the old
@@ -264,7 +279,7 @@ commit fails again in exactly the same way. To get a fix into a release
 run, the tag has to point at it:
 
 ```bash
-git tag -f v1.0 <commit> && git push --force origin v1.0
+git tag -f v1.0.1 <commit> && git push --force origin v1.0.1
 ```
 
 That is safe on a tag that never produced a published image, because
@@ -299,7 +314,9 @@ and the forecast is right, and only the styles are old. The rule is
   had the Read scope and a push needs Read & Write (attempt 2), the
   browser suite flaked on a service-worker wait that was waiting for the
   wrong thing (attempt 3), and the deploy hook secret was not set
-  (attempt 4). Attempt 5 was green from end to end.
+  (attempt 4). Attempt 5 was green from end to end, and `v1.0.1` was green
+  on its first attempt — the four failures were the cost of finding out
+  which secrets were missing, not a property of the pipeline.
 - **The smoke test is a real check, and it can fail honestly.** It hits
   `https://rainalert.live/` and greps the answer for `Version <tag>`, so
   it proves the new build is the one answering and not an old one. On the
@@ -338,7 +355,10 @@ and the forecast is right, and only the styles are old. The rule is
   for that deploy. I could not confirm whether it also changes the service's
   stored default image, so after a release also update the tag in
   `render.yaml` and the service settings so a later manual redeploy or
-  restart does not bring back an older version.
+  restart does not bring back an older version. `render.yaml` is at `1.0.1`
+  now, which is the build the live service is running; the service's own
+  **Settings → Image** field is worth a look after a release, because a
+  manual "Deploy latest reference" pulls the *stored* tag.
 - **The smoke test reads the version, not just the page.** The footer of
   every page carries the version of the build that answered it, so the
   smoke test greps for `Version <tag>` and can tell "the site is up" from

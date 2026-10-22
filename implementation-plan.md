@@ -5,16 +5,17 @@ the repository. Unchecked items (`[ ]`) are open. Items marked **(verify)** may
 already be done, but nothing in the repository proves it, so they stay open
 until confirmed.
 
-Live site: <https://rainalert.live> — **live**, on the `1.0` image. Image:
-`lasiurusbat/rainalert` (one tag, `1.0`). Repository:
+Live site: <https://rainalert.live> — **live**, on the `1.0.1` image. Image:
+`lasiurusbat/rainalert` (two tags, `1.0` and `1.0.1`). Repository:
 <https://github.com/lasiurusbat/RainAlert>.
 
 ## 1. Where we are
 
 The app works locally, is containerised, has a CI/CD pipeline and Dependabot
-committed and pushed to GitHub, and has a deployment runbook. The first
-release tag exists (`v1.0`), the image it built is on Docker Hub, the
-deploy hook has put it on Render, and the domain is attached — so **the
+committed and pushed to GitHub, and has a deployment runbook. Two
+release tags exist (`v1.0` and `v1.0.1`), the images they built are on
+Docker Hub, the deploy hook has put them on Render, and the domain is
+attached — so **the
 app is online** and its address is the one it claims. Tier 1 of the alert
 ideas is complete: the page colour-codes rain
 risk, shows an hour-by-hour strip for today with a "bring an umbrella"
@@ -69,7 +70,7 @@ a page that is missing says so with its status code.
 ### Packaging and delivery
 - [x] Multi-stage `Dockerfile`: non-root user, no system packages, tests included in the image
 - [x] `.dockerignore`, `.gitignore`, `docker-compose.yml` (app plus a `tests` profile)
-- [x] `render.yaml`: free web service running `docker.io/lasiurusbat/rainalert:1.0`, user agent naming rainalert.live
+- [x] `render.yaml`: free web service running `docker.io/lasiurusbat/rainalert:1.0.1`, user agent naming rainalert.live
 - [x] `.github/workflows/ci-cd.yml`: build, test in the image, push on release tag, Render deploy hook, smoke test
 - [x] `.github/dependabot.yml`: weekly updates for Actions, pip and the Docker base image
 - [x] `DEPLOY.md` runbook (image push, Render setup, domain, pipeline, known limits)
@@ -85,19 +86,19 @@ a page that is missing says so with its status code.
 
 These steps use accounts and dashboards I cannot see from the repository.
 
-- [x] Docker Hub: create an access token with Read & Write scope. Done 2026-10-22: the `lasiurusbat/rainalert` repository is public and has **one tag**, `1.0`, pushed by the `v1.0` run.
-- [ ] **(verify)** GitHub secrets set: `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN` are set; `RENDER_DEPLOY_HOOK_URL` is not.
-- [x] Render: the app answers at <https://rainalert.live/> on the `1.0` image, with the footer reading "Version 1.0 · build 7265a18". The service is named `rainalert-1-0` because an older service already held the name `rainalert`.
+- [x] Docker Hub: create an access token with Read & Write scope. Done 2026-10-22: the `lasiurusbat/rainalert` repository is public and has **two tags**, `1.0` and `1.0.1`, pushed by the two release runs.
+- [x] **(verify)** GitHub secrets set: `DOCKERHUB_USERNAME`, `DOCKERHUB_TOKEN` and `RENDER_DEPLOY_HOOK_URL` are all set. The hook came from the service that runs the image, because a hook is per-service.
+- [x] Render: the app answers at <https://rainalert.live/> on the `1.0.1` image, with the footer reading "Version 1.0.1 · build e045be4". The service is named `rainalert-1-0` because an older service already held the name `rainalert`. The donation link is on the live page: the service runs with `DONATION_URL` set.
 - [ ] Delete the old stub service `rainalert` at <https://rainalert.onrender.com>, which serves a JSON stub (`{"message": "Rain Alert API is running", "status": "ok"}`) rather than this app.
-- [ ] Take the deploy hook from the **new** service and add it as the `RENDER_DEPLOY_HOOK_URL` secret, so the workflow can deploy by itself. Render's own docs list deploy hooks on the free Hobby plan, so there is one to copy.
+- [x] Take the deploy hook from the **new** service and add it as the `RENDER_DEPLOY_HOOK_URL` secret, so the workflow can deploy by itself. Render's own docs list deploy hooks on the free Hobby plan, so there is one to copy. Done 2026-10-22.
 - [x] Note the order: the image must exist on Docker Hub before Render can pull it, or the first deploy fails. It did.
 - [x] **(verify)** Domain: `rainalert.live` added in Render, the Namecheap URL-forwarding records replaced, DNS records added, HTTPS working. Confirmed 2026-10-22: the domain is a CNAME to `rainalert-1-0.onrender.com`, `http://` answers `301` to `https://`, and every route on the live address answers.
 - [ ] GitHub: protect `main`, require the `build-test-push` check, optionally add a reviewer to the `production` environment
 - [ ] Review and merge (or close) the open Dependabot pull request once its checks pass
 - [x] Cut the first release: tag `v1.0` on `main` and push it. Done 2026-10-22.
-- [ ] Watch the first release run, fix anything small it turns up. The workflow itself is green on every push to `main`; only the tag-gated half — the push and the deploy — has never run. The smoke test will fail until the domain is attached.
-- [ ] Open the live site, search a city, confirm forecast and English weekday names
-- [ ] Confirm the canonical link, the social card and the sitemap all point at `https://rainalert.live` (the `SITE_URL` default), and that `/city/atlantis` answers `404`
+- [x] Watch the release runs, fix anything small they turn up. The tag-gated half has now run twice and is green for both: `v1.0` took five attempts (the Docker Hub secrets, the token's scope, a flaky service-worker wait and the missing deploy-hook secret), and `v1.0.1` was green on its first attempt.
+- [x] Open the live site, search a city, confirm forecast and English weekday names. Done 2026-10-22: `/city/london` answers with a live forecast from both upstreams.
+- [x] Confirm the canonical link, the social card and the sitemap all point at `https://rainalert.live` (the `SITE_URL` default), and that an address the geocoder does not know answers `404`. Done 2026-10-22. Note that `/city/atlantis` answers `200`, correctly — Atlantis is a real place in New Jersey. Use a name no geocoder has, such as `/city/zzzqxkvv`.
 - [ ] Submit `https://rainalert.live/sitemap.xml` in Google Search Console and Bing Webmaster Tools
 - [ ] Optional: free uptime pinger on `https://rainalert.live/` to avoid the one-minute cold start
 
@@ -163,7 +164,7 @@ Decide first, because it affects hosting and licensing:
 - [x] The app version is on the page — the footer of every page carries it, along with the commit it was built from — so the pipeline's smoke test can confirm the new release is the one answering without a separate health endpoint
 - [x] `RainAlert-Ideas-for-Alerting-Users.md` is already tracked in git (it was in the initial commit) and is annotated in place with what has been built, so the remaining question is only whether to keep it as a living design record or retire it once the ideas are done
 - [x] Every feature has both a unit test and an end-to-end test. The offline suite covers every function body in the package (the only lines it cannot reach are decorators and module-level statements, which run at import), and the browser suite covers the reader-facing half: the city index, the 404 page, the temperature switch, the now-marker, the hourly table and the donation link
-- [ ] Keep `render.yaml` tag in step with each release (a hook deploy may not update the service's stored default image)
+- [ ] Keep `render.yaml` tag in step with each release (a hook deploy may not update the service's stored default image). Done for `1.0.1`; the service's own **Settings → Image** field is worth a look after each release, because a manual "Deploy latest reference" pulls the *stored* tag.
 - [ ] Re-read Render's free-tier terms before the site grows; Render describes the free tier as not meant for production
 - [ ] Re-check free-tier limits and Action versions every few months (Dependabot covers the Action versions)
 
@@ -176,7 +177,7 @@ Decide first, because it affects hosting and licensing:
 ## 8. Open questions
 
 1. ~~Is the Docker Hub image already pushed, and is the Render service created?~~ Answered 2026-10-21: neither exists yet. Order of work: Docker Hub repo and token, GitHub secrets, first image (via `v1.0` tag), then the Render Blueprint, then the domain.
-2. Does the free Render plan offer a deploy hook for this service?
+2. ~~Does the free Render plan offer a deploy hook for this service?~~ Answered: yes. The hook was taken from the service that runs the image — a hook is per-service — and the `v1.0` and `v1.0.1` runs both deployed through it.
 3. ~~What is the Buy Me a Coffee URL, and what wording do you want?~~ Answered: <https://buymeacoffee.com/rainalert>, wording above.
 4. ~~Ship the donation link in `v0.8` or `v0.9`?~~ Answered: `v1.0`. Built and tested.
 5. Which alert channel comes first: ntfy.sh, Telegram or email?

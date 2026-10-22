@@ -13,7 +13,7 @@ Both APIs are free, keyless, and need no signup. There is no database, no
 user accounts, and nothing to configure before running it.
 
 > **The site is live at <https://rainalert.live/>** — the real page, on the
-> `1.0` image, with every route answering. The app also runs locally —
+> `1.0.1` image, with every route answering. The app also runs locally —
 > see [Quick start](#quick-start). `DEPLOY.md` is the runbook.
 
 ![Rain Alert showing a 7-day forecast for London](docs/screenshot.png)
@@ -688,8 +688,9 @@ look up is better than an endless index.
 ## Donations and data credits
 
 **Donation link.** Set `DONATION_URL` to your donation page — for this site
-that is <https://buymeacoffee.com/rainalert>, which exists but is not yet
-linked from a live site. The page then shows one quiet line just under the
+that is <https://buymeacoffee.com/rainalert>, and the live service runs with
+it set, so the link is on the site today. The page then shows one quiet line
+just under the
 search, plus a link in the footer. It is a plain
 text link, not an embedded widget, so no third-party script is loaded and no
 consent notice is needed. It opens in a new tab. It is a site-wide link, so it
@@ -1041,19 +1042,21 @@ exception text is always logged, never rendered on the page.
 ## Deployment
 
 **The site is live at <https://rainalert.live/>.** The app runs locally
-too, from `python app.py` or `docker compose up`. Checked on 2026-10-22:
+too, from `python app.py` or `docker compose up`. Checked on 2026-10-23:
 
 - The app answers at <https://rainalert.live/> — the real page, on the
-  `1.0` image, with the footer reading "Version 1.0 · build 7265a18".
+  `1.0.1` image, with the footer reading "Version 1.0.1 · build e045be4".
   `http://` redirects to `https://`, and every route answers.
-- The first release tag has been cut (`v1.0`, on `main`), so the
-  push-and-deploy half of the CI workflow has fired — and failed, four
-  times, before it passed: at the Docker Hub login, at the push (the
-  token had the Read scope, and a push needs Read & Write), in the
-  browser suite, and at the deploy hook (the `RENDER_DEPLOY_HOOK_URL`
-  secret was not set). It is green now, and a release is one `git tag`.
+- Two release tags have been cut (`v1.0` and `v1.0.1`, both on `main`), so
+  the push-and-deploy half of the CI workflow has fired twice. The first
+  release failed four times before it passed: at the Docker Hub login, at
+  the push (the token had the Read scope, and a push needs Read & Write),
+  in the browser suite, and at the deploy hook (the `RENDER_DEPLOY_HOOK_URL`
+  secret was not set). The second was green on its first attempt, and a
+  release is one `git tag`.
 - The Docker Hub repository `lasiurusbat/rainalert` is public and has
-  **one tag**: `1.0`, the image `render.yaml` names.
+  **two tags**: `1.0` and `1.0.1`, the latter being the image `render.yaml`
+  names and the one the live service is running.
 - A Render service answers at <https://rainalert.onrender.com>, but it
   serves a JSON stub (`{"message": "Rain Alert API is running 🌂", "status":
   "ok"}`), not this app — this app's `/` renders the HTML page. It should
@@ -1067,7 +1070,7 @@ that runs a prebuilt image from Docker Hub:
 ```yaml
 runtime: image
 image:
-  url: docker.io/lasiurusbat/rainalert:1.0
+  url: docker.io/lasiurusbat/rainalert:1.0.1
 ```
 
 Render pulls the image; it does not build the Dockerfile. Releases are cut by
