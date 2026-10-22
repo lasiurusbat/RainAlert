@@ -1,6 +1,7 @@
 # RainAlert refactor plan
 
-Status as of 2026-10-22: **planned, nothing started.** Checked items (`[x]`)
+Status as of 2026-10-22: **steps 0–4 done** on the `refactor/modules`
+branch; steps 5–12 open. Checked items (`[x]`)
 are finished and can be seen in the repository; unchecked items (`[ ]`) are
 open.
 
@@ -167,8 +168,8 @@ the browser suite actually ran rather than skipped.
 
 ### Step 0 — Baseline
 
-- [ ] Run the offline and browser suites and record the counts.
-- [ ] Save the rendered HTML of `/`, `/city/london`, `/cities`,
+- [x] Run the offline and browser suites and record the counts.
+- [x] Save the rendered HTML of `/`, `/city/london`, `/cities`,
       `/release-notes`, a 404, `/api/alert?city=London` and
       `/calendar.ics?city=London` with both upstreams mocked, from a small
       script in `tools/` (not in CI). Steps 5–10 are diffed against these
@@ -178,54 +179,58 @@ the browser suite actually ran rather than skipped.
 
 Risk: low.
 
-- [ ] Create `rainalert/__init__.py` and `rainalert/data/`.
-- [ ] Move `cities.py` and `releases.py` into `rainalert/data/` with
+- [x] Create `rainalert/__init__.py` and `rainalert/data/`.
+- [x] Move `cities.py` and `releases.py` into `rainalert/data/` with
       `git mv`, so history follows them.
-- [ ] `app.py` imports from the new place and re-exports `RELEASES` and
+- [x] `app.py` imports from the new place and re-exports `RELEASES` and
       `CURATED_CITIES`.
-- [ ] Add `rainalert/` to the `COPY` in the `Dockerfile`, and check
+- [x] Add `rainalert/` to the `COPY` in the `Dockerfile`, and check
       `.dockerignore` does not exclude it.
-- [ ] `docker compose up --build` still serves the page.
+- [x] `docker compose up --build` still serves the page.
 
 ### Step 2 — Configuration and errors
 
 Risk: **medium**. This is the step where a patch can silently stop applying.
 
-- [ ] `rainalert/config.py` takes every `os.getenv`, `load_dotenv()`,
+- [x] `rainalert/config.py` takes every `os.getenv`, `load_dotenv()`,
       `clean_donation_url` and the constants derived from them.
-- [ ] `rainalert/errors.py` takes the three exceptions.
-- [ ] Every function that reads a setting reads it as `config.NAME` at call
+- [x] `rainalert/errors.py` takes the three exceptions.
+- [x] Every function that reads a setting reads it as `config.NAME` at call
       time, never `from config import NAME`, so a patch of the module is
       seen.
-- [ ] In the same commit, move every `mock.patch.object(rainalert,
+- [x] In the same commit, move every `mock.patch.object(rainalert,
       "DONATION_URL" | "APP_VERSION" | "APP_COMMIT" | "SEVERITY_*")` to
       `rainalert.config`.
-- [ ] Prove the patches still bite: temporarily break one patched value and
-      watch its test fail.
+- [x] Prove the patches still bite: temporarily break one patched value and
+      watch its test fail. (Done: the donation link read as `""` failed six
+      tests.)
 
 ### Step 3 — The calendar file
 
-Risk: low.
+Risk: low. Done after step 4, because the calendar uses the rain rules and
+the labels. The calendar tests now import `rainalert.calendar_ics` directly,
+since `app.py` no longer needs the low-level helpers itself.
 
-- [ ] Move `calendar_escape`, `calendar_fold`, `calendar_day`,
+- [x] Move `calendar_escape`, `calendar_fold`, `calendar_day`,
       `calendar_next_day`, `calendar_slug`, `calendar_days`,
       `calendar_summary`, `calendar_description` and `build_calendar` into
       `rainalert/calendar_ics.py`.
-- [ ] `calendar_failure` stays with the routes; it is HTTP, not iCalendar.
-- [ ] **First**, add a test that pins the event id for "São Paulo" and for
+- [x] `calendar_failure` stays with the routes; it is HTTP, not iCalendar.
+- [x] **First**, add a test that pins the event id for "São Paulo" and for
       "Washington, D.C.", so no later step can change an id unnoticed.
 
 ### Step 4 — Labels and rain rules
 
 Risk: low; pure functions, a mechanical move.
 
-- [ ] `rainalert/domain/rain.py`: `round_half_up`, `rain_chance`,
+- [x] `rainalert/domain/rain.py`: `round_half_up`, `rain_chance`,
       `chance_number`, `severity_band`, `needs_umbrella`, `alert_threshold`.
-- [ ] `rainalert/present/labels.py`: `WEEKDAY_NAMES`,
+- [x] `rainalert/present/labels.py`: `WEEKDAY_NAMES`,
       `WEEKDAY_SHORT_NAMES`, `format_date`, `format_date_parts`, the three
       rain-chance formatters, `format_precipitation`, `format_rain_hours`,
       `format_temperature`, `severity_label`, `hour_height_step`.
-- [ ] `app.py` re-exports all of them; the tests do not change yet.
+- [x] `app.py` imports all of them for its own use, so the tests reach
+      them unchanged.
 
 After steps 1–4, `app.py` is about 700 lines shorter and nothing has
 changed shape.
