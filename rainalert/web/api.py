@@ -15,7 +15,7 @@ from rainalert.domain.rain import alert_threshold
 from rainalert.errors import FORECAST_ERRORS, MISSING_CITY
 from rainalert.upstream.geocoding import get_coordinates
 from rainalert.upstream.open_meteo import load_forecast
-from rainalert.web.common import fetch_forecast, report_failure
+from rainalert.web.common import report_failure
 
 
 def calendar_failure(message, status):
@@ -98,12 +98,12 @@ def calendar_export():
     threshold, personal = alert_threshold(request.args.get('threshold'))
     try:
         latitude, longitude, display_city = get_coordinates(city)
-        forecast = fetch_forecast(latitude, longitude)
+        days = load_forecast(latitude, longitude).days
     except FORECAST_ERRORS as exc:
         failure = report_failure(exc, city)
         return calendar_failure(failure.api_message, failure.status)
 
-    body = build_calendar(forecast, display_city, threshold, personal)
+    body = build_calendar(days, display_city, threshold, personal)
     response = Response(body, mimetype="text/calendar")
     response.headers['Content-Disposition'] = (
         f'attachment; filename="rain-alert-{calendar_slug(display_city)}.ics"')

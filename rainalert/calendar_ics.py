@@ -18,6 +18,7 @@ import re
 from datetime import date, datetime, timedelta, timezone
 
 from rainalert.domain.rain import chance_number, severity_band, severity_label
+from rainalert.present.labels import format_date
 
 
 # The name the calendar gets in the reader's calendar app.
@@ -105,23 +106,21 @@ def calendar_slug(city):
     return slug[:40] or "forecast"
 
 
-def calendar_days(forecast, threshold):
+def calendar_days(days, threshold):
     """The days of the forecast that reach the threshold.
 
-    The number that is compared is the number the page shows, so the
-    calendar and the list can never disagree about which days are wet. A
-    day the service did not report is never one of them: an unknown chance
-    is not a chance of anything.
+    The number that is compared is :func:`chance_number`, the number the
+    page shows, so the calendar and the list can never disagree about which
+    days are wet. A day the service did not report is never one of them: an
+    unknown chance is not a chance of anything.
     """
-    days = []
-    for day in forecast or []:
-        chance = day.get("chance_number")
-        if chance is None:
-            chance = chance_number(day.get("chance"))
+    wet = []
+    for day in days or ():
+        chance = chance_number(day.chance)
         if chance is None or chance < threshold:
             continue
-        days.append(day)
-    return days
+        wet.append(day)
+    return wet
 
 
 def calendar_summary(day):
@@ -130,10 +129,8 @@ def calendar_summary(day):
     The band is the one the row in the list carries, so the calendar and
     the page never disagree about how wet a day is.
     """
-    band = day.get("severity") or severity_band(day.get("chance"))
-    chance = day.get("chance_number")
-    if chance is None:
-        chance = chance_number(day.get("chance")) or 0
+    band = severity_band(day.chance)
+    chance = chance_number(day.chance) or 0
     return f"{severity_label(band)} - {chance}% chance of rain"
 
 
@@ -145,10 +142,8 @@ def calendar_description(day, city, threshold, personal):
     umbrella belongs to the app's advice and is not mixed into the
     reader's own limit, exactly as in the notifications.
     """
-    chance = day.get("chance_number")
-    if chance is None:
-        chance = chance_number(day.get("chance")) or 0
-    lines = [f"{chance}% chance of rain in {city} on {day.get('date')}."]
+    chance = chance_number(day.chance) or 0
+    lines = [f"{chance}% chance of rain in {city} on {format_date(day.iso_date)}."]
     if personal:
         lines.append(f"At or above your {threshold}% alert threshold.")
     else:
@@ -157,7 +152,7 @@ def calendar_description(day, city, threshold, personal):
     return "\n".join(lines)
 
 
-def build_calendar(forecast, city, threshold, personal=False, now=None):
+def build_calendar(days, city, threshold, personal=False, now=None):
     """The whole calendar file, as text.
 
     One all-day event per day that reaches the threshold. The events are
@@ -165,7 +160,6 @@ def build_calendar(forecast, city, threshold, personal=False, now=None):
     which days are wet, and the reader's own calendar app decides when to
     remind them about it.
     """
-    days = calendar_days(forecast, threshold)
     stamp = (now or datetime.now(timezone.utc)).strftime("%Y%m%dT%H%M%SZ")
     lines = [
         "BEGIN:VCALENDAR",
@@ -175,13 +169,13 @@ def build_calendar(forecast, city, threshold, personal=False, now=None):
         "METHOD:PUBLISH",
         f"X-WR-CALNAME:{calendar_escape(f'{CALENDAR_NAME} - {city}')}",
     ]
-    for day in days:
-        start = calendar_day(day.get("iso_date"))
+    for day in calendar_days(days, threshold):
+        start = calendar_day(day.iso_date)
         if not start:
             # A day the service dated unreadably is left out rather than
             # written as a broken date.
             continue
-        end = calendar_next_day(day.get("iso_date"))
+        end = calendar_next_day(day.iso_date)
         uid = f"rainalert-{calendar_slug(city)}-{start}@{CALENDAR_UID_DOMAIN}"
         lines.extend([
             "BEGIN:VEVENT",

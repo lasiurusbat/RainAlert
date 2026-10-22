@@ -1,7 +1,7 @@
 # RainAlert refactor plan
 
 Status as of 2026-10-22: **steps 0–12 done** on the `refactor/modules`
-branch. One item is open: `/calendar.ics` on `Day`s (step 7). Checked items (`[x]`)
+branch, with nothing open but the optional ideas in section 6. Checked items (`[x]`)
 are finished and can be seen in the repository; unchecked items (`[ ]`) are
 open.
 
@@ -311,10 +311,11 @@ Risk: medium.
       45-line dict now in `fetch_weather`).
 - [x] `/api/alert` works on `Hour`s directly and no longer builds labels
       it does not use.
-- [ ] `/calendar.ics` still uses the template's day dicts: the event text
-      needs the long date and the band, which the dicts already carry.
-      Moving `calendar_ics` onto `Day`s is left for later; it changes the
-      signature its tests call.
+- [x] `/calendar.ics` works on `Day`s too. `calendar_ics` reads the chance
+      from each `Day` and derives the band and the long date the way the
+      page does, so the file is unchanged byte for byte; the page counts
+      its exportable days from the same `Day`s. `fetch_forecast`, which
+      only the export used, is gone.
 - [x] Keep `fetch_weather` and `fetch_forecast` as thin compositions until
       step 11, because the tests call them.
 

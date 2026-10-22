@@ -6,6 +6,7 @@ import unittest
 from datetime import date
 
 from rainalert import calendar_ics, errors
+from rainalert.domain.model import Day
 from tests.fixtures import AppTestCase, FakeResponse
 
 
@@ -48,9 +49,7 @@ class TestCalendarFile(unittest.TestCase):
         id that changed would make a reader's calendar add a second copy of
         every event instead of updating the first.
         """
-        forecast = [{"iso_date": "2026-10-21", "chance": 80,
-                     "chance_number": 80, "severity": "high",
-                     "date": "Wednesday 21.10.2026"}]
+        forecast = [Day(iso_date="2026-10-21", chance=80)]
         for city, uid in (
                 ("São Paulo", "rainalert-s-o-paulo-20261021@rainalert.live"),
                 ("Washington, D.C.",
@@ -104,8 +103,7 @@ class TestCalendarFile(unittest.TestCase):
         them long.
         """
         text = calendar_ics.build_calendar(
-            [{"iso_date": "2026-10-21", "date": "Wednesday 21.10.2026",
-              "chance": 80, "chance_number": 80, "severity": "high"}],
+            [Day(iso_date="2026-10-21", chance=80)],
             "München, Bayern, Deutschland", 50)
         for line in text.split("\r\n"):
             self.assertLessEqual(len(line.encode("utf-8")), 75, line)

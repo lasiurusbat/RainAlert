@@ -28,7 +28,7 @@ class TestLiveOpenMeteo(unittest.TestCase):
         latitude, longitude, label = geocoding.get_coordinates("London")
         self.assertTrue(label)
 
-        forecast = common.fetch_forecast(latitude, longitude)
+        forecast, _ = common.fetch_weather(latitude, longitude)
         self.assertGreater(len(forecast), 0)
         for day in forecast:
             self.assertIn("date", day)

@@ -91,6 +91,7 @@ def render_forecast_page(city, unit, city_page=False, error=None, status=200):
     which answers ``200`` and says what went wrong.
     """
     weather_data = None
+    days = ()
     headline = None
     display_city = None
     alert = None
@@ -99,6 +100,7 @@ def render_forecast_page(city, unit, city_page=False, error=None, status=200):
         try:
             latitude, longitude, display_city = get_coordinates(city)
             forecast = load_forecast(latitude, longitude, unit)
+            days = forecast.days
             weather_data = [day_view(day, index)
                             for index, day in enumerate(forecast.days)]
             # The umbrella advice is about the hours ahead, so the
@@ -134,8 +136,7 @@ def render_forecast_page(city, unit, city_page=False, error=None, status=200):
     # How many days the app's own threshold would put into a calendar. The
     # browser uses it to decide whether the export link is worth offering:
     # a link that would download an empty calendar is not an offer.
-    calendar_days_count = len(
-        calendar_days(weather_data or [], config.UMBRELLA_THRESHOLD))
+    calendar_days_count = len(calendar_days(days, config.UMBRELLA_THRESHOLD))
 
     # Whether the page carries a forecast, an error, or nothing at all. The
     # browser uses it to decide whether a search that was just submitted

@@ -22,16 +22,6 @@ def report_failure(error, city):
     return failure
 
 
-def fetch_forecast(latitude, longitude, unit=None):
-    """Return the daily forecast as a list of dicts.
-
-    An empty list means the service responded but had no forecast for the
-    location; transport and payload problems raise :class:`WeatherUnavailable`.
-    """
-    forecast, _ = fetch_weather(latitude, longitude, unit)
-    return forecast
-
-
 def fetch_weather(latitude, longitude, unit=None):
     """Return the daily forecast and today's hourly rain chances, as the
     template renders them.
