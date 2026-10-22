@@ -1,12 +1,12 @@
 # Deploying RainAlert to Render (free) at rainalert.live
 
-**The site is not live.** The Docker half of this has been exercised
-locally: the image builds, both test suites pass inside it, and a forecast
-renders with English weekday names. The CI workflow itself has run and is
-green on every push to `main`. The **tag-gated half has fired** — `v1.0`
-was cut on 2026-10-22 — and the image it built **has been pushed to Docker
-Hub**. No deploy has been requested, because the deploy job needs the
-Render hook and the hook secret is not set.
+**The site is live, on a Render address rather than on its own domain.**
+The Docker half has been exercised for real: the image builds, both test
+suites pass inside it, and a forecast renders with English weekday names.
+The CI workflow itself has run and is green on every push to `main`. The
+**tag-gated half has fired** — `v1.0` was cut on 2026-10-22 — and the
+image it built **has been pushed to Docker Hub**. The service was deployed
+by hand, because the deploy hook secret was not set.
 
 State of the world, checked on 2026-10-22:
 
@@ -16,12 +16,15 @@ State of the world, checked on 2026-10-22:
 - **The Docker Hub repository `lasiurusbat/rainalert` is public and has
   one tag**: `1.0`, pushed on 2026-10-22, which is the image `render.yaml`
   points at.
+- **The app answers at <https://rainalert-1-0.onrender.com/>** — the real
+  page, on the `1.0` image, with the footer reading "Version 1.0 · build
+  7265a18". The service took the name `rainalert-1-0` because
+  `rainalert` was already taken.
 - **A Render service named `rainalert` answers at
-  <https://rainalert.onrender.com>, but it is not this app.** Its `/`
+  <https://rainalert.onrender.com>, and it is not this app.** Its `/`
   returns the JSON `{"message": "Rain Alert API is running 🌂", "status":
-  "ok"}`; this app's `/` renders the HTML page. It looks like a minimal
-  service that happens to share the name, and it has to be replaced or
-  repointed at the real image.
+  "ok"}`; this app's `/` renders the HTML page. It is a minimal service
+  that happens to share the name, and it should be deleted.
 - **`rainalert.live` is on Namecheap URL forwarding and answers nothing.**
   `http://rainalert.live/` answers `302` with `X-Served-By: Namecheap
   URL Forward` and points at `http://www.rainalert.live/`, whose A record
@@ -93,6 +96,25 @@ Two settings in `render.yaml` are worth knowing about:
 - **`healthCheckPath: /`.** The app has no separate health endpoint: its
   home page is the app's own page, and a `200` from it means the server is
   up and serving.
+
+**Saving a new image does not deploy anything.** This is the one that
+catches people: an image-backed service is never redeployed automatically,
+because auto-deploy only applies to Git-connected services. Changing the
+image URL in the service's settings changes what the *next* deploy will
+pull, and nothing else — the old container keeps serving, and it keeps
+serving the old version without any sign that anything is wrong. The
+deploy is a separate action, and there are three ways to make it:
+
+- **Deploys → Manual Deploy → Deploy latest reference**, in the
+  dashboard. It re-pulls the image at the configured tag.
+- **The deploy hook**, `GET`/`POST` on the service's hook URL. This is
+  what the workflow calls, and it can name a tag with `imgURL`.
+- **The API**, `POST /v1/services/{id}/deploys` with the image URL.
+
+Whichever one you use, check the result: the footer of the live page
+carries the version and the commit of the build that is answering, so a
+`curl` for `Version` on the live address tells you which build is really
+there.
 
 ## 3. Attach the domain
 
@@ -195,7 +217,9 @@ pull request / push to main          push of a tag such as v1.0
    `unauthorized: access token has insufficient scopes` — the token has to
    be able to write, not only to read.
 2. **Render:** service -> Settings -> Deploy Hook -> copy the URL. Treat it as
-   a secret: anyone with it can trigger deploys.
+   a secret: anyone with it can trigger deploys. Take it from the service
+   that runs the image — a hook is per-service, and a hook from a
+   different service deploys that one instead.
 3. **GitHub:** repository -> Settings -> Secrets and variables -> Actions ->
    add `DOCKERHUB_USERNAME`, `DOCKERHUB_TOKEN`, `RENDER_DEPLOY_HOOK_URL`.
    The username is the Docker Hub account name, not an email address.

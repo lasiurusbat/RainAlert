@@ -8,13 +8,15 @@ Enter a city name → geocoded to coordinates via **Nominatim** (OpenStreetMap) 
 Both APIs are free, keyless, and need no signup. There is no database and no
 user account system.
 
-**The app runs locally only.** Nothing is deployed: `rainalert.live` does not
-serve this app, no image has been pushed to Docker Hub, and no deploy has
-been requested. The first release tag (`v1.0`) was cut on 2026-10-22, but
-the workflow run it triggered never got past the Docker Hub push. The
-deployment machinery is written and committed, and it has now been run
-end to end except for the last step. `DEPLOY.md` is the runbook, and the
-"Still to do" section below is the list of what is actually ahead.
+**The app is deployed, but not on its own domain.** It answers at
+<https://rainalert-1-0.onrender.com/> — the real page, on the `1.0` image
+— and the image is on Docker Hub. The domain `rainalert.live` is still on
+Namecheap forwarding and points nowhere, so the site is reachable but not
+at the address it claims. The first release tag (`v1.0`) was cut on
+2026-10-22 and the image it built was pushed; the deploy was done by hand
+because the workflow's deploy hook was never set. `DEPLOY.md` is the
+runbook, and the "Still to do" section below is the list of what is
+actually ahead.
 
 ## Running it
 
@@ -69,24 +71,31 @@ gets none of them, because the offline suite asserts the app's own defaults.
 
 ## Deployment status
 
-**The app is not live.** Checked on 2026-10-22, and every one of these is
-still true:
+**The app is live, on a Render address rather than on the domain.**
+Checked on 2026-10-22:
 
-- **The Render service is not serving this app.** A service named
-  `rainalert` answers at <https://rainalert.onrender.com>, but its `/`
-  returns the JSON `{"message": "Rain Alert API is running 🌂", "status":
-  "ok"}` behind gunicorn. This app's `/` renders the HTML page. It is a
-  different, minimal service that happens to share the name.
-- **`rainalert.live` points nowhere useful.** The domain is at Namecheap
-  with URL forwarding: `http://rainalert.live/` answers `302` from the
-  Namecheap forwarder and points at `http://www.rainalert.live/`, whose
-  own A record is `0.0.0.0` — so the second hop answers nothing, and
-  `https://` on the root does not answer at all. No Render address appears
-  in the DNS at all.
-
-**The image is on Docker Hub.** `lasiurusbat/rainalert:1.0` was pushed on
-2026-10-22 and is the repository's first tag, so the image `render.yaml`
-names can be pulled at last.
+- **The app answers at <https://rainalert-1-0.onrender.com/>.** It serves
+  the real page — the start page, and a city's page with a live forecast
+  from both upstreams — and its footer reads "Version 1.0 · build
+  7265a18", which is the commit the `v1.0` tag points at. The service was
+  created from the Blueprint and took the name `rainalert-1-0` because
+  `rainalert` was already taken.
+- **The image is on Docker Hub.** `lasiurusbat/rainalert:1.0` was pushed
+  on 2026-10-22 and is the repository's first tag.
+- **The old stub service is still there.** A service named `rainalert`
+  answers at <https://rainalert.onrender.com> and returns the JSON
+  `{"message": "Rain Alert API is running 🌂", "status": "ok"}`. It is not
+  this app, it never was, and it should be deleted so that the two
+  addresses cannot be confused.
+- **`rainalert.live` still points nowhere useful.** The domain is at
+  Namecheap with URL forwarding: `http://rainalert.live/` answers `302`
+  from the Namecheap forwarder and points at `http://www.rainalert.live/`,
+  whose own A record is `0.0.0.0` — so the second hop answers nothing,
+  and `https://` on the root does not answer at all. No Render address
+  appears in the DNS at all. **The live page's canonical link and its
+  `og:url` already point at `https://rainalert.live/`**, because that is
+  what `SITE_URL` says, so the domain has to move before the site is
+  right in every other way too.
 
 **The first release tag has been cut, and the run it triggered took four
 attempts.** `v1.0` points at `7265a18` on `main`, and the tag-gated half
@@ -111,26 +120,36 @@ of the workflow has now run, so the machinery is not untested:
   the offline suite inside the image, the browser suite on the runner, the
   Docker Hub login and the push were all green. The deploy job then
   failed on `curl: (3) URL rejected: Bad hostname`, because the
-  `RENDER_DEPLOY_HOOK_URL` secret is not set: the hook URL was empty.
+  `RENDER_DEPLOY_HOOK_URL` secret is not set: the hook URL was empty. The
+  service was deployed by hand instead.
 
-So the app is served by `python app.py` or `docker compose up`, and by
-nothing else.
+**Changing the image in Render does not deploy anything.** An image-backed
+service is never redeployed automatically, because auto-deploy only
+applies to Git-connected services. Saving a new image URL in the service's
+settings changes what the *next* deploy will pull and nothing else. The
+deploy is a separate action: **Deploys → Manual Deploy → Deploy latest
+reference**, or the deploy hook.
 
 ### Still to do
 
-- [ ] Set `RENDER_DEPLOY_HOOK_URL` as a repository secret — the Render
-      service's deploy hook URL — and re-run the failed jobs of the `v1.0`
-      run. The image is already pushed, so the deploy job on its own is
-      all that has to run again; the tag does not have to be moved. The
-      free Render plan has to include a deploy hook for there to be one.
-- [ ] Point the domain at Render: add `rainalert.live` to the service,
-      then replace the Namecheap forwarding records with the DNS records
-      Render gives, and verify HTTPS.
+- [ ] Take the deploy hook from the **new** service
+      (`rainalert-1-0`), not from the old stub, and set it as the
+      `RENDER_DEPLOY_HOOK_URL` repository secret. It is in the service's
+      Settings, under "Deploy hook". The `v1.0` deploy job can then be
+      re-run — the image is already pushed, so only that job has to run
+      again, and the tag does not have to be moved.
+- [ ] Delete the old stub service `rainalert`, so that
+      `rainalert.onrender.com` stops answering with JSON and only one
+      service answers under that name.
+- [ ] Point the domain at Render: add `rainalert.live` to the **new**
+      service, then replace the Namecheap forwarding records with the DNS
+      records Render gives, and verify HTTPS. The live page's canonical
+      link already claims that address.
 - [ ] Re-check the smoke test in the workflow: it greps the live page for
       `Version <tag>`, so it proves the new build is the one answering and
-      not an old one. **It will fail on the first successful tag run** as
-      long as the domain is still on Namecheap forwarding, so the release
-      ends red even when the deploy itself worked.
+      not an old one. **It will fail while the domain is still on
+      Namecheap forwarding**, so the release ends red even when the deploy
+      itself worked.
 
 ## Layout
 
@@ -623,9 +642,9 @@ scale the reader chose.
 `runtime: image` pointing at `docker.io/lasiurusbat/rainalert:1.0`. Render
 pulls that image; it never runs the `Dockerfile`. A release is therefore a
 pushed image tag, not a merged commit. The old `runtime: python` shape,
-where Render ran `pip install` and gunicorn itself, is gone. None of this
-has happened yet — the image does not exist and no tag has been cut. See
-"Deployment status" above.
+where Render ran `pip install` and gunicorn itself, is gone — that is the
+shape the old stub service still runs. The image exists and the service
+pulls it. See "Deployment status" above.
 
 **CI runs the tests inside the built image.** `.github/workflows/ci-cd.yml`
 builds for `linux/amd64` and runs the offline suite
@@ -647,8 +666,10 @@ suite still runs in the image, because that one can be.
 commit already on `main`, builds and tests the image, pushes it to Docker
 Hub as the version without the `v`, and calls Render's deploy hook with an
 `imgURL` parameter naming that exact tag. Pull requests never push and never
-deploy, so the secrets are only touched on a tag run. **No tag has been
-pushed yet**, so the push-and-deploy half of the workflow has never run.
+deploy, so the secrets are only touched on a tag run. **`v1.0` has been
+pushed**, so the push half of the workflow has run; the deploy half has
+not, because the hook secret is not set and the service was deployed by
+hand instead.
 
 **Every page says which build is answering.** `APP_VERSION` and `APP_COMMIT`
 are read from the environment and passed to every template as `app_version`

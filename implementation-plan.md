@@ -84,15 +84,16 @@ a page that is missing says so with its status code.
 
 These steps use accounts and dashboards I cannot see from the repository.
 
-- [ ] Docker Hub: create an access token with Read & Write scope. Confirmed 2026-10-21: the `lasiurusbat/rainalert` repository exists and is public, but it has **zero tags** — no image has ever been pushed.
-- [ ] **(verify)** GitHub secrets set: `DOCKERHUB_USERNAME`, `DOCKERHUB_TOKEN`, `RENDER_DEPLOY_HOOK_URL`
-- [ ] Render: the service `rainalert` exists at <https://rainalert.onrender.com>, but it serves a JSON stub (`{"message": "Rain Alert API is running", "status": "ok"}`), not this app. Repoint it at the real image or replace it with one created from the Blueprint.
-- [ ] Confirm the free Render service has a deploy hook (docs do not say) and add its URL as a GitHub secret. If not, plan on manual redeploys.
-- [ ] Note the order: the image must exist on Docker Hub before Render can pull it, or the first deploy fails
-- [ ] **(verify)** Domain: `rainalert.live` added in Render, the Namecheap URL-forwarding records replaced, DNS records added, verified, HTTPS working. Confirmed 2026-10-21: the domain is on Namecheap forwarding and answers nothing — it 302s to a `www` host whose A record is `0.0.0.0`.
+- [x] Docker Hub: create an access token with Read & Write scope. Done 2026-10-22: the `lasiurusbat/rainalert` repository is public and has **one tag**, `1.0`, pushed by the `v1.0` run.
+- [ ] **(verify)** GitHub secrets set: `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN` are set; `RENDER_DEPLOY_HOOK_URL` is not.
+- [x] Render: the app answers at <https://rainalert-1-0.onrender.com/> on the `1.0` image, with the footer reading "Version 1.0 · build 7265a18". It took that name because `rainalert` was taken.
+- [ ] Delete the old stub service `rainalert` at <https://rainalert.onrender.com>, which serves a JSON stub (`{"message": "Rain Alert API is running", "status": "ok"}`) rather than this app.
+- [ ] Take the deploy hook from the **new** service and add it as the `RENDER_DEPLOY_HOOK_URL` secret, so the workflow can deploy by itself. Render's own docs list deploy hooks on the free Hobby plan, so there is one to copy.
+- [x] Note the order: the image must exist on Docker Hub before Render can pull it, or the first deploy fails. It did.
+- [ ] **(verify)** Domain: `rainalert.live` added in Render, the Namecheap URL-forwarding records replaced, DNS records added, verified, HTTPS working. Confirmed 2026-10-22: the domain is on Namecheap forwarding and answers nothing — it 302s to a `www` host whose A record is `0.0.0.0`.
 - [ ] GitHub: protect `main`, require the `build-test-push` check, optionally add a reviewer to the `production` environment
 - [ ] Review and merge (or close) the open Dependabot pull request once its checks pass
-- [ ] Cut the first release: tag `v1.0` on `main` and push it (no tag exists yet)
+- [x] Cut the first release: tag `v1.0` on `main` and push it. Done 2026-10-22.
 - [ ] Watch the first release run, fix anything small it turns up. The workflow itself is green on every push to `main`; only the tag-gated half — the push and the deploy — has never run. The smoke test will fail until the domain is attached.
 - [ ] Open the live site, search a city, confirm forecast and English weekday names
 - [ ] Confirm the canonical link, the social card and the sitemap all point at `https://rainalert.live` (the `SITE_URL` default), and that `/city/atlantis` answers `404`

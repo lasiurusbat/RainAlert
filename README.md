@@ -12,12 +12,12 @@ and swaps the favicon when rain is coming.
 Both APIs are free, keyless, and need no signup. There is no database, no
 user accounts, and nothing to configure before running it.
 
-> **The site is not live yet.** `rainalert.live` does not serve this app.
-> The first release tag (`v1.0`) was cut and the image it built is on
-> Docker Hub, but no deploy has been requested. The app runs
-> locally — see [Quick start](#quick-start). The deployment
-> machinery is written and committed; the one-time setup that would put it
-> online is still ahead. `DEPLOY.md` is the runbook.
+> **The site is live, but not on its own domain yet.** It answers at
+> <https://rainalert-1-0.onrender.com/> — the real page, on the `1.0`
+> image. `rainalert.live` is still on Namecheap forwarding and points
+> nowhere, so the site is reachable but not at the address it claims. The
+> app also runs locally — see [Quick start](#quick-start).
+> `DEPLOY.md` is the runbook.
 
 ![Rain Alert showing a 7-day forecast for London](docs/screenshot.png)
 
@@ -1043,25 +1043,28 @@ exception text is always logged, never rendered on the page.
 
 ## Deployment
 
-**Nothing is deployed yet.** The app runs locally, from `python app.py` or
-`docker compose up`. The pieces below are written and committed, but the
-one-time setup that would put it online has not been done — checked on
-2026-10-22:
+**The site is live, on a Render address rather than on its own domain.**
+The app runs locally too, from `python app.py` or `docker compose up`.
+Checked on 2026-10-22:
 
+- The app answers at <https://rainalert-1-0.onrender.com/> — the real
+  page, on the `1.0` image, with the footer reading "Version 1.0 · build
+  7265a18".
 - The first release tag has been cut (`v1.0`, on `main`), so the
   push-and-deploy half of the CI workflow has fired — and failed, four
   times: once at the Docker Hub login, once at the push (the token had the
   Read scope, and a push needs Read & Write), once in the browser suite,
   and once at the deploy hook (the `RENDER_DEPLOY_HOOK_URL` secret was
-  not set). The run to re-run is the same tag; it does not have to be cut
-  again.
+  not set). The service was deployed by hand instead.
 - The Docker Hub repository `lasiurusbat/rainalert` is public and has
   **one tag**: `1.0`, the image `render.yaml` names.
 - A Render service answers at <https://rainalert.onrender.com>, but it
   serves a JSON stub (`{"message": "Rain Alert API is running 🌂", "status":
-  "ok"}`), not this app — this app's `/` renders the HTML page.
+  "ok"}`), not this app — this app's `/` renders the HTML page. It should
+  be deleted.
 - `rainalert.live` is registered at Namecheap with URL forwarding, and
-  nothing is hosted behind it.
+  nothing is hosted behind it, so the site's own address does not work yet
+  even though the site does.
 
 The rest of this section describes the intended setup.
 
