@@ -17,8 +17,7 @@ the other routes.
 import re
 from datetime import date, datetime, timedelta, timezone
 
-from rainalert.domain.rain import chance_number, severity_band
-from rainalert.present.labels import severity_label
+from rainalert.domain.rain import chance_number, severity_band, severity_label
 
 
 # The name the calendar gets in the reader's calendar app.

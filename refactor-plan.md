@@ -1,7 +1,7 @@
 # RainAlert refactor plan
 
-Status as of 2026-10-22: **steps 0–4 done** on the `refactor/modules`
-branch; steps 5–12 open. Checked items (`[x]`)
+Status as of 2026-10-22: **steps 0–5 done** on the `refactor/modules`
+branch; steps 6–12 open. Checked items (`[x]`)
 are finished and can be seen in the repository; unchecked items (`[ ]`) are
 open.
 
@@ -239,20 +239,31 @@ changed shape.
 
 Risk: **medium**.
 
-- [ ] `rainalert/domain/model.py`: frozen dataclasses `Hour(moment,
+- [x] `rainalert/domain/model.py`: frozen dataclasses `Hour(moment,
       chance)` and `Day(iso_date, chance, high, low, amount, rain_hours,
       hours)`. The `past` and `now` flags are computed from `now`, not
       stored.
-- [ ] `rainalert/domain/parse.py`: `parse_forecast(payload) -> (days, now)`.
+- [x] `rainalert/domain/parse.py`: `parse_forecast(payload) -> (days, now)`.
       It calls `local_now` once and groups the hours once.
       `parse_today_hours` becomes a lookup in the result, not a second
       parse.
-- [ ] `fetch_weather` keeps its signature and its return value: it parses,
+- [x] `fetch_weather` keeps its signature and its return value: it parses,
       then builds the dicts. The template does not change.
-- [ ] `hour_moment()` is deleted; `notification_event` and
+- [x] `hour_moment()` is deleted; `notification_event` and
       `summarise_hours` take `Hour` objects. Their tests build `Hour`s
       instead of dicts.
-- [ ] Diff against the step 0 snapshots: identical.
+- [x] A test holds the claim: one page load groups the hours once (it was
+      twice before this step).
+
+Done differently from the outline above: `Hour` stores `past` and `now`,
+because the parser is the one place that knows the current time and both
+the strip and the alerts need the same answer. `severity_label` moved to
+`domain/rain.py`, because the band names are part of the scale and the
+summary and the notification need them. `summarise_hours` and the
+notification rule went into `domain/alerts.py` in this step rather than in
+step 6. The view builders (`day_view`, `hour_view`) stay in `app.py` until
+step 7.
+- [x] Diff against the step 0 snapshots: identical.
 
 ### Step 6 — One rule for naming a day, one rule for today's alert
 

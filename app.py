@@ -8,7 +8,7 @@ Two free, keyless APIs are used:
 import os
 import re
 import unicodedata
-from datetime import date, datetime, timedelta, timezone
+from datetime import date
 from functools import lru_cache
 
 import requests
@@ -21,14 +21,17 @@ from rainalert import config
 from rainalert.data.cities import CITY_NAMES, CITY_SLUGS, CURATED_CITIES
 from rainalert.calendar_ics import build_calendar, calendar_days, calendar_slug
 from rainalert.data.releases import RELEASES
+from rainalert.domain.alerts import clock, notification_event, summarise_hours
+from rainalert.domain.parse import parse_forecast
 from rainalert.domain.rain import (alert_threshold, chance_number, needs_umbrella,
-                                   rain_chance, round_half_up, severity_band)
+                                   rain_chance, round_half_up, severity_band,
+                                   severity_label)
 from rainalert.errors import CityNotFound, GeocodingUnavailable, WeatherUnavailable
 from rainalert.present.labels import (WEEKDAY_NAMES, describe_rain_chance, format_date,
                                       format_date_parts, format_precipitation,
                                       format_rain_chance, format_rain_chance_short,
                                       format_rain_hours, format_temperature,
-                                      hour_height_step, severity_label)
+                                      hour_height_step)
 
 app = Flask(__name__)
 
@@ -46,208 +49,6 @@ DAILY_FIELDS = ("precipitation_probability_max,temperature_2m_max,"
 HOURLY_FIELDS = "precipitation_probability"
 
 geolocator = Nominatim(user_agent=config.NOMINATIM_USER_AGENT, timeout=config.GEOCODER_TIMEOUT)
-
-
-# --- Hourly rain for today ---------------------------------------------------
-# The strip shows the city's local day, one column per hour. The hours run
-# 00 to 23 in the city's own timezone - the same local time the daily
-# forecast is dated in - so "today" means the same thing in both lists.
-HOURS_PER_DAY = 24
-
-
-def parse_hour_timestamp(value):
-    """Parse an Open-Meteo local timestamp such as ``2026-10-21T15:00``."""
-    try:
-        return datetime.strptime(str(value).strip(), "%Y-%m-%dT%H:%M")
-    except (TypeError, ValueError):
-        return None
-
-
-def local_now(payload):
-    """The local hour the forecast is current for.
-
-    The API reports the current time in the queried location's own timezone,
-    which is the same local time the hourly and daily data are dated in. The
-    UTC offset is only a fallback, for a response without a current block.
-
-    The result is always a naive local time, so it can be compared with the
-    timestamps parsed out of the hourly array.
-    """
-    current = payload.get("current") or {}
-    moment = parse_hour_timestamp(current.get("time"))
-    if moment is not None:
-        return moment.replace(minute=0, second=0, microsecond=0)
-
-    try:
-        offset = int(payload.get("utc_offset_seconds"))
-    except (TypeError, ValueError):
-        return None
-    now = datetime.now(timezone.utc) + timedelta(seconds=offset)
-    # The offset is already applied, so the result is a local wall time and
-    # carries no timezone of its own.
-    return now.replace(tzinfo=None, minute=0, second=0, microsecond=0)
-
-
-def parse_hourly_days(payload):
-    """The hourly rain chances, split by the day they belong to.
-
-    The service answers with one array of timestamps for the whole range,
-    and the strip draws one day at a time: the reader picks a day out of the
-    week and the graph shows that day. So the hours have to be grouped by
-    the day they fall on, and the groups come back in the order of the
-    daily list.
-
-    Returns a list of ``(date, hours)`` pairs. An empty list means the
-    response carried no hourly data; the daily list still renders on its own.
-    """
-    daily = payload.get("daily") or {}
-    hourly = payload.get("hourly") or {}
-    times = hourly.get("time") or []
-    chances = hourly.get("precipitation_probability") or []
-    if not times:
-        return []
-
-    entries = []
-    for index, stamp in enumerate(times):
-        moment = parse_hour_timestamp(stamp)
-        if moment is None:
-            continue
-        chance = chances[index] if index < len(chances) else None
-        entries.append((moment, chance))
-
-    # The hourly array starts at local midnight of the current day. Matching
-    # on the date rather than slicing the first 24 keeps the strip aligned
-    # with the daily list even if the two disagree by a day. A day with 23 or
-    # 25 hours (a clock-change day) is kept whole rather than truncated.
-    now = local_now(payload)
-    days = []
-    for day in (daily.get("time") or []):
-        todays = [entry for entry in entries
-                  if entry[0].date().isoformat() == day]
-        days.append((day, _build_hours(todays, now)))
-
-    if not days:
-        # There is no daily list to line the hours up with, so the first day
-        # of the hourly array is the day the strip draws.
-        if not entries:
-            return []
-        return [(entries[0][0].date().isoformat(),
-                 _build_hours(entries[:HOURS_PER_DAY], now))]
-
-    if not days[0][1]:
-        # The hourly array does not start on the first day of the daily
-        # list. The strip still needs a day to draw, so it falls back to the
-        # first day of the array, as it always has.
-        days[0] = (days[0][0], _build_hours(entries[:HOURS_PER_DAY], now))
-
-    return days
-
-
-def parse_today_hours(payload):
-    """Today's hourly rain chances, one entry per hour, in local time.
-
-    The current time decides which day is "today" when it is available,
-    because that is the day the now-marker belongs to. The first daily
-    entry is the fallback.
-
-    An empty list means the response carried no hourly data; the daily list
-    still renders on its own.
-    """
-    days = parse_hourly_days(payload)
-    if not days:
-        return []
-    now = local_now(payload)
-    today = now.date().isoformat() if now is not None else None
-    if today:
-        for day, hours in days:
-            if day == today and hours:
-                return hours
-    return days[0][1]
-
-
-def _build_hours(entries, now):
-    """Turn (timestamp, chance) pairs into the entries the template renders."""
-    hours = []
-    for moment, chance in entries:
-        band = severity_band(chance)
-        probability = rain_chance(chance)
-        hours.append({
-            "day": moment.date().isoformat(),
-            "hour": moment.hour,
-            "hour_label": f"{moment.hour:02d}",
-            "time_label": f"{moment.hour:02d}:00",
-            "chance": chance,
-            # The tooltip and the screen-reader text stand on their own, so
-            # they carry the full phrase. The table cell sits under a real
-            # "Rain chance" column heading, so it can be the bare number.
-            "chance_label": describe_rain_chance(chance),
-            "chance_cell": format_rain_chance(chance),
-            # The bare number, for the strip's own value row: one narrow
-            # column per hour does not have room for the sign.
-            "chance_short": format_rain_chance_short(chance),
-            "severity": band,
-            "severity_label": severity_label(band),
-            "height": hour_height_step(chance),
-            # A value the app cannot read is unknown, whether it arrived as
-            # null or as something that is not a number.
-            "unknown": probability is None,
-            "past": now is not None and moment < now,
-            "now": now is not None and moment == now,
-        })
-    return hours
-
-
-def summarise_hours(hours, when="for the rest of today"):
-    """A one-line summary of when rain is likely in the given hours.
-
-    The threshold is the umbrella threshold, so the sentence agrees with the
-    umbrella icon on the daily list. Only hours that have not happened yet
-    count: a window that has already passed is not an alert.
-
-    ``when`` says which day the sentence is about: "for the rest of today"
-    for the day that is running, and "tomorrow" or "on Friday" for a day
-    that is still to come.
-
-    Returns an empty string when there is nothing to say.
-    """
-    upcoming = [hour for hour in hours if not hour["past"]]
-    if not upcoming:
-        return ""
-
-    # Group the wet hours into contiguous windows.
-    windows = []
-    window = []
-    for hour in upcoming:
-        probability = rain_chance(hour["chance"])
-        if probability is not None and probability >= config.UMBRELLA_THRESHOLD:
-            window.append(hour)
-        elif window:
-            windows.append(window)
-            window = []
-    if window:
-        windows.append(window)
-
-    if not windows:
-        return f"No rain likely {when}."
-
-    first = windows[0]
-    band = "high" if any(hour["severity"] == "high" for hour in first) \
-        else "moderate"
-    if all(hour["severity"] == "unknown" for hour in first):
-        # An unknown chance is not a wet hour, but it is also not a dry one,
-        # so it is never called "possible" or "likely".
-        band = "unknown"
-    peak = max(rain_chance(hour["chance"]) or 0 for hour in first)
-    if len(first) == 1:
-        span = f"at about {first[0]['time_label']}"
-    else:
-        span = f"from about {first[0]['time_label']} to {first[-1]['time_label']}"
-
-    sentence = f"{severity_label(band).lower()} {span}, up to {round_half_up(peak)}%"
-    if len(windows) > 1:
-        sentence += ", and at other times too"
-
-    return f"{sentence[0].upper()}{sentence[1:]}. Bring an umbrella."
 
 
 # --- The headline ------------------------------------------------------------
@@ -722,94 +523,6 @@ def structured_data(city=None, forecast=None):
     return {"@context": "https://schema.org", "@graph": graph}
 
 
-# --- Notifications -----------------------------------------------------------
-# Two things are worth interrupting a reader for: rain in the hour they are
-# in right now, and rain about to start. Everything else is either already on
-# the page or too far away to be worth a notification.
-#
-# Each event carries a key. The browser keeps the keys of the events it has
-# already shown, so the same rain is never announced twice, and a poll that
-# lands in the same wet hour has nothing new to say.
-
-
-def hour_moment(hour):
-    """The local time of an hourly entry, as a datetime."""
-    try:
-        return datetime.fromisoformat(
-            f"{hour.get('day')}T{int(hour.get('hour', 0)):02d}:00")
-    except (TypeError, ValueError):
-        return None
-
-
-def notification_body(chance, city, when, threshold, personal):
-    """The sentence under a notification's title."""
-    percent = round_half_up(chance)
-    sentence = f"{percent}% chance of rain in {city} {when}."
-    if personal:
-        # The reader's own limit, in their own words. The umbrella is the
-        # app's advice and belongs to the page, not to this notification.
-        sentence += f" Above your {threshold}% threshold."
-    elif percent >= config.UMBRELLA_THRESHOLD:
-        sentence += " Bring an umbrella."
-    return sentence
-
-
-def notification_event(hours, threshold, city, personal=False):
-    """The one notification worth showing right now, or ``None``.
-
-    Rain in the current hour is worth interrupting the reader for: it is
-    happening now, and the umbrella is the answer to it. The key is the day,
-    so a wet afternoon is announced once and not once an hour.
-
-    Rain further ahead is only worth a notification once it is close enough
-    to act on. The first wet hour within ``NOTIFICATION_LEAD_HOURS`` is the
-    one, and its key is the hour, so the same rain is not announced twice
-    when the forecast shifts a little.
-
-    A day the service did not report is never a wet hour: an unknown chance
-    is not a chance of anything.
-    """
-    entries = [hour for hour in (hours or []) if hour.get("day")]
-    remaining = [hour for hour in entries if not hour.get("past")]
-    if not remaining:
-        return None
-
-    current = remaining[0]
-    current_moment = hour_moment(current)
-    if current_moment is None:
-        return None
-
-    current_chance = rain_chance(current.get("chance"))
-    if current_chance is not None and current_chance >= threshold:
-        return {
-            "key": f"now:{current.get('day')}",
-            "title": f"{severity_label(severity_band(current_chance))} right now",
-            "body": notification_body(
-                current_chance, city, "right now", threshold, personal),
-        }
-
-    for hour in remaining[1:]:
-        chance = rain_chance(hour.get("chance"))
-        if chance is None or chance < threshold:
-            continue
-        moment = hour_moment(hour)
-        if moment is None:
-            continue
-        lead = (moment - current_moment).total_seconds() / 3600
-        if lead > config.NOTIFICATION_LEAD_HOURS:
-            # Too far off to be worth saying now. A later poll catches it
-            # as it comes closer, because the hours are in order.
-            break
-        label = hour.get("time_label") or f"{moment.hour:02d}:00"
-        return {
-            "key": f"hour:{hour.get('day')}T{int(hour.get('hour', 0)):02d}:00",
-            "title": f"{severity_label(severity_band(chance))} from {label}",
-            "body": notification_body(
-                chance, city, f"at {label}", threshold, personal),
-        }
-    return None
-
-
 # --- Calendar export ---------------------------------------------------------
 def calendar_failure(message, status):
     """A plain-text answer for a request that cannot be answered.
@@ -856,27 +569,13 @@ def get_coordinates(city_name):
     return location.latitude, location.longitude, label
 
 
-def fetch_forecast(latitude, longitude, unit=None):
-    """Return the daily forecast as a list of dicts.
+def fetch_payload(latitude, longitude, unit=None):
+    """The forecast service's answer, as the JSON it sent.
 
-    An empty list means the service responded but had no forecast for the
-    location; transport and payload problems raise :class:`WeatherUnavailable`.
-    """
-    forecast, _ = fetch_weather(latitude, longitude, unit)
-    return forecast
-
-
-def fetch_weather(latitude, longitude, unit=None):
-    """Return the daily forecast and today's hourly rain chances.
-
-    Both come from a single request: Open-Meteo serves the daily and the
-    hourly fields together, and asking for both in one call keeps the app
-    to one request per page load.
-
-    The daily list is the primary result. The hourly list is an addition to
-    it, so it may be empty when the service omits the hourly block, but a
-    transport or payload problem raises :class:`WeatherUnavailable` and the
-    page shows the error rather than a half-rendered forecast.
+    The daily and the hourly fields come from a single request: Open-Meteo
+    serves them together, and asking for both in one call keeps the app to
+    one request per page load. A transport or payload problem raises
+    :class:`WeatherUnavailable`.
 
     ``unit`` is the temperature scale to ask the service for. The service
     converts the values itself, so the app never does the arithmetic.
@@ -902,105 +601,141 @@ def fetch_weather(latitude, longitude, unit=None):
         raise WeatherUnavailable(f"the forecast request failed: {exc}") from exc
 
     try:
-        payload = response.json()
+        return response.json()
     except ValueError as exc:
         raise WeatherUnavailable("the forecast response was not valid JSON") from exc
 
-    daily = payload.get("daily") or {}
-    dates = daily.get("time") or daily.get("time_string") or []
-    chances = daily.get("precipitation_probability_max") or []
-    highs = daily.get("temperature_2m_max") or []
-    lows = daily.get("temperature_2m_min") or []
-    amounts = daily.get("precipitation_sum") or []
-    hours_of_rain = daily.get("precipitation_hours") or []
 
-    # The hours of every day, split by the day they fall on. The strip draws
-    # the day the reader picks, so the hours have to be grouped before the
-    # days are built.
-    try:
-        hourly_days = parse_hourly_days(payload)
-    except (TypeError, ValueError) as exc:
-        # A missing hourly strip is a missing feature, not a broken forecast.
-        app.logger.warning("Hourly forecast could not be parsed: %s", exc)
-        hourly_days = []
-    hours_by_date = {day: hours for day, hours in hourly_days}
+def _hourly_failed(exc):
+    # A missing hourly strip is a missing feature, not a broken forecast.
+    app.logger.warning("Hourly forecast could not be parsed: %s", exc)
 
-    forecast = []
-    for index, (day, chance) in enumerate(zip(dates, chances)):
-        band = severity_band(chance)
-        weekday_short, date_short = format_date_parts(day)
-        day_name = day_panel_name(day, index)
-        when, when_summary = day_phrases(index, day_name)
-        day_hours = hours_by_date.get(day) or []
-        forecast.append({
-            "date": format_date(day),
-            # The raw date, kept so the headline can name the weekday without
-            # having to take the formatted date apart again.
-            "iso_date": day,
-            # The short forms, for the week that is a row of seven narrow
-            # columns. The long date is still on the page, for screen
-            # readers.
-            "weekday_short": weekday_short,
-            "date_short": date_short,
-            # The visible number, and the full phrase for the screen reader.
-            # The column heading above the list says "chance of rain" once.
-            "rain_label": format_rain_chance(chance),
-            "rain_sr_label": describe_rain_chance(chance),
-            "temp_label": format_temperature(
-                highs[index] if index < len(highs) else None,
-                lows[index] if index < len(lows) else None,
-            ),
-            # What the day panel says about this day: which day it is, how
-            # much rain falls in it and how long it lasts. The panel is
-            # built from the same chance the column shows, so the two can
-            # never disagree.
-            "day_name": day_name,
-            "day_label": f"{day_name} {date_short}".strip(),
-            "chance_label": (
-                f"{chance_number(chance)}% chance of rain"
-                if chance_number(chance) is not None
-                else ""
-            ),
-            "amount_label": format_precipitation(
-                amounts[index] if index < len(amounts) else None),
-            "hours_label": format_rain_hours(
-                hours_of_rain[index] if index < len(hours_of_rain) else None),
-            "chance": chance,
-            # The number the row shows, and the number a personal alert
-            # threshold in the browser is compared against. The browser
-            # reads it from the markup, so the threshold and the number on
-            # the page are always the same value.
-            "chance_number": chance_number(chance),
-            "severity": band,
-            "severity_label": severity_label(band),
-            # The panel names the band in words. A day the service did not
-            # report is named as such, and the panel leaves the figures out
-            # altogether: a day with no chance reported is never counted as
-            # a dry one.
-            "band_label": ("Rain not reported" if band == "unknown"
-                           else severity_label(band)),
-            "umbrella": needs_umbrella(chance),
-            # The hours of this day, for the strip the reader can pick.
-            # The strip and the panel are the same day, so the two can
-            # never be about different days.
-            "hours": day_hours,
-            # The title the strip carries while this day is the one that
-            # shows, and the sentence under it.
-            "hourly_title": f"{day_name}, hour by hour",
-            "hourly_summary": (summarise_hours(day_hours, when_summary)
-                               if day_hours else ""),
-            # How a caption names this day.
-            "day_when": when,
-        })
 
-    try:
-        hours = parse_today_hours(payload)
-    except (TypeError, ValueError) as exc:
-        # A missing hourly strip is a missing feature, not a broken forecast.
-        app.logger.warning("Hourly forecast could not be parsed: %s", exc)
-        hours = []
+def load_forecast(latitude, longitude, unit=None):
+    """The forecast for a place, parsed once: the days and today's hours."""
+    payload = fetch_payload(latitude, longitude, unit)
+    return parse_forecast(payload, on_hourly_error=_hourly_failed)
 
-    return forecast, hours
+
+def hour_view(hour):
+    """One hour of the strip, in the form the template renders."""
+    band = severity_band(hour.chance)
+    return {
+        "day": hour.day,
+        "hour": hour.moment.hour,
+        "hour_label": f"{hour.moment.hour:02d}",
+        "time_label": clock(hour),
+        "chance": hour.chance,
+        # The tooltip and the screen-reader text stand on their own, so
+        # they carry the full phrase. The table cell sits under a real
+        # "Rain chance" column heading, so it can be the bare number.
+        "chance_label": describe_rain_chance(hour.chance),
+        "chance_cell": format_rain_chance(hour.chance),
+        # The bare number, for the strip's own value row: one narrow
+        # column per hour does not have room for the sign.
+        "chance_short": format_rain_chance_short(hour.chance),
+        "severity": band,
+        "severity_label": severity_label(band),
+        "height": hour_height_step(hour.chance),
+        # A value the app cannot read is unknown, whether it arrived as
+        # null or as something that is not a number.
+        "unknown": rain_chance(hour.chance) is None,
+        "past": hour.past,
+        "now": hour.now,
+    }
+
+
+def parse_today_hours(payload):
+    """Today's hours, in the form the template renders."""
+    return [hour_view(hour) for hour in parse_forecast(payload).today]
+
+
+def day_view(day, index):
+    """One day of the week, in the form the template renders."""
+    chance = day.chance
+    band = severity_band(chance)
+    weekday_short, date_short = format_date_parts(day.iso_date)
+    day_name = day_panel_name(day.iso_date, index)
+    when, when_summary = day_phrases(index, day_name)
+    return {
+        "date": format_date(day.iso_date),
+        # The raw date, kept so the headline can name the weekday without
+        # having to take the formatted date apart again.
+        "iso_date": day.iso_date,
+        # The short forms, for the week that is a row of seven narrow
+        # columns. The long date is still on the page, for screen
+        # readers.
+        "weekday_short": weekday_short,
+        "date_short": date_short,
+        # The visible number, and the full phrase for the screen reader.
+        # The column heading above the list says "chance of rain" once.
+        "rain_label": format_rain_chance(chance),
+        "rain_sr_label": describe_rain_chance(chance),
+        "temp_label": format_temperature(day.high, day.low),
+        # What the day panel says about this day: which day it is, how
+        # much rain falls in it and how long it lasts. The panel is
+        # built from the same chance the column shows, so the two can
+        # never disagree.
+        "day_name": day_name,
+        "day_label": f"{day_name} {date_short}".strip(),
+        "chance_label": (
+            f"{chance_number(chance)}% chance of rain"
+            if chance_number(chance) is not None
+            else ""
+        ),
+        "amount_label": format_precipitation(day.amount),
+        "hours_label": format_rain_hours(day.rain_hours),
+        "chance": chance,
+        # The number the row shows, and the number a personal alert
+        # threshold in the browser is compared against. The browser
+        # reads it from the markup, so the threshold and the number on
+        # the page are always the same value.
+        "chance_number": chance_number(chance),
+        "severity": band,
+        "severity_label": severity_label(band),
+        # The panel names the band in words. A day the service did not
+        # report is named as such, and the panel leaves the figures out
+        # altogether: a day with no chance reported is never counted as
+        # a dry one.
+        "band_label": ("Rain not reported" if band == "unknown"
+                       else severity_label(band)),
+        "umbrella": needs_umbrella(chance),
+        # The hours of this day, for the strip the reader can pick.
+        # The strip and the panel are the same day, so the two can
+        # never be about different days.
+        "hours": [hour_view(hour) for hour in day.hours],
+        # The title the strip carries while this day is the one that
+        # shows, and the sentence under it.
+        "hourly_title": f"{day_name}, hour by hour",
+        "hourly_summary": (summarise_hours(day.hours, when_summary)
+                           if day.hours else ""),
+        # How a caption names this day.
+        "day_when": when,
+    }
+
+
+def fetch_forecast(latitude, longitude, unit=None):
+    """Return the daily forecast as a list of dicts.
+
+    An empty list means the service responded but had no forecast for the
+    location; transport and payload problems raise :class:`WeatherUnavailable`.
+    """
+    forecast, _ = fetch_weather(latitude, longitude, unit)
+    return forecast
+
+
+def fetch_weather(latitude, longitude, unit=None):
+    """Return the daily forecast and today's hourly rain chances, as the
+    template renders them.
+
+    The daily list is the primary result. The hourly list is an addition to
+    it, so it may be empty when the service omits the hourly block, but a
+    transport or payload problem raises :class:`WeatherUnavailable` and the
+    page shows the error rather than a half-rendered forecast.
+    """
+    forecast = load_forecast(latitude, longitude, unit)
+    return ([day_view(day, index) for index, day in enumerate(forecast.days)],
+            [hour_view(hour) for hour in forecast.today])
 
 
 # --- Routes ------------------------------------------------------------------
@@ -1382,7 +1117,7 @@ def api_alert():
     threshold, personal = alert_threshold(request.args.get('threshold'))
     try:
         latitude, longitude, display_city = get_coordinates(city)
-        _, hours = fetch_weather(latitude, longitude)
+        hours = load_forecast(latitude, longitude).today
     except CityNotFound:
         return noindex(jsonify({
             "error": "City not found. Please try a different name "
@@ -1396,8 +1131,8 @@ def api_alert():
         return noindex(jsonify({
             "error": "The weather service is unavailable right now."})), 503
 
-    remaining = [hour for hour in (hours or []) if not hour.get("past")]
-    now = remaining[0].get("time_label") if remaining else None
+    remaining = [hour for hour in hours if not hour.past]
+    now = clock(remaining[0]) if remaining else None
     return noindex(jsonify({
         "city": display_city,
         "now": now,

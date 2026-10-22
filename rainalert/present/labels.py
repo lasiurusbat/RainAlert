@@ -188,22 +188,3 @@ def hour_height_step(chance, step=HOUR_HEIGHT_STEP):
         return 0
     steps = round_half_up(probability / step)
     return max(0, min(100, steps * step))
-
-
-def severity_label(band):
-    """A short human-readable name for a severity band.
-
-    The three bands read as a scale - unlikely, possible, likely - rather
-    than as absolute claims. A day with a 25% chance is not "dry", it is
-    just unlikely to be wet, and saying otherwise would mislead.
-
-    The labels are deliberately short: they appear on the same line as the
-    date, and a long label would push the forecast row onto a second line
-    and make the whole list taller than the viewport.
-    """
-    return {
-        "low": "Rain unlikely",
-        "moderate": "Rain possible",
-        "high": "Rain likely",
-        "unknown": "Unknown",
-    }.get(band, "Unknown")

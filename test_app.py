@@ -15,6 +15,7 @@ import requests
 
 import app as rainalert
 from rainalert import calendar_ics
+from rainalert.domain import parse
 
 
 FORECAST_PAYLOAD = {
@@ -600,7 +601,7 @@ class TestHourlySummary(AppTestCase):
 
     def _summary_for(self, chances, now="2026-10-21T09:00"):
         payload = hourly_payload(chances, now=now)
-        hours = rainalert.parse_today_hours(payload)
+        hours = parse.parse_forecast(payload).today
         return rainalert.summarise_hours(hours)
 
     def test_a_wet_window_is_reported(self):
@@ -1053,6 +1054,20 @@ class TestHourlyParsing(unittest.TestCase):
         hours = rainalert.parse_today_hours(payload)
         self.assertEqual(len(hours), 23)
 
+    def test_a_page_parses_the_hours_once(self):
+        """The hours are grouped once per request, and today is picked
+        out of the groups rather than parsed a second time."""
+        rainalert.get_coordinates.cache_clear()
+        with mock.patch.object(rainalert.geolocator, "geocode",
+                               return_value=FakeLocation()), \
+                mock.patch.object(rainalert.requests, "get",
+                                  return_value=FakeResponse()), \
+                mock.patch.object(parse, "_parse_hourly_days",
+                                  wraps=parse._parse_hourly_days) as grouped:
+            response = rainalert.app.test_client().get("/city/london")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(grouped.call_count, 1)
+
     def test_an_empty_hourly_block_gives_no_hours(self):
         self.assertEqual(rainalert.parse_today_hours({}), [])
         self.assertEqual(rainalert.parse_today_hours({"hourly": {}}), [])
@@ -1069,15 +1084,15 @@ class TestHourlyParsing(unittest.TestCase):
         """Without a current block the offset still says what time it is."""
         payload = hourly_payload([0] * 24)
         del payload["current"]
-        self.assertIsNotNone(rainalert.local_now(payload))
+        self.assertIsNotNone(parse.local_now(payload))
 
     def test_the_local_now_is_none_without_any_time_information(self):
-        self.assertIsNone(rainalert.local_now({}))
+        self.assertIsNone(parse.local_now({}))
 
     def test_an_unparseable_timestamp_is_rejected(self):
-        self.assertIsNone(rainalert.parse_hour_timestamp("not-a-time"))
-        self.assertIsNone(rainalert.parse_hour_timestamp(None))
-        self.assertIsNotNone(rainalert.parse_hour_timestamp("2026-10-21T15:00"))
+        self.assertIsNone(parse.parse_hour_timestamp("not-a-time"))
+        self.assertIsNone(parse.parse_hour_timestamp(None))
+        self.assertIsNotNone(parse.parse_hour_timestamp("2026-10-21T15:00"))
 
 
 class TestCaching(AppTestCase):
@@ -1633,7 +1648,7 @@ class TestNotificationEvent(unittest.TestCase):
     def event(self, chances, threshold=None, now="2026-10-21T09:00",
               personal=False, city="London"):
         payload = hourly_payload(chances, now=now)
-        hours = rainalert.parse_today_hours(payload)
+        hours = parse.parse_forecast(payload).today
         if threshold is None:
             threshold = rainalert.config.UMBRELLA_THRESHOLD
         return rainalert.notification_event(
@@ -1673,7 +1688,7 @@ class TestNotificationEvent(unittest.TestCase):
         """A missing value is not a chance of rain."""
         payload = hourly_payload(
             [0] * 10 + [None] + [0] * 13, now="2026-10-21T09:00")
-        hours = rainalert.parse_today_hours(payload)
+        hours = parse.parse_forecast(payload).today
         self.assertIsNone(rainalert.notification_event(
             hours, rainalert.config.UMBRELLA_THRESHOLD, "London"))
 
