@@ -127,7 +127,7 @@ Python 3.14.5.
 ## Running the tests
 
 ```bash
-python -m unittest discover -s tests/offline -t .  # 533 offline tests, no network required
+python -m unittest discover -s tests/offline -t .  # 538 offline tests, no network required
 python -m unittest tests.test_browser               # 128 browser tests, needs Chrome
 python -m unittest tests.test_api                   # 7 live integration tests, hits both APIs
 ```
@@ -1071,9 +1071,9 @@ too, from `python app.py` or `docker compose up`. Checked on 2026-10-23:
   secret was not set). The second was green on its first attempt, and a
   release is one `git tag`.
 - The Docker Hub repository `lasiurusbat/rainalert` is public and has
-  **two tags**: `1.0` and `1.0.1`, the latter being the one the live service
-  is running. `render.yaml` already names `1.1.0`, the release in
-  preparation, which exists once the `v1.1.0` tag has been pushed.
+  tags `1.0`, `1.0.1` and `1.1.0`, the last being the one the live service
+  is running. `render.yaml` already names `1.1.1`, the release in
+  preparation, which exists once the `v1.1.1` tag has been pushed.
 - The Render service is named `rainalert` and answers at
   <https://rainalert-1-0.onrender.com> as well as on the domain; an older
   stub service that used to hold the name has been deleted.
@@ -1086,7 +1086,7 @@ that runs a prebuilt image from Docker Hub:
 ```yaml
 runtime: image
 image:
-  url: docker.io/lasiurusbat/rainalert:1.1.0
+  url: docker.io/lasiurusbat/rainalert:1.1.1
 ```
 
 Render pulls the image; it does not build the Dockerfile. Releases are cut by

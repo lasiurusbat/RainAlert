@@ -12,7 +12,7 @@ from flask import Flask
 from flask.logging import default_handler
 
 from rainalert import config
-from rainalert.web import api, pages, site
+from rainalert.web import api, pages, security, site
 
 # The templates and the static files live at the top of the repository,
 # next to the package, not inside it.
@@ -47,4 +47,5 @@ def create_app():
     pages.register(app)
     api.register(app)
     site.register(app)
+    security.register(app)
     return app

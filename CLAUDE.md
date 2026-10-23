@@ -29,7 +29,7 @@ Serves on <http://127.0.0.1:5000>. `FLASK_DEBUG=1` enables the reloader and
 debugger.
 
 ```bash
-python -m unittest discover -s tests/offline -t .  # offline suite, 533 tests, no network
+python -m unittest discover -s tests/offline -t .  # offline suite, 538 tests, no network
 python -m unittest tests.test_browser               # browser suite, 128 tests, needs Chrome
 python -m unittest tests.test_api                   # live integration tests, hits both APIs
 ```
@@ -176,6 +176,7 @@ Nothing is outstanding.
 | `rainalert/web/pages.py` | `/`, `/city/<slug>`, `/cities`, `/release-notes` and `render_forecast_page()` |
 | `rainalert/web/api.py` | `/api/alert` and `/calendar.ics` |
 | `rainalert/web/site.py` | `robots.txt`, `sitemap.xml`, the manifest, the service worker, the 404 |
+| `rainalert/web/security.py` | The security headers on every response: CSP, HSTS, X-Frame-Options, X-Content-Type-Options, Referrer-Policy, Permissions-Policy |
 | `rainalert/web/common.py` | What the route modules share: reporting a failure. The forecast as views is a helper here, but only the tests call it |
 | `rainalert/data/cities.py` | The curated list of cities that have a page of their own |
 | `rainalert/data/releases.py` | What each release brought, for the release notes page |
@@ -663,8 +664,8 @@ search form carries the unit in a hidden field, so a new search keeps the
 scale the reader chose.
 
 **Deployment runs a prebuilt image, not a build.** `render.yaml` uses
-`runtime: image` pointing at `docker.io/lasiurusbat/rainalert:1.1.0` (the release in
-preparation; the live service runs `1.0.1` until the `v1.1.0` tag has been
+`runtime: image` pointing at `docker.io/lasiurusbat/rainalert:1.1.1` (the release in
+preparation; the live service runs `1.1.0` until the `v1.1.1` tag has been
 pushed and deployed, and a manual deploy before then has no such image to
 pull). Render
 pulls that image; it never runs the `Dockerfile`. A release is therefore a
@@ -942,6 +943,15 @@ for `serviceWorker` in `navigator` and for `window.isSecureContext`, and
 registers on `load`. `http://127.0.0.1` and `http://localhost` are secure
 contexts, so it works in local development, and a failure is swallowed
 because the app works without it.
+
+- **The security headers are strict because the site loads nothing from
+  elsewhere.** `rainalert/web/security.py` sets the CSP (`default-src 'none'`,
+  everything else `'self'`, no `unsafe-inline`), `X-Frame-Options: DENY`,
+  `nosniff`, `Referrer-Policy` and `Permissions-Policy`. HSTS is sent only
+  when the request was HTTPS (`X-Forwarded-Proto` behind Render's proxy), with
+  no `includeSubDomains` or `preload`. So: no inline `style=`, `<style>` or
+  `<script>` (the JSON-LD block is data and is exempt), and no third-party
+  asset. A test fails on either; widen the policy deliberately if one is needed.
 
 ## Gotchas
 

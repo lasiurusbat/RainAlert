@@ -37,7 +37,7 @@ a page that is missing says so with its status code.
 - [x] Geocoding cache, explicit timeouts, configuration through environment variables
 - [x] City-local dates (`timezone=auto`) and English weekday names
 - [x] Temperature rounding fix (round half up)
-- [x] Offline unit tests (533), browser tests (128) and live API tests (7)
+- [x] Offline unit tests (538), browser tests (128) and live API tests (7)
 - [x] `app.py` split into the `rainalert` package, in layers (`domain`, `present`, `upstream`, `web`), and the tests into `tests/`, one file per module (see `refactor-plan.md`)
 - [x] Comprehensive `README.md` with screenshot, `CLAUDE.md` project notes
 - [x] API reference (`API.md`) and an OpenAPI 3.1 spec (`openapi.yaml`), with tests that keep them in step with the routes
@@ -70,7 +70,7 @@ a page that is missing says so with its status code.
 ### Packaging and delivery
 - [x] Multi-stage `Dockerfile`: non-root user, no system packages, tests included in the image
 - [x] `.dockerignore`, `.gitignore`, `docker-compose.yml` (app plus a `tests` profile)
-- [x] `render.yaml`: free web service running `docker.io/lasiurusbat/rainalert:1.1.0` (the release in preparation), user agent naming rainalert.live
+- [x] `render.yaml`: free web service running `docker.io/lasiurusbat/rainalert:1.1.1` (the release in preparation), user agent naming rainalert.live
 - [x] `.github/workflows/ci-cd.yml`: build, test in the image, push on release tag, Render deploy hook, smoke test
 - [x] `.github/dependabot.yml`: weekly updates for Actions, pip and the Docker base image
 - [x] `DEPLOY.md` runbook (image push, Render setup, domain, pipeline, known limits)

@@ -17,6 +17,25 @@ promises a forecast the service does not give.
 
 RELEASES = [
     {
+        "version": "1.1.1",
+        "date": "2026-10-23",
+        "name": "A tighter lock on the door",
+        "features": [
+            {
+                "title": "Security headers on every page",
+                "text": "Every response now carries the headers browsers "
+                        "use to protect a reader: a strict content security "
+                        "policy, HTTPS-only transport, no framing of the "
+                        "site inside another page, no guessing of file "
+                        "types, a trimmed referrer and a permissions policy "
+                        "that switches off the camera, microphone and "
+                        "location. The site loads nothing from anyone "
+                        "else, so the policy allows nothing from anyone "
+                        "else.",
+            },
+        ],
+    },
+    {
         "version": "1.1.0",
         "date": "2026-10-23",
         "name": "Put it on your home screen",
