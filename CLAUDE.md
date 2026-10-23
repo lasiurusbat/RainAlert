@@ -9,10 +9,10 @@ Both APIs are free, keyless, and need no signup. There is no database and no
 user account system.
 
 **The app is deployed and live at <https://rainalert.live/>.** It runs
-from the `1.0.1` image on Docker Hub, on a Render service, and the domain
+from the `1.1.0` image on Docker Hub, on a Render service, and the domain
 is attached to it: `http://` redirects to `https://`, and every route
-answers. Two release tags have been cut — `v1.0` on 2026-10-22 and
-`v1.0.1` on 2026-10-23 — the images they built were pushed, and the
+answers. Three release tags have been cut — `v1.0` on 2026-10-22,
+`v1.0.1` and `v1.1.0` on 2026-10-23 — the images they built were pushed, and the
 workflow's deploy hook has deployed them. It
 also runs locally, from `python app.py` or `docker compose up`. `DEPLOY.md`
 is the runbook, and the "Still to do" section below is the list of what is
@@ -78,8 +78,8 @@ gets none of them, because the offline suite asserts the app's own defaults.
   `gcp-us-west1-1.origin.onrender.com`, resolving to `216.24.57.16` and
   `216.24.57.18`. `http://` answers `301` to `https://`; `https://` answers
   `200` with the real page, and a city's page with a live forecast from
-  both upstreams. The footer reads "Version 1.0.1 · build e045be4", which is
-  the commit the `v1.0.1` tag points at, so the build that is answering is
+  both upstreams. The footer reads "Version 1.1.0 · build 34fc8b2", which is
+  the commit the `v1.1.0` tag points at, so the build that is answering is
   the build that was released.
 - **Every route answers on the live domain**: the start page, `/cities`,
   `/release-notes`, `/robots.txt`, `/sitemap.xml`, `/manifest.json`,
@@ -87,9 +87,10 @@ gets none of them, because the offline suite asserts the app's own defaults.
   a `404` for an address that is not on the site. Each page's canonical
   link is its own address under `https://rainalert.live/`, which is what
   `SITE_URL` says.
-- **The image is on Docker Hub.** `lasiurusbat/rainalert` has two tags:
-  `1.0`, pushed on 2026-10-22, and `1.0.1`, pushed on 2026-10-23 by the
-  second release run. The second one is what the live service is running.
+- **The image is on Docker Hub.** `lasiurusbat/rainalert` has three tags:
+  `1.0`, pushed on 2026-10-22, `1.0.1` and `1.1.0`, pushed on 2026-10-23.
+  The last one is what the live service is running; `1.1.1`, the release
+  in preparation, adds the security headers.
 - **The donation link is on the live page.** The service runs with
   `DONATION_URL` set, so "Buy me a coffee" appears under the search and
   in the footer of every page. The variable is read at start-up, so

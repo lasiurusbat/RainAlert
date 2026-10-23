@@ -13,7 +13,7 @@ Both APIs are free, keyless, and need no signup. There is no database, no
 user accounts, and nothing to configure before running it.
 
 > **The site is live at <https://rainalert.live/>** — the real page, on the
-> `1.0.1` image, with every route answering. The app also runs locally —
+> `1.1.0` image, with every route answering. The app also runs locally —
 > see [Quick start](#quick-start). `DEPLOY.md` is the runbook.
 
 ![Rain Alert showing a 7-day forecast for London](docs/screenshot.png)
@@ -699,6 +699,33 @@ look up is better than an endless index.
 
 ---
 
+## Security headers
+
+Every response — pages, the API, the 404, the manifest and the worker —
+carries the same set of headers, added in one place
+(`rainalert/web/security.py`):
+
+| Header | Value |
+|---|---|
+| `Content-Security-Policy` | `default-src 'none'`, with `'self'` for script, style, img, font, connect, manifest and worker; `form-action 'self'`, `base-uri 'none'`, `frame-ancestors 'none'`, `object-src 'none'` |
+| `Strict-Transport-Security` | `max-age=31536000`, sent only when the request came over HTTPS |
+| `X-Frame-Options` | `DENY` |
+| `X-Content-Type-Options` | `nosniff` |
+| `Referrer-Policy` | `strict-origin-when-cross-origin` |
+| `Permissions-Policy` | camera, microphone, geolocation, payment, usb and interest-cohort switched off |
+
+The policy can be this tight because the site loads nothing from anyone
+else: the font, the photograph, the script and the stylesheet are its own,
+and the two forecast services are called by the server, not the browser. It
+allows no inline script or style, so a template must use classes in
+`static/style.css` rather than a `style` attribute. The JSON-LD block is
+data, not code, and needs no allowance. HSTS is sent only over HTTPS — behind
+Render's proxy the app reads `X-Forwarded-Proto` — and carries no
+`includeSubDomains` or `preload`. An offline test fails when a page gains
+inline code or a third-party address.
+
+---
+
 ## Donations and data credits
 
 **Donation link.** Set `DONATION_URL` to your donation page — for this site
@@ -771,6 +798,7 @@ RainAlert/
 │       ├── pages.py             # the pages
 │       ├── api.py               # /api/alert and /calendar.ics
 │       ├── site.py              # robots, sitemap, manifest, service worker, 404
+│       ├── security.py          # the security headers on every response
 │       └── common.py            # what the routes share
 ├── templates/
 │   ├── index.html               # the start page and the forecast
@@ -1061,15 +1089,16 @@ exception text is always logged, never rendered on the page.
 too, from `python app.py` or `docker compose up`. Checked on 2026-10-23:
 
 - The app answers at <https://rainalert.live/> — the real page, on the
-  `1.0.1` image, with the footer reading "Version 1.0.1 · build e045be4".
+  `1.1.0` image, with the footer reading "Version 1.1.0 · build 34fc8b2".
   `http://` redirects to `https://`, and every route answers.
-- Two release tags have been cut (`v1.0` and `v1.0.1`, both on `main`), so
-  the push-and-deploy half of the CI workflow has fired twice. The first
+- Three release tags have been cut (`v1.0`, `v1.0.1` and `v1.1.0`, all on
+  `main`), so the push-and-deploy half of the CI workflow has fired three
+  times. The first
   release failed four times before it passed: at the Docker Hub login, at
   the push (the token had the Read scope, and a push needs Read & Write),
   in the browser suite, and at the deploy hook (the `RENDER_DEPLOY_HOOK_URL`
-  secret was not set). The second was green on its first attempt, and a
-  release is one `git tag`.
+  secret was not set). The later ones were green on their first attempt, and
+  a release is one `git tag`.
 - The Docker Hub repository `lasiurusbat/rainalert` is public and has
   tags `1.0`, `1.0.1` and `1.1.0`, the last being the one the live service
   is running. `render.yaml` already names `1.1.1`, the release in
