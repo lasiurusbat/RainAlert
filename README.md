@@ -13,7 +13,7 @@ Both APIs are free, keyless, and need no signup. There is no database, no
 user accounts, and nothing to configure before running it.
 
 > **The site is live at <https://rainalert.live/>** — the real page, on the
-> `1.1.0` image, with every route answering. The app also runs locally —
+> `1.1.2` image, with every route answering. The app also runs locally —
 > see [Quick start](#quick-start). `DEPLOY.md` is the runbook.
 
 ![Rain Alert showing a 7-day forecast for London](docs/screenshot.png)
@@ -127,7 +127,7 @@ Python 3.14.5.
 ## Running the tests
 
 ```bash
-python -m unittest discover -s tests/offline -t .  # 538 offline tests, no network required
+python -m unittest discover -s tests/offline -t .  # 540 offline tests, no network required
 python -m unittest tests.test_browser               # 128 browser tests, needs Chrome
 python -m unittest tests.test_api                   # 7 live integration tests, hits both APIs
 ```
@@ -664,6 +664,7 @@ has to be findable, and it is built to be:
 | `/release-notes` | What each release of the app brought, linked from the footer |
 | `/robots.txt` | Where the crawlers may go, and where the sitemap is |
 | `/sitemap.xml` | Every page of the site, for the crawlers |
+| `/googlee75783b48c054b73.html`, `/BingSiteAuth.xml` | The ownership files Google Search Console and Bing Webmaster Tools fetch from the root; they must stay for the site to stay verified |
 
 Five things make it work:
 
@@ -797,7 +798,7 @@ RainAlert/
 │       ├── __init__.py          # create_app()
 │       ├── pages.py             # the pages
 │       ├── api.py               # /api/alert and /calendar.ics
-│       ├── site.py              # robots, sitemap, manifest, service worker, 404
+│       ├── site.py              # robots, sitemap, search-engine verification files, manifest, service worker, 404
 │       ├── security.py          # the security headers on every response
 │       └── common.py            # what the routes share
 ├── templates/
@@ -811,6 +812,8 @@ RainAlert/
 │   ├── app.js                   # saved city, personal alert threshold, notifications
 │   ├── favicon.svg              # tab icon
 │   ├── favicon-rain.svg         # the tab icon when rain is coming
+│   ├── googlee75783b48c054b73.html  # Google Search Console's ownership file (served from the root)
+│   ├── BingSiteAuth.xml         # Bing Webmaster Tools' ownership file (served from the root)
 │   ├── manifest.json            # the web app manifest (installability)
 │   ├── service-worker.js        # the service worker (offline shell)
 │   ├── offline.html             # the page shown when the server cannot be reached
@@ -1089,20 +1092,19 @@ exception text is always logged, never rendered on the page.
 too, from `python app.py` or `docker compose up`. Checked on 2026-10-23:
 
 - The app answers at <https://rainalert.live/> — the real page, on the
-  `1.1.0` image, with the footer reading "Version 1.1.0 · build 34fc8b2".
+  `1.1.2` image, with the footer reading "Version 1.1.2".
   `http://` redirects to `https://`, and every route answers.
-- Three release tags have been cut (`v1.0`, `v1.0.1` and `v1.1.0`, all on
-  `main`), so the push-and-deploy half of the CI workflow has fired three
-  times. The first
+- Four release tags have been cut (`v1.0`, `v1.0.1`, `v1.1.0`, `v1.1.1` and
+  `v1.1.2`, all on `main`), so the push-and-deploy half of the CI workflow has
+  fired five times. The first
   release failed four times before it passed: at the Docker Hub login, at
   the push (the token had the Read scope, and a push needs Read & Write),
   in the browser suite, and at the deploy hook (the `RENDER_DEPLOY_HOOK_URL`
   secret was not set). The later ones were green on their first attempt, and
   a release is one `git tag`.
 - The Docker Hub repository `lasiurusbat/rainalert` is public and has
-  tags `1.0`, `1.0.1` and `1.1.0`, the last being the one the live service
-  is running. `render.yaml` already names `1.1.1`, the release in
-  preparation, which exists once the `v1.1.1` tag has been pushed.
+  tags `1.0`, `1.0.1`, `1.1.0`, `1.1.1` and `1.1.2`, the last being the one the live
+  service is running. `render.yaml` names `1.1.2` too.
 - The Render service is named `rainalert` and answers at
   <https://rainalert-1-0.onrender.com> as well as on the domain; an older
   stub service that used to hold the name has been deleted.
@@ -1115,7 +1117,7 @@ that runs a prebuilt image from Docker Hub:
 ```yaml
 runtime: image
 image:
-  url: docker.io/lasiurusbat/rainalert:1.1.1
+  url: docker.io/lasiurusbat/rainalert:1.1.2
 ```
 
 Render pulls the image; it does not build the Dockerfile. Releases are cut by

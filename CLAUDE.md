@@ -9,10 +9,10 @@ Both APIs are free, keyless, and need no signup. There is no database and no
 user account system.
 
 **The app is deployed and live at <https://rainalert.live/>.** It runs
-from the `1.1.0` image on Docker Hub, on a Render service, and the domain
+from the `1.1.2` image on Docker Hub, on a Render service, and the domain
 is attached to it: `http://` redirects to `https://`, and every route
-answers. Three release tags have been cut — `v1.0` on 2026-10-22,
-`v1.0.1` and `v1.1.0` on 2026-10-23 — the images they built were pushed, and the
+answers. Five release tags have been cut — `v1.0` on 2026-10-22,
+`v1.0.1`, `v1.1.0`, `v1.1.1` and `v1.1.2` on 2026-10-23 — the images they built were pushed, and the
 workflow's deploy hook has deployed them. It
 also runs locally, from `python app.py` or `docker compose up`. `DEPLOY.md`
 is the runbook, and the "Still to do" section below is the list of what is
@@ -29,7 +29,7 @@ Serves on <http://127.0.0.1:5000>. `FLASK_DEBUG=1` enables the reloader and
 debugger.
 
 ```bash
-python -m unittest discover -s tests/offline -t .  # offline suite, 538 tests, no network
+python -m unittest discover -s tests/offline -t .  # offline suite, 540 tests, no network
 python -m unittest tests.test_browser               # browser suite, 128 tests, needs Chrome
 python -m unittest tests.test_api                   # live integration tests, hits both APIs
 ```
@@ -78,8 +78,8 @@ gets none of them, because the offline suite asserts the app's own defaults.
   `gcp-us-west1-1.origin.onrender.com`, resolving to `216.24.57.16` and
   `216.24.57.18`. `http://` answers `301` to `https://`; `https://` answers
   `200` with the real page, and a city's page with a live forecast from
-  both upstreams. The footer reads "Version 1.1.0 · build 34fc8b2", which is
-  the commit the `v1.1.0` tag points at, so the build that is answering is
+  both upstreams. The footer reads "Version 1.1.2" and the commit the `v1.1.2` tag
+  points at, so the build that is answering is
   the build that was released.
 - **Every route answers on the live domain**: the start page, `/cities`,
   `/release-notes`, `/robots.txt`, `/sitemap.xml`, `/manifest.json`,
@@ -87,10 +87,10 @@ gets none of them, because the offline suite asserts the app's own defaults.
   a `404` for an address that is not on the site. Each page's canonical
   link is its own address under `https://rainalert.live/`, which is what
   `SITE_URL` says.
-- **The image is on Docker Hub.** `lasiurusbat/rainalert` has three tags:
-  `1.0`, pushed on 2026-10-22, `1.0.1` and `1.1.0`, pushed on 2026-10-23.
-  The last one is what the live service is running; `1.1.1`, the release
-  in preparation, adds the security headers.
+- **The image is on Docker Hub.** `lasiurusbat/rainalert` has five tags:
+  `1.0`, pushed on 2026-10-22, `1.0.1`, `1.1.0`, `1.1.1` and `1.1.2`, pushed on
+  2026-10-23. The last one is what the live service is running, and it
+  added the Google and Bing ownership files; `1.1.1` added the security headers.
 - **The donation link is on the live page.** The service runs with
   `DONATION_URL` set, so "Buy me a coffee" appears under the search and
   in the footer of every page. The variable is read at start-up, so
@@ -152,7 +152,11 @@ it is what makes a release a release.
 
 ### Still to do
 
-Nothing is outstanding.
+- **Verify the site with the search engines.** `v1.1.2` serves the Google and
+  Bing ownership files (`/googlee75783b48c054b73.html` and `/BingSiteAuth.xml`).
+  Click Verify in Google Search Console (a URL-prefix property for
+  `https://rainalert.live/`) and in Bing Webmaster Tools, then submit
+  `https://rainalert.live/sitemap.xml` in both.
 
 ## Layout
 
@@ -176,7 +180,7 @@ Nothing is outstanding.
 | `rainalert/web/__init__.py` | `create_app()`: the Flask app, its template globals and its routes |
 | `rainalert/web/pages.py` | `/`, `/city/<slug>`, `/cities`, `/release-notes` and `render_forecast_page()` |
 | `rainalert/web/api.py` | `/api/alert` and `/calendar.ics` |
-| `rainalert/web/site.py` | `robots.txt`, `sitemap.xml`, the manifest, the service worker, the 404 |
+| `rainalert/web/site.py` | `robots.txt`, `sitemap.xml`, the search engines' ownership files, the manifest, the service worker, the 404 |
 | `rainalert/web/security.py` | The security headers on every response: CSP, HSTS, X-Frame-Options, X-Content-Type-Options, Referrer-Policy, Permissions-Policy |
 | `rainalert/web/common.py` | What the route modules share: reporting a failure. The forecast as views is a helper here, but only the tests call it |
 | `rainalert/data/cities.py` | The curated list of cities that have a page of their own |
@@ -189,6 +193,7 @@ Nothing is outstanding.
 | `static/style.css` | All styling |
 | `static/fonts/` | The self-hosted Archivo variable face: the Latin subset and the Latin Extended subset, for the accented letters of a city nobody looked up in advance |
 | `static/app.js` | The browser half: saved city, personal alert threshold, notifications |
+| `static/googlee75783b48c054b73.html`, `static/BingSiteAuth.xml` | Google's and Bing's site-ownership files, each served from the root by its own route; they must stay |
 | `static/manifest.json` | The web app manifest: the app's name, icons and install metadata |
 | `static/service-worker.js` | The service worker: caches the shell, never the forecast |
 | `static/offline.html` | The page shown when the server cannot be reached |
@@ -665,9 +670,9 @@ search form carries the unit in a hidden field, so a new search keeps the
 scale the reader chose.
 
 **Deployment runs a prebuilt image, not a build.** `render.yaml` uses
-`runtime: image` pointing at `docker.io/lasiurusbat/rainalert:1.1.1` (the release in
-preparation; the live service runs `1.1.0` until the `v1.1.1` tag has been
-pushed and deployed, and a manual deploy before then has no such image to
+`runtime: image` pointing at `docker.io/lasiurusbat/rainalert:1.1.2` (the release that is
+live; when the next release is in preparation, the file may name a tag that
+is not pushed yet, and a manual deploy before then has no such image to
 pull). Render
 pulls that image; it never runs the `Dockerfile`. A release is therefore a
 pushed image tag, not a merged commit. The old `runtime: python` shape,
@@ -695,8 +700,8 @@ suite still runs in the image, because that one can be.
 commit already on `main`, builds and tests the image, pushes it to Docker
 Hub as the version without the `v`, and calls Render's deploy hook with an
 `imgURL` parameter naming that exact tag. Pull requests never push and never
-deploy, so the secrets are only touched on a tag run. **`v1.0` and `v1.0.1`
-have both been pushed and the whole path has run green**, so a release is a
+deploy, so the secrets are only touched on a tag run. **`v1.0`, `v1.0.1`, `v1.1.0`
+`v1.1.1` and `v1.1.2` have all been pushed and the whole path has run green**, so a release is a
 tag and a push and nothing else: the build, the offline suite inside the
 image, the browser suite on the runner, the Docker Hub login, the push, the
 hook and the smoke test on the live domain.
@@ -956,6 +961,12 @@ because the app works without it.
 
 ## Gotchas
 
+- **Do not remove `static/googlee75783b48c054b73.html` or `static/BingSiteAuth.xml`,
+  or their routes.** Google Search Console and Bing Webmaster Tools verified the
+  site by fetching them from the root, and both say the files must stay for the
+  site to stay verified. `VERIFICATION_FILES` in `rainalert/web/site.py` lists
+  them, `verification_file()` serves them, and tests hold them.
+
 - **`strftime('%A')` follows the process locale**, which is why the weekday
   names are hard-coded in `WEEKDAY_NAMES` rather than read from
   `strftime`. On a German Windows machine, or in a container with `LANG`
@@ -1023,7 +1034,8 @@ because the app works without it.
   title renders empty and the icon URL breaks. Two routes render that
   template today, `/` and `/city/<slug>`, and both go through
   `render_forecast_page()`; six (`/api/alert`, `/calendar.ics`,
-  `/robots.txt`, `/sitemap.xml`, `/manifest.json` and `/service-worker.js`)
+  `/robots.txt`, `/sitemap.xml`, `/manifest.json`, `/service-worker.js` and the two
+  search-engine ownership files)
   render no template at all, and `/cities`, `/release-notes` and the 404
   handler render their own templates with their own titles. The
   forecast page keeps the default icon whenever there is no alert, which is

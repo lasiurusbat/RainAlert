@@ -4,24 +4,25 @@
 exercised for real: the image builds, both test suites pass inside it, and
 a forecast renders with English weekday names. The CI workflow itself has
 run and is green on every push to `main`. The **tag-gated half has fired
-twice** — `v1.0` on 2026-10-22 and `v1.0.1` on 2026-10-23 — the images
+five times** — `v1.0` on 2026-10-22, then `v1.0.1`, `v1.1.0`, `v1.1.1` and `v1.1.2` on 2026-10-23 — the images
 they built **have been pushed to Docker Hub**, and the deploy hook has put
 them on the service.
 
 State of the world, checked on 2026-10-23:
 
-- **Two release tags exist** (`v1.0` and `v1.0.1`, both on `main`), and the
-  workflow's push-and-deploy half has run **green** for both. The first
-  needed five attempts; the second was green the first time. The four
+- **Five release tags exist** (`v1.0`, `v1.0.1`, `v1.1.0`, `v1.1.1` and `v1.1.2`, all
+  on `main`), and the workflow's push-and-deploy half has run **green** for
+  all of them. The first needed five attempts; the later ones were green
+  the first time. The four
   early failures were at the Docker Hub login, the Docker Hub push, the
   browser suite and the deploy hook, in that order; the causes are in
   "Known limits" below.
 - **The Docker Hub repository `lasiurusbat/rainalert` is public and has
-  two tags**: `1.0` (pushed 2026-10-22) and `1.0.1` (pushed 2026-10-23),
-  which is the image the live service is running and the one `render.yaml`
+  five tags**: `1.0` (pushed 2026-10-22), then `1.0.1`, `1.1.0`, `1.1.1` and `1.1.2`
+  (pushed 2026-10-23), the last of which is the image the live service is running and the one `render.yaml`
   points at.
 - **The app answers at <https://rainalert.live/>** — the real page, on the
-  `1.0.1` image, with the footer reading "Version 1.0.1 · build e045be4".
+  `1.1.2` image, with the footer reading "Version 1.1.2".
   `http://` redirects to `https://`.
 - **The donation link is live.** The service runs with `DONATION_URL` set,
   so "Buy me a coffee" appears under the search and in the footer of every
@@ -44,10 +45,10 @@ and these commands are only a fallback.
 
 ```bash
 docker build --platform linux/amd64 \
-  --build-arg APP_VERSION=1.0.1 --build-arg APP_COMMIT=$(git rev-parse --short HEAD) \
-  -t lasiurusbat/rainalert:1.0.1 .
+  --build-arg APP_VERSION=1.1.2 --build-arg APP_COMMIT=$(git rev-parse --short HEAD) \
+  -t lasiurusbat/rainalert:1.1.2 .
 docker login
-docker push lasiurusbat/rainalert:1.0.1
+docker push lasiurusbat/rainalert:1.1.2
 ```
 
 Render runs `linux/amd64`. Use a new tag for every release (0.9, 1.0, ...)
@@ -144,10 +145,18 @@ page:
   canonical link, the Open Graph image and the JSON-LD should all point at
   `https://rainalert.live`. If they point at a different host, `SITE_URL` is
   wrong and needs a redeploy.
-- Submit `https://rainalert.live/sitemap.xml` in
-  [Google Search Console](https://search.google.com/search-console) and in
-  [Bing Webmaster Tools](https://www.bing.com/webmasters). Both are free
-  and both want the sitemap, not a verification tag in the markup.
+- Verify the site with
+  [Google Search Console](https://search.google.com/search-console) and
+  [Bing Webmaster Tools](https://www.bing.com/webmasters), then submit
+  `https://rainalert.live/sitemap.xml` in both. Both are free. Both are
+  verified by a file at the root, which the app serves
+  (`/googlee75783b48c054b73.html` and `/BingSiteAuth.xml`, from `static/`,
+  listed in `VERIFICATION_FILES` in `rainalert/web/site.py`); they came
+  with release `1.1.2`. **Keep both files**: the engines check again, and a site whose
+  file has gone loses its verification. In Search Console add a *URL
+  prefix* property for `https://rainalert.live/` — the address Google
+  shows for the upload is the property's own address, so a property added
+  as `.../sitemap.xml/` asks for the file at a path that does not exist.
 - Check that the footer carries the **Buy me a coffee** link. The link is
   rendered only when the service runs with the `DONATION_URL` environment
   variable, and the Blueprint in `render.yaml` is where that variable comes
@@ -173,7 +182,7 @@ All of the above were checked on 2026-10-22 and again on 2026-10-23, on
 the live domain, and all of it behaves as written — the donation link
 included, and the missing city's page now answers `404` with the title
 "Page not found - Rain Alert" and the site's own canonical link. The only
-thing left is to submit the sitemap to the two search engines.
+thing left is to verify the site with the two search engines and submit the sitemap to them.
 
 ## 4. Optional
 
@@ -196,7 +205,7 @@ reasons, and they are all deliberate:
   proves that the DNS and the certificate are right. A monitor pointed at
   Render's own address would keep saying "up" while the domain was broken.
 - It is a `200` with the real page, so the monitor can check for the
-  version in the footer as well — `Version 1.0.1` — and tell "the site is
+  version in the footer as well — `Version 1.1.2` — and tell "the site is
   up" from "the new build is up". That is the same check the workflow's
   smoke test makes, from the other side.
 
@@ -239,7 +248,7 @@ something answers.
 
 The workflow is `.github/workflows/ci-cd.yml`. The build-and-test half runs
 on every push to `main` and is green. The tag-gated half — the push and
-the deploy — has fired for `v1.0` and `v1.0.1` and is green for both: the
+the deploy — has fired for `v1.0`, `v1.0.1`, `v1.1.0`, `v1.1.1` and `v1.1.2` and is green for all: the
 build, the offline suite inside the image, the browser suite on the
 runner, the Docker Hub login, the push, the deploy hook and the smoke test
 on the live domain.
@@ -363,8 +372,8 @@ and the forecast is right, and only the styles are old. The rule is
   had the Read scope and a push needs Read & Write (attempt 2), the
   browser suite flaked on a service-worker wait that was waiting for the
   wrong thing (attempt 3), and the deploy hook secret was not set
-  (attempt 4). Attempt 5 was green from end to end, and `v1.0.1` was green
-  on its first attempt — the four failures were the cost of finding out
+  (attempt 4). Attempt 5 was green from end to end, and `v1.0.1`, `v1.1.0`, `v1.1.1` and `v1.1.2` were green
+  on their first attempt — the four failures were the cost of finding out
   which secrets were missing, not a property of the pipeline.
 - **The smoke test is a real check, and it can fail honestly.** It hits
   `https://rainalert.live/` and greps the answer for `Version <tag>`, so
@@ -404,9 +413,8 @@ and the forecast is right, and only the styles are old. The rule is
   for that deploy. I could not confirm whether it also changes the service's
   stored default image, so after a release also update the tag in
   `render.yaml` and the service settings so a later manual redeploy or
-  restart does not bring back an older version. `render.yaml` is at `1.1.1`
-  now, the release in preparation, while the live service runs `1.1.0` until
-  the `v1.1.1` tag is pushed; the service's own
+  restart does not bring back an older version. `render.yaml` is at `1.1.2`
+  now, which is what the live service runs; the service's own
   **Settings → Image** field is worth a look after a release, because a
   manual "Deploy latest reference" pulls the *stored* tag.
 - **The smoke test reads the version, not just the page.** The footer of
@@ -418,5 +426,5 @@ and the forecast is right, and only the styles are old. The rule is
 - **The test counts drift.** The count appears in **four** documents —
   `CLAUDE.md`, `README.md`, `DEPLOY.md` and `implementation-plan.md` — and
   they are updated together, but a test added without updating all four
-  leaves them disagreeing. The suite has 538 offline tests, 128 browser
+  leaves them disagreeing. The suite has 540 offline tests, 128 browser
   tests and 7 live integration tests.

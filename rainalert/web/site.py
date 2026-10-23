@@ -11,6 +11,14 @@ from rainalert.data.cities import CURATED_CITIES
 from rainalert.present.seo import (NOT_FOUND_DESCRIPTION, NOT_FOUND_TITLE,
                                    canonical_url, page_meta)
 
+# The files the search engines fetch from the root to confirm who owns the
+# site, with the type each is served as. They must stay: the engines check
+# again to keep the site verified.
+VERIFICATION_FILES = {
+    "googlee75783b48c054b73.html": "text/html; charset=utf-8",
+    "BingSiteAuth.xml": "application/xml",
+}
+
 
 def robots():
     """Where the crawlers may go.
@@ -109,8 +117,22 @@ def service_worker():
     return response
 
 
+def verification_file(filename):
+    """A search engine's site-ownership file, served from the root.
+
+    Google and Bing each look for a file of a given name at the root, and
+    the files are a line or two, so each has a route of its own.
+    """
+    response = send_from_directory(current_app.static_folder, filename)
+    response.headers['Content-Type'] = VERIFICATION_FILES[filename]
+    return response
+
+
 def register(app):
     """Add the crawl files, the install files and the 404 page to the app."""
+    for filename in VERIFICATION_FILES:
+        app.add_url_rule(f"/{filename}", endpoint=filename,
+                         view_func=lambda filename=filename: verification_file(filename))
     app.add_url_rule("/robots.txt", view_func=robots)
     app.add_url_rule("/sitemap.xml", view_func=sitemap)
     app.add_url_rule("/manifest.json", view_func=manifest)

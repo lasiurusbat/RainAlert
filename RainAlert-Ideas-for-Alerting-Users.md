@@ -8,15 +8,19 @@ Oct 21, 2026 · @Vedad
 
 *Code annotations added 2026-10-22. The single `app.py` was split into the `rainalert` package the same day (see `refactor-plan.md`), so the notes below name the module each piece now lives in. Nothing a reader sees changed: every route's answer was compared byte for byte before and after each step. The split matters for Tier 3, and the codebase notes at the end say why.*
 
+*Release annotations added 2026-10-23. The app went online on 2026-10-22 (`v1.0`) and has since had `v1.0.1`, `v1.1.0` and `v1.1.1`, so step 0 below is done and the notes that said "nothing is deployed" are corrected. `v1.1.0` added a release-notes page and an "Install app" link with a one-time hint; `v1.1.1` added security headers. None of that changes the tiers.*
+
+*Search annotation added 2026-10-23. `1.1.2` serves the ownership files Google Search Console (`/googlee75783b48c054b73.html`) and Bing Webmaster Tools (`/BingSiteAuth.xml`) ask for, so the sitemap can be submitted to both. That is about being found, not about alerting, and it changes none of the tiers; step 0's "put the app online" now has its follow-up, getting the site into the search results.*
+
 ## Where RainAlert stands today
 
 RainAlert is pull-only: users must open it, type a city and read a seven-day list, so nothing in it actually alerts anyone. It is also stateless, with no accounts, database or background jobs, so most real alerting ideas need one small piece of persistence.
 
-**One thing to keep in mind while reading this document: the app is deployed, and it has almost no users.** As of 2026-10-22 — checked again that day — the app answers at `https://rainalert.live` on the `1.0` image, but it has only just come online and nobody is reading it yet. So "pull-only" currently means "pull-only by whoever finds the site", and the tiers below are a design that has to survive having real readers, not a feature waiting for a user. The deployment steps are in `DEPLOY.md`.
+**One thing to keep in mind while reading this document: the app is deployed, and it has almost no users.** As of 2026-10-23 the app answers at `https://rainalert.live` on the `1.1.1` image, but it has only just come online and nobody is reading it yet. So "pull-only" currently means "pull-only by whoever finds the site", and the tiers below are a design that has to survive having real readers, not a feature waiting for a user. The deployment steps are in `DEPLOY.md`.
 
 The ideas below are grouped by cost: in-page changes first, then browser-side features, then server-pushed notifications.
 
-**Where it stands now:** all four Tier 1 ideas are built — the page colour-codes rain risk, shows an hour-by-hour strip for today with a "bring an umbrella" summary, leads with a one-line headline about the week, and renames the browser tab and swaps the favicon when rain is coming. All of Tier 2 is built too: the reader's city and their own rain threshold live in the browser's `localStorage`, and the server stays stateless; a browser notification says so when rain is about to start while the tab is open; the app is installable, with a manifest, a service worker and its own icons, so it can live on a home screen and open without a network; and the rainy days can be exported to the reader's own calendar, which then does the reminding with the tab closed. The app is still pull-only in the sense that matters here: nothing reaches a user who is not already looking at the page — and nothing reaches anyone at all until it is deployed — and there is still no database, account or background job.
+**Where it stands now:** all four Tier 1 ideas are built — the page colour-codes rain risk, shows an hour-by-hour strip for today with a "bring an umbrella" summary, leads with a one-line headline about the week, and renames the browser tab and swaps the favicon when rain is coming. All of Tier 2 is built too: the reader's city and their own rain threshold live in the browser's `localStorage`, and the server stays stateless; a browser notification says so when rain is about to start while the tab is open; the app is installable, with a manifest, a service worker and its own icons, so it can live on a home screen and open without a network; and the rainy days can be exported to the reader's own calendar, which then does the reminding with the tab closed. The app is still pull-only in the sense that matters here: nothing reaches a user who is not already looking at the page, even though the site is now online, and there is still no database, account or background job.
 
 ## Tier 1: In-page alerts (no new infrastructure)
 
@@ -52,7 +56,7 @@ These features keep state in the user's browser, so the server stays stateless.
     - The start page loads the remembered city by itself, so there is no retyping. A page that already shows a forecast is left alone — reloading it would throw the reader's forecast away.
     - The threshold is marked with **its own symbol and its own words** (a ▲), because it answers a different question from the umbrella. The umbrella, the banner, the ☔ icon and the tab title are the app's advice and all fire at the same `UMBRELLA_THRESHOLD`; the reader's own limit is a second, separate answer, and the two never stand in for each other.
     - The threshold is compared against the number the page shows, so the marker and the percentage can never disagree. A day the service did not report is never counted as a dry day, and never marked as a wet one either.
-    - Without JavaScript the preferences row is hidden and the page is exactly what it was before. The server tells the page what kind of page it is through three attributes on `<body>`: `data-autoload`, `data-search` and `data-city`.
+    - Without JavaScript the preferences row is hidden and the page is exactly what it was before. The server tells the page what kind of page it is through four attributes on `<body>`: `data-autoload`, `data-search`, `data-city` and `data-unit` (the temperature scale the forecast is in).
     - One limitation to carry into Tier 3: `localStorage` follows the **browser**, not the person. A reader who switches device, or opens the site in a private window, gets a blank slate — the saved city does not follow them. That is the same gap Tier 3's server-side table would close, and it is the strongest argument for having one.
 - **Web Notifications while the tab is open.** A small JS timer re-fetches every 30 minutes and fires a notification such as "Rain starts in about 1 hour". It is simple, but only works while the tab is open.
   - ✅ **Built.** A 🔔 button next to the hourly strip's title turns the notifications on, and the page polls the server every 30 minutes while it is open.
@@ -65,6 +69,7 @@ These features keep state in the user's browser, so the server stays stateless.
   - ✅ **Built.** `static/manifest.json` and `static/service-worker.js`, served from the **root** (`/manifest.json` and `/service-worker.js`) so the scope covers the whole site, with four generated PNG icons (180, 192, 512 and a maskable 512 for Android) and an `apple-touch-icon` for iOS. The installed app opens in its own window with no browser chrome.
     - **The forecast is never cached.** A navigation goes to the network first and bypasses the browser's own cache as well, the alert poll is never intercepted, and `/` is deliberately absent from the shell list — there is a test that asserts it. A rain chance from yesterday is wrong, so it is never replayed.
     - **The shell is cached**, so the app opens without a network and shows a short offline page saying that the forecast cannot be fetched — not a stale forecast. The shell is the stylesheet, the script, the icons and the background photo: the files that make the page *look* like Rain Alert, and nothing that carries data.
+    - **The app says it can be installed**, in two quiet places (added in `v1.1.0`): an "Install app" link in the footer, revealed by the script only when the browser can install (Chrome's install prompt, or the Add to Home Screen steps on Safari for iPhone), and a one-time hint on a later visit by a reader who has a city remembered. Neither uses amber, because the lamp means rain.
     - **It still cannot reach a closed app.** The service worker caches files; it cannot wake the app and deliver a notification. That is the same Tier 3 gap as the browser notification, and the offline page is the honest face of it.
 - **Calendar export (.ics).** An "Add rainy days to my calendar" button that generates an `.ics` file with an event on each day over the threshold. The user's own calendar app does the alerting, with no notification infrastructure on your side.
   - ✅ **Built.** A quiet "📅 Add rainy days to my calendar" link on the caption line beside "7-day rain chance" downloads a standard iCalendar file from `/calendar.ics`, with one all-day event for every day that reaches the threshold.
@@ -99,7 +104,7 @@ None of these are built yet, and Tier 3 is the step that decides whether the app
 
 Start with the cheap in-page wins, and add real push last, because that step is what makes the name honest.
 
-0. **Put the app online.** — ⬜ **Not started.** Nothing below can alert a user who cannot reach the page. This is a release tag, a Docker Hub image, a Render service and the domain's DNS — no code, but it is ahead of every other item here.
+0. **Put the app online.** — ✅ **Done** on 2026-10-22: a release tag, a Docker Hub image, a Render service and the domain's DNS. `https://rainalert.live` is live, and `v1.1.1` is what it runs.
 1. Headline banner and colour-coding (Tier 1). — ✅ **Done.**
 2. Hour-by-hour "today's rain" strip (Tier 1). — ✅ **Done.**
 3. Tab title and favicon as the alert (Tier 1). — ✅ **Done.**
@@ -119,7 +124,7 @@ opens without a network. Step 7 is the last Tier 2 piece, and the cheapest of
 them all — it hands the alerting to the reader's own calendar app, so it works
 with the tab closed and needs no server of ours. Step 0 was not in the
 original list, because the app was assumed to be up; it is now first, and
-step 8 is not worth building until there is a site to push to — a tab that
+it is done, so there is a site to push to. Step 8 is the only step left — a tab that
 is open can talk to the server, and a tab that is closed cannot. The code
 side of step 8 is smaller than it was, though: the split of `app.py` into
 the `rainalert` package left the alert rules usable from a script, so step 8

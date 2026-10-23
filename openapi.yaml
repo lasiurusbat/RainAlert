@@ -402,6 +402,36 @@ paths:
                 weather:
                   value: The weather service is unavailable right now.
 
+  /BingSiteAuth.xml:
+    get:
+      tags: [Install]
+      summary: Bing Webmaster Tools' verification file.
+      description: |
+        The file Bing fetches to confirm who owns the site. It answers at
+        the root under its own name.
+      responses:
+        "200":
+          description: The verification file.
+          content:
+            application/xml:
+              schema:
+                type: string
+
+  /googlee75783b48c054b73.html:
+    get:
+      tags: [Install]
+      summary: Google Search Console's verification file.
+      description: |
+        The file Google fetches to confirm who owns the site. It answers at
+        the root under its own name and holds one line.
+      responses:
+        "200":
+          description: The verification file.
+          content:
+            text/html:
+              schema:
+                type: string
+
   /manifest.json:
     get:
       tags: [Install]

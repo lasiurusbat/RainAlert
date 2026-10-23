@@ -181,6 +181,29 @@ class TestInstallableApp(AppTestCase):
         self.assertIn('rel="manifest" href="/manifest.json"', body)
 
 
+class TestBingVerification(AppTestCase):
+    """Bing Webmaster Tools confirms ownership by fetching a file at the root."""
+
+    def test_the_verification_file_answers_at_the_root(self):
+        response = self.client.get("/BingSiteAuth.xml")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("xml", response.headers["Content-Type"])
+        self.assertIn("<user>3748406E898E213455944433376F7F2C</user>",
+                      response.get_data(as_text=True))
+
+
+class TestGoogleVerification(AppTestCase):
+    """Google Search Console confirms ownership by fetching a file at the root."""
+
+    def test_the_verification_file_answers_at_the_root(self):
+        response = self.client.get("/googlee75783b48c054b73.html")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("text/html", response.headers["Content-Type"])
+        self.assertEqual(
+            response.get_data(as_text=True).strip(),
+            "google-site-verification: googlee75783b48c054b73.html")
+
+
 class TestSearchEngineOptimisation(AppTestCase):
     """The parts of the site a search engine reads.
 

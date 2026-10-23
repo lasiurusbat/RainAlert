@@ -17,6 +17,23 @@ promises a forecast the service does not give.
 
 RELEASES = [
     {
+        "version": "1.1.2",
+        "date": "2026-10-23",
+        "name": "Found by the search engines",
+        "features": [
+            {
+                "title": "Verified with Google and Bing",
+                "text": "The site now answers the ownership checks of "
+                        "Google Search Console and Bing Webmaster Tools, "
+                        "each with a small file at the root of the site. "
+                        "That is what lets the sitemap be submitted to "
+                        "both, so the pages of the site can be found in "
+                        "their results. Nothing on the pages you read has "
+                        "changed.",
+            },
+        ],
+    },
+    {
         "version": "1.1.1",
         "date": "2026-10-23",
         "name": "A tighter lock on the door",

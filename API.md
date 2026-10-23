@@ -23,6 +23,8 @@ authentication, no account and no database.
 | `GET` | `/release-notes` | `text/html` | What each release of the app brought. |
 | `GET` | `/robots.txt` | `text/plain` | Where the crawlers may go, and where the sitemap is. |
 | `GET` | `/sitemap.xml` | `application/xml` | The pages of the site, for the crawlers. |
+| `GET` | `/BingSiteAuth.xml` | `application/xml` | Bing Webmaster Tools' site-ownership verification file. |
+| `GET` | `/googlee75783b48c054b73.html` | `text/html` | Google Search Console's site-ownership verification file. |
 | `GET` | `/api/alert` | `application/json` | The one thing worth interrupting the reader for. |
 | `GET` | `/calendar.ics` | `text/calendar` | The rainy days as an importable calendar file. |
 | `GET` | `/manifest.json` | `application/manifest+json` | The web app manifest, for installing the app. |
@@ -396,6 +398,17 @@ a plain-text sentence and a status code.
 | `503` | `The weather service is unavailable right now.` | The forecast service was unreachable. |
 
 ---
+
+## `GET /BingSiteAuth.xml`
+
+The file Bing Webmaster Tools fetches to confirm who owns the site: a `<users>`
+document holding the site's verification id. It answers at the root.
+
+## `GET /googlee75783b48c054b73.html`
+
+The file Google Search Console fetches to confirm who owns the site: one line,
+`google-site-verification: googlee75783b48c054b73.html`. It has to answer at the
+root under its own name, so it has a route of its own.
 
 ## `GET /manifest.json`
 

@@ -23,7 +23,8 @@ class TestApiDocumentation(unittest.TestCase):
     # on purpose: it is Flask's own handler, and it is described in the
     # reference as a path rather than as a route of its own.
     DOCUMENTED_ROUTES = ("/", "/api/alert", "/calendar.ics",
-                         "/manifest.json", "/service-worker.js")
+                         "/manifest.json", "/service-worker.js",
+                         "/googlee75783b48c054b73.html", "/BingSiteAuth.xml")
 
     def read(self, name):
         path = os.path.join(REPO, name)
