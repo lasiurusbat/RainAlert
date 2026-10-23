@@ -1211,15 +1211,16 @@ button:focus-visible {
    the footer lines - a fade, not a box - takes the brightness out of the
    photograph where the words are. It is absolutely positioned, so it costs
    the panel no height, and it sits behind the text (`isolation` keeps it
-   inside the footer's own stacking context). */
+   inside the footer's own stacking context). It stays inside the footer's
+   width: a haze that hangs out sideways makes a narrow page scroll. */
 .copyright::before {
     content: '';
     position: absolute;
-    inset: -0.9rem -2.5rem;
+    inset: -0.9rem 0;
     z-index: -1;
     pointer-events: none;
-    background: radial-gradient(ellipse at center,
-        rgba(8, 12, 15, 0.8) 0%, rgba(8, 12, 15, 0.6) 45%, rgba(8, 12, 15, 0) 75%);
+    background: radial-gradient(ellipse farthest-side at center,
+        rgba(8, 12, 15, 0.8) 0%, rgba(8, 12, 15, 0.6) 65%, rgba(8, 12, 15, 0) 100%);
 }
 
 .copyright a {
