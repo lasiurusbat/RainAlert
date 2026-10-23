@@ -118,6 +118,50 @@ class TestShortDate(unittest.TestCase):
                 self.assertEqual(labels.format_date_parts(value), ("", ""))
 
 
+class TestNumericDate(unittest.TestCase):
+    """A date as dd.mm.yyyy, which is how the release notes date a release."""
+
+    def test_the_day_the_month_and_the_year(self):
+        self.assertEqual(labels.format_numeric_date("2026-10-23"),
+                         "23.10.2026")
+
+    def test_the_day_and_the_month_are_padded(self):
+        self.assertEqual(labels.format_numeric_date("2026-01-05"),
+                         "05.01.2026")
+
+    def test_there_is_no_weekday(self):
+        """A release is dated by the day alone."""
+        for weekday in labels.WEEKDAY_NAMES:
+            self.assertNotIn(weekday,
+                             labels.format_numeric_date("2026-10-23"))
+
+    def test_the_year_has_four_digits(self):
+        self.assertEqual(labels.format_numeric_date("2026-12-31"),
+                         "31.12.2026")
+
+    def test_a_value_that_cannot_be_read_is_left_alone(self):
+        """Like format_date: never a crash, never an invented date."""
+        for value in ("not-a-date", "", None, "2026-13-40"):
+            with self.subTest(value=value):
+                self.assertEqual(labels.format_numeric_date(value),
+                                 str(value))
+
+    def test_it_does_not_follow_the_process_locale(self):
+        """The digits come from the date itself, never from a locale."""
+        import locale
+        previous = locale.setlocale(locale.LC_TIME)
+        try:
+            for name in ("de_DE.UTF-8", "German_Germany.1252"):
+                try:
+                    locale.setlocale(locale.LC_TIME, name)
+                except locale.Error:
+                    continue
+                self.assertEqual(labels.format_numeric_date("2026-10-23"),
+                                 "23.10.2026")
+        finally:
+            locale.setlocale(locale.LC_TIME, previous)
+
+
 class TestUnreadableValues(unittest.TestCase):
     """A value the service did not report is not a zero.
 

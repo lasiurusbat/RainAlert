@@ -16,6 +16,7 @@ from rainalert.data.releases import RELEASES
 from rainalert.domain.alerts import forecast_headline, tab_alert
 from rainalert.errors import FORECAST_ERRORS, MISSING_CITY
 from rainalert.present.forecast_view import day_view
+from rainalert.present.labels import format_numeric_date
 from rainalert.present.seo import (city_from_slug, city_path, page_description,
                                    page_meta, page_title, short_city_name)
 from rainalert.upstream.geocoding import get_coordinates
@@ -265,7 +266,8 @@ def release_notes():
                      "answer, your own threshold, a calendar export and an "
                      "installable app."),
                     "/release-notes"),
-        releases=RELEASES,
+        releases=[dict(release, shown_date=format_numeric_date(release["date"]))
+                  for release in RELEASES],
     )
 
 

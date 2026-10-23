@@ -1616,6 +1616,43 @@ class ReleaseNotesBrowserTestCase(BrowserServerMixin, unittest.TestCase):
         # The photograph is behind the page, so the page itself is clear.
         self.assertEqual(panel["body"], "rgba(0, 0, 0, 0)")
 
+    def test_every_release_is_dated_as_dd_mm_yyyy(self):
+        self.driver.get(self.base + "/release-notes")
+        self.wait_for("return document.querySelector('.releases') !== null;")
+        dates = self.driver.execute_script(
+            "return Array.prototype.map.call("
+            "document.querySelectorAll('.release .release-date'),"
+            "function (t) { return {shown: t.innerText.trim(),"
+            "                      iso: t.getAttribute('datetime'),"
+            "                      visible: t.getBoundingClientRect().height > 0};"
+            "});")
+        self.assertGreaterEqual(len(dates), 3)
+        for date in dates:
+            self.assertRegex(date["shown"], r"^\d{2}\.\d{2}\.\d{4}$")
+            self.assertTrue(date["visible"])
+            year, month, day = date["iso"].split("-")
+            self.assertEqual(date["shown"], f"{day}.{month}.{year}")
+
+    def test_the_newest_release_is_first_and_not_dated_before_the_next(self):
+        self.driver.get(self.base + "/release-notes")
+        self.wait_for("return document.querySelector('.releases') !== null;")
+        isos = self.driver.execute_script(
+            "return Array.prototype.map.call("
+            "document.querySelectorAll('.release .release-date'),"
+            "function (t) { return t.getAttribute('datetime'); });")
+        self.assertEqual(isos, sorted(isos, reverse=True))
+
+    def test_the_date_shares_the_line_of_the_version(self):
+        """It is part of the heading, so a release costs no extra line."""
+        self.driver.get(self.base + "/release-notes")
+        self.wait_for("return document.querySelector('.releases') !== null;")
+        same_line = self.driver.execute_script(
+            "var h = document.querySelector('.release-version');"
+            "var t = h.querySelector('.release-date');"
+            "return t.getBoundingClientRect().top < "
+            "       h.getBoundingClientRect().bottom;")
+        self.assertTrue(same_line)
+
     def test_the_notes_page_does_not_scroll_sideways(self):
         self.driver.execute_cdp_cmd("Emulation.setDeviceMetricsOverride", {
             "width": 400, "height": 780,
@@ -1652,6 +1689,267 @@ class ReleaseNotesBrowserTestCase(BrowserServerMixin, unittest.TestCase):
         self.assertEqual(self.driver.current_url.rstrip("/"),
                          self.base.rstrip("/"))
         self.assertEqual(self.driver.title, "Rain Alert - 7-day rain chance for any city")
+
+
+@unittest.skipUnless(
+    HAS_SELENIUM or REQUIRE_BROWSER,
+    "selenium is not installed")
+class InstallBrowserTestCase(BrowserServerMixin, unittest.TestCase):
+    """The footer link and the one-time hint that offer the app.
+
+    Chrome sends a ``beforeinstallprompt`` event when the app can be
+    installed. Headless Chrome never does, so the tests send one themselves,
+    with a ``prompt()`` that counts its calls.
+    """
+
+    OFFER_EVENT = (
+        "var e = new Event('beforeinstallprompt', {cancelable: true});"
+        "e.prompt = function () {"
+        "    window.installPrompts = (window.installPrompts || 0) + 1; };"
+        "window.dispatchEvent(e);")
+
+    def open_the_forecast(self, visits=None):
+        """The forecast page, as a reader on their `visits`-th visit."""
+        # A real install event, when Chrome sends one, would replace the
+        # test's own and its `prompt()` would count nothing. Only the
+        # events the test sends reach the page.
+        self.driver.execute_cdp_cmd(
+            "Page.addScriptToEvaluateOnNewDocument", {"source": (
+                "window.addEventListener('beforeinstallprompt', function (e) {"
+                "    if (e.isTrusted) { e.stopImmediatePropagation(); }"
+                "}, true);")})
+        if visits is not None:
+            self.driver.execute_script(
+                "localStorage.setItem('rainalert.city', 'London');"
+                "localStorage.setItem('rainalert.visits', arguments[0]);"
+                "sessionStorage.removeItem('rainalert.visitCounted');",
+                str(visits - 1))
+        self.driver.get(self.base + "/?city=London")
+        self.wait_for("return document.querySelector('.weather-list') !== null;")
+
+    def shown(self, element_id):
+        return self.driver.execute_script(
+            "var e = document.getElementById(arguments[0]);"
+            "return !!e && !e.hidden && e.getBoundingClientRect().height > 0;",
+            element_id)
+
+    # Headless Chrome may send a real install event of its own for a page
+    # on localhost, so there is no test for "the browser never offers": the
+    # offline suite checks that the link is hidden in the markup.
+
+    def test_the_link_shows_when_chrome_offers_the_install(self):
+        self.open_the_forecast()
+        self.driver.execute_script(self.OFFER_EVENT)
+        self.assertTrue(self.shown("install-offer"))
+
+    def test_the_link_opens_the_install_prompt_once(self):
+        self.open_the_forecast()
+        self.driver.execute_script(self.OFFER_EVENT)
+        self.driver.find_element(By.ID, "install-app").click()
+        self.assertEqual(
+            self.driver.execute_script("return window.installPrompts;"), 1)
+        # A prompt can be used once, so the offer waits for the next one.
+        self.assertFalse(self.shown("install-offer"))
+
+    def test_the_link_is_gone_once_the_app_is_installed(self):
+        self.open_the_forecast()
+        self.driver.execute_script(self.OFFER_EVENT)
+        self.driver.execute_script(
+            "window.dispatchEvent(new Event('appinstalled'));")
+        self.assertFalse(self.shown("install-offer"))
+
+    def test_the_link_sits_in_the_footer_on_the_line_of_the_build(self):
+        self.open_the_forecast()
+        self.driver.execute_script(self.OFFER_EVENT)
+        self.assertTrue(self.driver.execute_script(
+            "return !!document.querySelector("
+            "'.copyright .build-info #install-app');"))
+
+    def test_the_footer_gains_no_height(self):
+        """The link shares the build's line, so the page does not grow."""
+        self.open_the_forecast()
+        before = self.driver.execute_script(
+            "return document.documentElement.scrollHeight;")
+        self.driver.execute_script(self.OFFER_EVENT)
+        after = self.driver.execute_script(
+            "return document.documentElement.scrollHeight;")
+        self.assertEqual(before, after)
+
+    def test_the_hint_shows_to_a_reader_who_came_back(self):
+        self.open_the_forecast(visits=2)
+        self.driver.execute_script(self.OFFER_EVENT)
+        self.assertTrue(self.shown("install-hint"))
+        self.assertEqual(self.driver.execute_script(
+            "return localStorage.getItem('rainalert.installHintSeen');"), "1")
+
+    def test_the_hint_never_shows_on_a_first_visit(self):
+        self.open_the_forecast(visits=1)
+        self.driver.execute_script(self.OFFER_EVENT)
+        self.assertFalse(self.shown("install-hint"))
+
+    def test_the_hint_never_shows_without_a_remembered_city(self):
+        self.open_the_forecast(visits=2)
+        self.driver.execute_script("localStorage.removeItem('rainalert.city');")
+        self.driver.execute_script(
+            "sessionStorage.removeItem('rainalert.visitCounted');")
+        self.driver.get(self.base + "/?city=London")
+        self.wait_for("return document.querySelector('.weather-list') !== null;")
+        self.driver.execute_script(self.OFFER_EVENT)
+        self.assertFalse(self.shown("install-hint"))
+
+    def test_the_hint_shows_only_once(self):
+        self.open_the_forecast(visits=2)
+        self.driver.execute_script(self.OFFER_EVENT)
+        self.assertTrue(self.shown("install-hint"))
+        self.driver.execute_script(
+            "sessionStorage.removeItem('rainalert.visitCounted');")
+        self.driver.get(self.base + "/?city=London")
+        self.wait_for("return document.querySelector('.weather-list') !== null;")
+        self.driver.execute_script(self.OFFER_EVENT)
+        self.assertFalse(self.shown("install-hint"))
+
+    def test_not_now_closes_the_hint_and_keeps_it_closed(self):
+        self.open_the_forecast(visits=2)
+        self.driver.execute_script(self.OFFER_EVENT)
+        self.driver.find_element(By.ID, "install-hint-close").click()
+        self.assertFalse(self.shown("install-hint"))
+        self.assertEqual(self.driver.execute_script(
+            "return localStorage.getItem('rainalert.installHintSeen');"), "1")
+
+    def test_the_hint_installs_through_the_same_prompt(self):
+        self.open_the_forecast(visits=2)
+        self.driver.execute_script(self.OFFER_EVENT)
+        self.driver.find_element(By.ID, "install-hint-go").click()
+        self.assertEqual(
+            self.driver.execute_script("return window.installPrompts;"), 1)
+        self.assertFalse(self.shown("install-hint"))
+
+    def test_the_hint_does_not_push_the_page_about(self):
+        """It is a note over the page, so it adds no height to it."""
+        self.open_the_forecast(visits=2)
+        before = self.driver.execute_script(
+            "return document.documentElement.scrollHeight;")
+        self.driver.execute_script(self.OFFER_EVENT)
+        self.assertTrue(self.shown("install-hint"))
+        after = self.driver.execute_script(
+            "return document.documentElement.scrollHeight;")
+        self.assertEqual(before, after)
+
+    IPHONE_SAFARI = (
+        "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) "
+        "AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 "
+        "Mobile/15E148 Safari/604.1")
+    IPHONE_CHROME = (
+        "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) "
+        "AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/118.0 "
+        "Mobile/15E148 Safari/604.1")
+
+    def pretend_to_be(self, user_agent):
+        """Load the next pages as another browser, and undo it afterwards."""
+        self.driver.execute_cdp_cmd(
+            "Emulation.setUserAgentOverride", {"userAgent": user_agent})
+        self.addCleanup(self.driver.execute_cdp_cmd,
+                        "Emulation.setUserAgentOverride", {"userAgent": ""})
+
+    def test_safari_on_an_iphone_is_offered_the_steps(self):
+        """No install event exists there, so the link comes from the
+        browser alone, and it shows the two taps instead of a dialog."""
+        self.pretend_to_be(self.IPHONE_SAFARI)
+        self.open_the_forecast()
+        self.assertTrue(self.shown("install-offer"))
+        self.driver.find_element(By.ID, "install-app").click()
+        self.assertTrue(self.shown("install-hint"))
+        text = self.driver.find_element(By.ID, "install-hint-text").text
+        self.assertIn("Share", text)
+        self.assertIn("Add to Home Screen", text)
+        self.assertFalse(self.shown("install-hint-go"))
+        self.assertEqual(
+            self.driver.find_element(By.ID, "install-hint-close").text,
+            "Got it")
+
+    def test_the_steps_are_closed_by_got_it(self):
+        self.pretend_to_be(self.IPHONE_SAFARI)
+        self.open_the_forecast()
+        self.driver.find_element(By.ID, "install-app").click()
+        self.driver.find_element(By.ID, "install-hint-close").click()
+        self.assertFalse(self.shown("install-hint"))
+
+    def test_chrome_on_an_iphone_is_not_offered_the_link(self):
+        """It is not Safari, and the steps would send the reader to a
+        menu that is not there."""
+        self.pretend_to_be(self.IPHONE_CHROME)
+        self.open_the_forecast()
+        self.assertFalse(self.shown("install-offer"))
+
+    def test_an_installed_app_is_not_offered_the_link(self):
+        """In its own window the app is installed, whatever the browser
+        says, so the link and the hint have nothing to offer."""
+        # Chrome cannot emulate the display mode, so the page is told what
+        # an installed app is told.
+        standalone = self.driver.execute_cdp_cmd(
+            "Page.addScriptToEvaluateOnNewDocument", {"source": (
+                "var ask = window.matchMedia.bind(window);"
+                "window.matchMedia = function (query) {"
+                "    var answer = ask(query);"
+                "    if (query.indexOf('display-mode: standalone') === -1) {"
+                "        return answer; }"
+                "    return {matches: true, media: query,"
+                "            addEventListener: function () {},"
+                "            removeEventListener: function () {}};"
+                "};")})
+        self.addCleanup(self.driver.execute_cdp_cmd,
+                        "Page.removeScriptToEvaluateOnNewDocument",
+                        {"identifier": standalone["identifier"]})
+        self.open_the_forecast(visits=2)
+        self.driver.execute_script(self.OFFER_EVENT)
+        self.assertFalse(self.shown("install-offer"))
+        self.assertFalse(self.shown("install-hint"))
+
+    def test_escape_closes_the_hint_and_keeps_it_closed(self):
+        self.open_the_forecast(visits=2)
+        self.driver.execute_script(self.OFFER_EVENT)
+        self.assertTrue(self.shown("install-hint"))
+        self.driver.find_element(By.TAG_NAME, "body").send_keys(Keys.ESCAPE)
+        self.assertFalse(self.shown("install-hint"))
+        self.assertEqual(self.driver.execute_script(
+            "return localStorage.getItem('rainalert.installHintSeen');"), "1")
+
+    def test_a_browser_that_stores_nothing_is_never_shown_the_hint(self):
+        """The visits cannot be counted, so a returning reader cannot be
+        told from a new one, and the hint stays away rather than guess."""
+        blocked = self.driver.execute_cdp_cmd(
+            "Page.addScriptToEvaluateOnNewDocument", {"source": (
+                "Object.defineProperty(window, 'localStorage', {"
+                "    get: function () { throw new Error('blocked'); }});")})
+        self.addCleanup(self.driver.execute_cdp_cmd,
+                        "Page.removeScriptToEvaluateOnNewDocument",
+                        {"identifier": blocked["identifier"]})
+        self.open_the_forecast()
+        self.driver.execute_script(self.OFFER_EVENT)
+        self.assertTrue(self.shown("install-offer"))
+        self.assertFalse(self.shown("install-hint"))
+
+    def test_the_pages_that_load_no_script_keep_the_link_hidden(self):
+        """The release notes load no script, so the link would be a dead
+        one: it stays hidden, and the footer is still the same footer."""
+        self.driver.get(self.base + "/release-notes")
+        self.wait_for("return document.querySelector('.releases') !== null;")
+        self.assertFalse(self.shown("install-offer"))
+
+    def test_the_hint_fits_a_narrow_screen(self):
+        self.driver.execute_cdp_cmd("Emulation.setDeviceMetricsOverride", {
+            "width": 360, "height": 740,
+            "deviceScaleFactor": 1, "mobile": False,
+        })
+        self.open_the_forecast(visits=2)
+        self.driver.execute_script(self.OFFER_EVENT)
+        box = self.driver.execute_script(
+            "var r = document.getElementById('install-hint')"
+            ".getBoundingClientRect();"
+            "return {left: r.left, right: r.right,"
+            "        width: document.documentElement.clientWidth};")
+        self.assertGreaterEqual(box["left"], 0)
+        self.assertLessEqual(box["right"], box["width"])
 
 
 class SiteNavigationBrowserTestCase(BrowserServerMixin, unittest.TestCase):

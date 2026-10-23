@@ -687,6 +687,153 @@
         });
     }
 
+    /* --- Installing the app --------------------------------------------------
+     * Two ways in, and a reader never sees a button that cannot work. Chrome
+     * on Android hands the page an install prompt (`beforeinstallprompt`),
+     * which the footer link keeps and opens. Safari on an iPhone has no such
+     * prompt, so the link shows the steps instead. Everywhere else, and in an
+     * app that is already installed, the link stays hidden.
+     *
+     * The one-time hint is a note over the page, shown on a later visit by a
+     * reader who has a city remembered: someone who came back and kept a
+     * city is someone who may want the app on the home screen. It is shown
+     * once, and never on a first visit.
+     */
+    var HINT_KEY = "rainalert.installHintSeen";
+    var VISITS_KEY = "rainalert.visits";
+    var VISIT_COUNTED_KEY = "rainalert.visitCounted";
+
+    var deferredInstall = null;
+
+    function isInstalled() {
+        if (navigator.standalone === true) { return true; }
+        try {
+            return window.matchMedia("(display-mode: standalone)").matches;
+        } catch (error) {
+            return false;
+        }
+    }
+
+    function isIosSafari() {
+        var agent = navigator.userAgent || "";
+        var ios = /iPad|iPhone|iPod/.test(agent)
+            || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+        return ios && !/CriOS|FxiOS|EdgiOS|OPiOS/.test(agent);
+    }
+
+    function canOfferInstall() {
+        if (isInstalled()) { return false; }
+        return deferredInstall !== null || isIosSafari();
+    }
+
+    /* A visit is a browser session, counted once however many pages it
+     * opens. */
+    function countVisit() {
+        if (read(sessionStore(), VISIT_COUNTED_KEY)) { return; }
+        write(sessionStore(), VISIT_COUNTED_KEY, "1");
+        var visits = parseInt(read(localStore(), VISITS_KEY), 10) || 0;
+        write(localStore(), VISITS_KEY, String(visits + 1));
+    }
+
+    function visitCount() {
+        return parseInt(read(localStore(), VISITS_KEY), 10) || 0;
+    }
+
+    function updateInstallOffer() {
+        var offer = document.getElementById("install-offer");
+        if (offer) { offer.hidden = !canOfferInstall(); }
+    }
+
+    function closeInstallNote() {
+        var note = document.getElementById("install-hint");
+        if (note) { note.hidden = true; }
+    }
+
+    function openInstallNote(steps, takeFocus) {
+        var note = document.getElementById("install-hint");
+        var text = document.getElementById("install-hint-text");
+        var go = document.getElementById("install-hint-go");
+        var close = document.getElementById("install-hint-close");
+        if (!note || !text || !go || !close) { return; }
+
+        if (steps) {
+            text.textContent = "In Safari, tap Share, then Add to Home Screen.";
+            go.hidden = true;
+            close.textContent = "Got it";
+        } else {
+            text.textContent = "Open Rain Alert from your home screen, "
+                + "with no address bar.";
+            go.textContent = deferredInstall ? "Install" : "Show me how";
+            go.hidden = false;
+            close.textContent = "Not now";
+        }
+        note.hidden = false;
+        if (takeFocus) { close.focus(); }
+    }
+
+    function startInstall() {
+        if (deferredInstall) {
+            /* A prompt can be used once; Chrome sends a new one when the
+             * reader is offered the install again. */
+            var offered = deferredInstall;
+            deferredInstall = null;
+            closeInstallNote();
+            updateInstallOffer();
+            offered.prompt();
+            return;
+        }
+        if (isIosSafari()) {
+            openInstallNote(true, true);
+        }
+    }
+
+    function dismissInstallNote() {
+        write(localStore(), HINT_KEY, "1");
+        closeInstallNote();
+    }
+
+    function maybeShowInstallHint() {
+        if (!canOfferInstall()) { return; }
+        if (read(localStore(), HINT_KEY)) { return; }
+        if (!(body.getAttribute("data-city") || "").trim()) { return; }
+        if (savedCity() === "" || visitCount() < 2) { return; }
+        write(localStore(), HINT_KEY, "1");
+        openInstallNote(false, false);
+    }
+
+    /* Registered at once, not in start(): Chrome can send the prompt as
+     * soon as the page has loaded. */
+    window.addEventListener("beforeinstallprompt", function (event) {
+        event.preventDefault();
+        deferredInstall = event;
+        updateInstallOffer();
+        maybeShowInstallHint();
+    });
+
+    window.addEventListener("appinstalled", function () {
+        deferredInstall = null;
+        updateInstallOffer();
+        closeInstallNote();
+    });
+
+    function setupInstall() {
+        var link = document.getElementById("install-app");
+        var go = document.getElementById("install-hint-go");
+        var close = document.getElementById("install-hint-close");
+        if (!link) { return; }
+
+        countVisit();
+        link.addEventListener("click", startInstall);
+        if (go) { go.addEventListener("click", startInstall); }
+        if (close) { close.addEventListener("click", dismissInstallNote); }
+        document.addEventListener("keydown", function (event) {
+            if (event.key === "Escape") { dismissInstallNote(); }
+        });
+
+        updateInstallOffer();
+        maybeShowInstallHint();
+    }
+
     /* --- Starting up --------------------------------------------------------- */
     function start() {
         document.documentElement.classList.remove("no-js");
@@ -695,6 +842,8 @@
         registerServiceWorker();
 
         promotePendingCity();
+
+        setupInstall();
 
         setupDayPicker();
 

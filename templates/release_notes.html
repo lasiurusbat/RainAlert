@@ -58,7 +58,7 @@
             <ol class="releases">
                 {% for release in releases %}
                 <li class="release">
-                    <h2 class="release-version">Version {{ release.version }}</h2>
+                    <h2 class="release-version">Version {{ release.version }}<span class="build-sep" aria-hidden="true">·</span><time class="release-date" datetime="{{ release.date }}">{{ release.shown_date }}</time></h2>
                     <p class="release-name">{{ release.name }}</p>
                     <ul class="release-features">
                         {% for feature in release.features %}

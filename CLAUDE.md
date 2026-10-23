@@ -29,8 +29,8 @@ Serves on <http://127.0.0.1:5000>. `FLASK_DEBUG=1` enables the reloader and
 debugger.
 
 ```bash
-python -m unittest discover -s tests/offline -t .  # offline suite, 520 tests, no network
-python -m unittest tests.test_browser               # browser suite, 105 tests, needs Chrome
+python -m unittest discover -s tests/offline -t .  # offline suite, 533 tests, no network
+python -m unittest tests.test_browser               # browser suite, 128 tests, needs Chrome
 python -m unittest tests.test_api                   # live integration tests, hits both APIs
 ```
 
@@ -577,11 +577,20 @@ version on the top entry should be the one the build stamps into the footer
 step by hand), and the number of the release in preparation is the fallback
 tag in `render.yaml`.
 
-- **A release is a version, a name and a list of features.** A feature is
-  a `title` and a `text`: the title is the `h3` and the text is the
-  paragraph under it, so the page reads as a set of things the app does
+- **A release is a version, a date, a name and a list of features.** A
+  feature is a `title` and a `text`: the title is the `h3` and the text is
+  the paragraph under it, so the page reads as a set of things the app does
   rather than as a wall of prose. The version is the `h2` and the
   release's name is the line under it.
+- **The date is `dd.mm.yyyy`, on the version's line.** An entry holds an ISO
+  `date` ("2026-10-23"); `format_numeric_date()` in `rainalert/present/labels.py`
+  writes it as `23.10.2026`, with no weekday and no locale, and the page
+  renders it in a `<time class="release-date" datetime="...">` inside the
+  `h2`, so a release costs no extra line. The date is the day the tag was
+  pushed, **in UTC**: `v1.0.1` was tagged at 01:07 local on 2026-10-23, which
+  is 2026-10-22 in UTC, and the notes say 22.10.2026. The forecast's own
+  dates keep their format (`format_date()`, "Thursday 22.10.2026"); only the
+  release notes use the numeric one.
 - **The page is the same night street as the rest of the site.** Same
   background photograph, same panel over it, same frame. It is a page of
   the site, so it looks like one.
@@ -874,6 +883,50 @@ safe zone the generator keeps clear), and `templates/index.html` links it with
   background photo: the files that make the page *look* like Rain Alert,
   and nothing that carries data. The offline page says plainly that the
   forecast cannot be fetched, and shows no forecast.
+
+**The app says it can be installed, in two quiet places.** Without a word
+about it, nobody finds the Chrome menu entry. Both pieces live in
+`templates/_footer.html` and `static/app.js`, so they are on every page
+that loads the script (the forecast pages; the city index, the release
+notes and the 404 load no script, so their link stays hidden).
+
+- **A footer link, "Install app"**, on the build's line after "Release
+  notes", so it costs no height. It is `hidden` in the markup and the
+  script reveals it only when the browser can install: Chrome on Android
+  hands over `beforeinstallprompt`, which the page keeps and the link
+  opens; Safari on an iPhone has no such prompt, so the link shows the
+  steps ("Share, then Add to Home Screen"). It stays hidden in an app that
+  is already installed (`display-mode: standalone`, `navigator.standalone`,
+  the `appinstalled` event) and in every other browser.
+- **A one-time hint**, a fixed note over the page (so the panel gains no
+  height), shown on a **later visit by a reader who has a city
+  remembered**: `rainalert.visits` counts browser sessions and must be at
+  least 2, and `rainalert.installHintSeen` is written the moment it shows,
+  so it is shown once. It is not tied to the moment a city is saved,
+  because that happens on the first visit. It is set in paper and mist, no
+  amber: the lamp means rain.
+- **Chrome's prompt can be used once.** The link clears it after
+  `prompt()` and waits for the next `beforeinstallprompt`.
+- **`beforeinstallprompt` is listened for at once, not in `start()`**,
+  because Chrome can send it as soon as the page has loaded.
+- **Headless Chrome sends a real install event on localhost**, which would
+  replace a test's own fake one and leave its `prompt()` uncounted. The
+  tests in `InstallBrowserTestCase` swallow trusted events before the page
+  sees them.
+- **Safari is told from other iOS browsers by its user agent.** Chrome,
+  Firefox, Edge and Opera on an iPhone (`CriOS`, `FxiOS`, `EdgiOS`,
+  `OPiOS`) are not offered the link, because the steps name Safari's
+  Share menu. The tests set the user agent with
+  `Emulation.setUserAgentOverride` and put it back in a cleanup, because
+  the browser is shared by the whole class.
+- **Chrome cannot emulate `display-mode: standalone`**, so the test for an
+  installed app wraps `window.matchMedia` in a script added with
+  `Page.addScriptToEvaluateOnNewDocument`. Remove such a script in a
+  cleanup (`Page.removeScriptToEvaluateOnNewDocument`), or it is still
+  there for the next test.
+- **A browser that stores nothing never sees the hint.** The visits cannot
+  be counted, so a returning reader cannot be told from a new one; the
+  hint stays away rather than guess. The footer link still works.
 
 **Bump `CACHE_VERSION` in `static/service-worker.js` when the shell
 changes.** The old caches are dropped when the new worker takes over, and

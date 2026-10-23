@@ -26,6 +26,19 @@
     <span class="build-info">
         Version {{ app_version }}{% if app_commit %} · build {{ app_commit }}{% endif %}
         {% if release_notes %}<span class="build-sep" aria-hidden="true">|</span><a class="release-link" href="{{ url_for('release_notes') }}">Release notes</a>{% endif %}
+        <!-- Hidden until the script knows the browser can install the
+             app: a button that cannot work is never handed to a reader. -->
+        <span class="install-offer" id="install-offer" hidden><span class="build-sep" aria-hidden="true">|</span><button type="button" class="install-link" id="install-app">Install app</button></span>
     </span>
 </footer>
+{# The one-time hint, and the steps for a browser that has no install
+   button. It is a fixed note over the page, so it costs the panel no
+   height, and it is hidden until the script has a reason to show it. #}
+<div class="install-hint" id="install-hint" role="status" hidden>
+    <p class="install-hint-text" id="install-hint-text"></p>
+    <div class="install-hint-actions">
+        <button type="button" class="install-hint-go" id="install-hint-go">Install</button>
+        <button type="button" class="install-hint-close" id="install-hint-close">Not now</button>
+    </div>
+</div>
 {% endmacro %}

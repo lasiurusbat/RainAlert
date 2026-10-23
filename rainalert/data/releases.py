@@ -2,7 +2,9 @@
 
 The release notes page is written by hand, in the same way as the API
 reference: it describes the app, it is not generated from it. Each entry
-is a version, a name for it, and the features it brought, newest first.
+is a version, the date it was cut, a name for it, and the features it
+brought, newest first. The date is the day the tag was pushed, as an ISO
+date.
 
 **Cutting a release means adding an entry here.** The version on the top
 entry is the number of the release in preparation, and that number is also
@@ -15,7 +17,44 @@ promises a forecast the service does not give.
 
 RELEASES = [
     {
+        "version": "1.1.0",
+        "date": "2026-10-23",
+        "name": "Put it on your home screen",
+        "features": [
+            {
+                "title": "An Install app link in the footer",
+                "text": "The app could always be installed, and now the page "
+                        "says so. When your browser can install it, the "
+                        "footer offers Install app: on Chrome for Android it "
+                        "opens the browser's own install dialog, and on "
+                        "Safari for iPhone it shows the two taps that do "
+                        "it. A browser that cannot install the app, or an "
+                        "app that is already installed, never sees the "
+                        "link.",
+            },
+            {
+                "title": "A hint, once, when you come back",
+                "text": "If you return to a city you asked the app to "
+                        "remember, a small note offers to put Rain Alert on "
+                        "your home screen. It is shown once and never on "
+                        "your first visit, and it sits over the page "
+                        "instead of pushing it about. Not now closes it for "
+                        "good.",
+            },
+            {
+                "title": "A page that fits a phone's screen",
+                "text": "On some Android phones the page could be dragged a "
+                        "little further than its own content, because the "
+                        "browser counted the height of its toolbars as part "
+                        "of the screen. The page now uses the height that is "
+                        "really visible, so it fits the screen and stays "
+                        "put.",
+            },
+        ],
+    },
+    {
         "version": "1.0.1",
+        "date": "2026-10-22",
         "name": "A page that is not there says so",
         "features": [
             {
@@ -32,6 +71,7 @@ RELEASES = [
     },
     {
         "version": "1.0",
+        "date": "2026-10-22",
         "name": "The 7-day rain chance for any city",
         "features": [
             {

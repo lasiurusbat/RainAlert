@@ -127,8 +127,8 @@ Python 3.14.5.
 ## Running the tests
 
 ```bash
-python -m unittest discover -s tests/offline -t .  # 520 offline tests, no network required
-python -m unittest tests.test_browser               # 105 browser tests, needs Chrome
+python -m unittest discover -s tests/offline -t .  # 533 offline tests, no network required
+python -m unittest tests.test_browser               # 128 browser tests, needs Chrome
 python -m unittest tests.test_api                   # 7 live integration tests, hits both APIs
 ```
 
@@ -612,12 +612,26 @@ The app is a **Progressive Web App**: it can be installed on a phone's home
 screen, or on a desktop, and then opens in its own window with its own icon
 instead of in a browser tab.
 
-- **On Android (Chrome):** open the site, then the browser menu → *Install
-  app* / *Add to Home screen*.
-- **On iOS (Safari):** open the site, tap the share button, then *Add to
-  Home Screen*.
+- **On Android (Chrome):** open the site and tap *Install app* in the footer,
+  which opens the browser's own install dialog. The browser menu → *Install
+  app* / *Add to Home screen* does the same.
+- **On iOS (Safari):** open the site and tap *Install app* in the footer,
+  which shows the two taps: the share button, then *Add to Home Screen*. Only
+  Safari offers the link; there is no install prompt on an iPhone for the
+  page to open.
 - **On the desktop (Chrome or Edge):** the install icon appears in the address
   bar, or it is under the browser menu → *Install*.
+
+**The page says so itself, in two quiet places.** The footer link *Install
+app* sits on the line of the build, after *Release notes*. It is hidden until
+the script knows the browser can install the app, and it stays hidden in an
+app that is already installed and in every browser that cannot install it.
+The second is a one-time hint, a small note over the page (so the panel gets
+no taller): a reader who comes back to a city they asked the app to
+remember is offered the install once, and *Not now* — or Escape — closes it for
+good. It is never shown on a first visit, and a browser that stores nothing
+never sees it. Both live on the forecast pages; the city index, the release
+notes and the 404 load no script, so the link stays hidden there.
 
 Nothing has to be published to an app store, and the installed app is the
 same app: the same forecast, the same tab alert, the same notifications.
@@ -719,9 +733,11 @@ from "the new build is up".
 **The changelog is a page of the site.** Next to the version, the footer
 carries a link to `/release-notes`, which says what each release brought,
 newest first, in the same night-street frame as the rest of the site. A
-release is a version, a name and the features it brought; a feature is a
-title and a paragraph. The content lives in `rainalert/data/releases.py`, so cutting a release means adding an entry
-there.
+release is a version, the date it was cut, a name and the features it
+brought; a feature is a title and a paragraph. The date is written as
+`dd.mm.yyyy` beside the version, in a `<time>` element that carries the ISO
+date for a machine to read. The content lives in `rainalert/data/releases.py`,
+so cutting a release means adding an entry there.
 
 ---
 

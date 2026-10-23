@@ -72,7 +72,11 @@ body {
     flex-direction: column;
     justify-content: flex-start;
     align-items: center;
+    /* 100vh is taller than the visible area in an Android browser, which left
+       a band to scroll through below the footer. svh is the height the page
+       is actually shown in. */
     min-height: 100vh;
+    min-height: 100svh;
     margin: 0;
     /* Less bottom padding: the copyright line already provides separation
        below the card, and this keeps a standard desktop view scroll-free. */
@@ -1256,6 +1260,99 @@ button:focus-visible {
    is styled like every other link in the footer. */
 .build-sep {
     margin: 0 0.35rem;
+}
+
+/* The install link, after the release notes. A button in the markup because
+   it does something rather than going somewhere, and set like the links
+   around it so the footer reads as one line. */
+.install-link {
+    margin: 0;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: inherit;
+    font: inherit;
+    text-decoration: underline;
+    cursor: pointer;
+}
+
+.install-link:hover,
+.install-link:focus-visible {
+    text-decoration-thickness: 2px;
+}
+
+/* The one-time hint, and the steps for Safari. A note over the page rather
+   than a line in it, so it costs the panel no height, and it is set in
+   paper and mist: the lamp's amber means rain. `hidden` needs its own rule,
+   or the flex display would win and the note would always show. */
+.install-hint {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: calc(0.75rem + env(safe-area-inset-bottom, 0px));
+    z-index: 20;
+    box-sizing: border-box;
+    width: calc(100% - 1.5rem);
+    max-width: 420px;
+    margin: 0 auto;
+    padding: 0.75rem 0.9rem;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.6rem;
+    background: var(--asphalt);
+    color: var(--paper);
+    border: 1px solid var(--line-lit);
+    border-radius: 12px;
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
+    font-size: 0.85rem;
+    line-height: 1.4;
+}
+
+.install-hint[hidden] {
+    display: none;
+}
+
+.install-hint-text {
+    flex: 1 1 14rem;
+    margin: 0;
+}
+
+.install-hint-actions {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.install-hint-go,
+.install-hint-close {
+    padding: 0.4rem 0.8rem;
+    border-radius: 8px;
+    font: inherit;
+    font-size: 0.8rem;
+    cursor: pointer;
+}
+
+.install-hint-go {
+    background: var(--paper);
+    color: var(--asphalt);
+    border: 1px solid var(--paper);
+}
+
+.install-hint-go[hidden] {
+    display: none;
+}
+
+.install-hint-close {
+    background: none;
+    color: var(--mist);
+    border: 1px solid var(--line-lit);
+}
+
+.install-hint-go:focus-visible,
+.install-hint-close:focus-visible {
+    outline: 2px solid var(--paper);
+    outline-offset: 2px;
 }
 
 /* --- The release notes ------------------------------------------------------

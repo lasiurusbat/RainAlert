@@ -34,6 +34,18 @@ def format_date(value):
     return f"{weekday} {parsed.strftime('%d.%m.%Y')}"
 
 
+def format_numeric_date(value):
+    """Format an ISO date as ``23.10.2026``, with no weekday.
+
+    The release notes date a release, and a release is dated by the day
+    alone. Like :func:`format_date` it uses no locale.
+    """
+    try:
+        return date.fromisoformat(str(value)).strftime("%d.%m.%Y")
+    except (TypeError, ValueError):
+        return str(value)
+
+
 def format_date_parts(value):
     """The short forms of a date, for the week that is a row of columns.
 

@@ -2,12 +2,14 @@
 """
 
 import re
+from datetime import date
 from unittest import mock
 
 from markupsafe import escape
 
 from rainalert import config
 from rainalert.data import releases
+from rainalert.present.labels import format_numeric_date
 from tests.fixtures import (AppTestCase, FakeLocation, FakeResponse,
                             hourly_payload)
 
@@ -403,6 +405,23 @@ class TestReleaseNotes(AppTestCase):
         versions = [release["version"] for release in releases.RELEASES]
         self.assertEqual(versions, sorted(versions, reverse=True))
 
+    def test_every_release_has_a_real_date(self):
+        for release in releases.RELEASES:
+            date.fromisoformat(release["date"])
+
+    def test_the_dates_never_run_backwards(self):
+        """Newest first, so no entry is dated before the one under it."""
+        dates = [release["date"] for release in releases.RELEASES]
+        self.assertEqual(dates, sorted(dates, reverse=True))
+
+    def test_the_page_carries_every_date(self):
+        """The machine-readable date and the words the site always uses."""
+        body = self.client.get("/release-notes").get_data(as_text=True)
+        for release in releases.RELEASES:
+            self.assertIn(f'<time class="release-date" '
+                          f'datetime="{release["date"]}">'
+                          f'{format_numeric_date(release["date"])}</time>', body)
+
     def test_the_page_carries_every_feature(self):
         """A feature is a title and a paragraph, and both are on the page.
 
@@ -413,7 +432,7 @@ class TestReleaseNotes(AppTestCase):
         body = self.client.get("/release-notes").get_data(as_text=True)
         for release in releases.RELEASES:
             for feature in release["features"]:
-                self.assertIn(feature["title"], body)
+                self.assertIn(escape(feature["title"]), body)
                 self.assertIn(escape(feature["text"]), body)
 
     def test_every_release_says_something(self):
@@ -485,6 +504,38 @@ class TestReleaseNotes(AppTestCase):
         """One macro, so the footer cannot drift from page to page."""
         footers = {self.footer(body) for body in self.pages()}
         self.assertEqual(len(footers), 1)
+
+    # -- the install offer ------------------------------------------------------
+
+    def test_every_footer_carries_the_install_link_and_it_is_hidden(self):
+        """The script reveals it, so a reader without one never gets a
+        button that cannot work."""
+        for body in self.pages() + [
+                self.client.get("/release-notes").get_data(as_text=True)]:
+            footer = self.footer(body)
+            self.assertIn('id="install-offer" hidden>', footer)
+            self.assertIn('id="install-app">Install app</button>', footer)
+
+    def test_the_install_link_follows_the_release_notes_on_one_line(self):
+        for body in self.pages():
+            footer = self.footer(body)
+            self.assertLess(footer.index("Release notes"),
+                            footer.index("Install app"))
+            self.assertLess(footer.index("Version "),
+                            footer.index("Install app"))
+
+    def test_the_install_hint_is_hidden_and_outside_the_footer(self):
+        for body in self.pages():
+            end = body.index("</footer>")
+            hint = body.index('id="install-hint"')
+            self.assertGreater(hint, end)
+            self.assertIn('id="install-hint" role="status" hidden>', body)
+
+    def test_the_install_markup_has_no_inline_style(self):
+        for body in self.pages():
+            start = body.index('id="install-offer"')
+            end = body.index('id="install-hint-close"')
+            self.assertNotIn("style=", body[start:end])
 
 
 class TestBrowserPreferences(AppTestCase):
