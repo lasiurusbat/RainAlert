@@ -88,8 +88,8 @@ These steps use accounts and dashboards I cannot see from the repository.
 
 - [x] Docker Hub: create an access token with Read & Write scope. Done 2026-10-22: the `lasiurusbat/rainalert` repository is public and has **two tags**, `1.0` and `1.0.1`, pushed by the two release runs.
 - [x] **(verify)** GitHub secrets set: `DOCKERHUB_USERNAME`, `DOCKERHUB_TOKEN` and `RENDER_DEPLOY_HOOK_URL` are all set. The hook came from the service that runs the image, because a hook is per-service.
-- [x] Render: the app answers at <https://rainalert.live/> on the `1.0.1` image, with the footer reading "Version 1.0.1 · build e045be4". The service is named `rainalert-1-0` because an older service already held the name `rainalert`. The donation link is on the live page: the service runs with `DONATION_URL` set.
-- [ ] Delete the old stub service `rainalert` at <https://rainalert.onrender.com>, which serves a JSON stub (`{"message": "Rain Alert API is running", "status": "ok"}`) rather than this app.
+- [x] Render: the app answers at <https://rainalert.live/> on the `1.0.1` image, with the footer reading "Version 1.0.1 · build e045be4". The service is named `rainalert` and its address is still `rainalert-1-0.onrender.com`; it was created under that name because an older stub held `rainalert`. The donation link is on the live page: the service runs with `DONATION_URL` set.
+- [x] Delete the old stub service `rainalert`, which served a JSON stub rather than this app.
 - [x] Take the deploy hook from the **new** service and add it as the `RENDER_DEPLOY_HOOK_URL` secret, so the workflow can deploy by itself. Render's own docs list deploy hooks on the free Hobby plan, so there is one to copy. Done 2026-10-22.
 - [x] Note the order: the image must exist on Docker Hub before Render can pull it, or the first deploy fails. It did.
 - [x] **(verify)** Domain: `rainalert.live` added in Render, the Namecheap URL-forwarding records replaced, DNS records added, HTTPS working. Confirmed 2026-10-22: the domain is a CNAME to `rainalert-1-0.onrender.com`, `http://` answers `301` to `https://`, and every route on the live address answers.

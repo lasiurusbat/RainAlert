@@ -94,13 +94,11 @@ gets none of them, because the offline suite asserts the app's own defaults.
   `DONATION_URL` set, so "Buy me a coffee" appears under the search and
   in the footer of every page. The variable is read at start-up, so
   changing it needs a restart of the service and no new image.
-- **The service is named `rainalert-1-0`**, because an older service
-  already held the name `rainalert`.
-- **The old stub service is still there.** A service named `rainalert`
-  answers at <https://rainalert.onrender.com> and returns the JSON
-  `{"message": "Rain Alert API is running 🌂", "status": "ok"}`. It is not
-  this app, it never was, and it should be deleted so that the two
-  addresses cannot be confused.
+- **The service is named `rainalert`, and its address is still
+  `rainalert-1-0.onrender.com`.** It was created as `rainalert-1-0`
+  because an older stub service held the name; the stub has been deleted
+  and the service renamed. Render fixes the subdomain at creation, so the
+  rename did not change the address and the domain's CNAME is untouched.
 
 **The first release ran, and it took five attempts.** `v1.0` points at
 `7265a18` on `main`, and the tag-gated half of the workflow has now run
@@ -153,9 +151,7 @@ it is what makes a release a release.
 
 ### Still to do
 
-- [ ] Delete the old stub service `rainalert`, so that
-      `rainalert.onrender.com` stops answering with JSON and only one
-      service answers under that name. Nothing depends on it.
+Nothing is outstanding.
 
 ## Layout
 
@@ -662,7 +658,7 @@ scale the reader chose.
 pulls that image; it never runs the `Dockerfile`. A release is therefore a
 pushed image tag, not a merged commit. The old `runtime: python` shape,
 where Render ran `pip install` and gunicorn itself, is gone — that is the
-shape the old stub service still runs. The image exists and the service
+shape the old stub service ran. The image exists and the service
 pulls it. See "Deployment status" above.
 
 **CI runs the tests inside the built image.** `.github/workflows/ci-cd.yml`
@@ -1079,11 +1075,10 @@ because the app works without it.
 - **Render does not redeploy an image service when a new image appears.**
   A new tag on Docker Hub is not enough on its own; the deploy hook has to
   be called with the `imgURL` parameter naming the tag. See `DEPLOY.md`.
-- **`rainalert.onrender.com` is not this app.** It answers with a JSON
-  `{"message": "Rain Alert API is running", "status": "ok"}`; this app's `/`
-  renders HTML. Do not read a 200 from that URL as "the site is up" — check
-  for the HTML page, or a `Forecast for …` heading. The app's own address
-  is `https://rainalert.live/`.
+- **`rainalert.onrender.com` is not this app and no longer exists.** It was
+  an older stub that answered with JSON; it has been deleted. The service's
+  own onrender address is `rainalert-1-0.onrender.com`, and the app's public
+  address is `https://rainalert.live/`.
 - **A resolver that still holds the old forwarding record will say the
   site is down when it is not.** The domain used to be on Namecheap URL
   forwarding, and a local resolver can keep answering with the forwarder's

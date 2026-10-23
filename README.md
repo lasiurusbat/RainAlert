@@ -1057,10 +1057,9 @@ too, from `python app.py` or `docker compose up`. Checked on 2026-10-23:
 - The Docker Hub repository `lasiurusbat/rainalert` is public and has
   **two tags**: `1.0` and `1.0.1`, the latter being the image `render.yaml`
   names and the one the live service is running.
-- A Render service answers at <https://rainalert.onrender.com>, but it
-  serves a JSON stub (`{"message": "Rain Alert API is running 🌂", "status":
-  "ok"}`), not this app — this app's `/` renders the HTML page. It should
-  be deleted.
+- The Render service is named `rainalert` and answers at
+  <https://rainalert-1-0.onrender.com> as well as on the domain; an older
+  stub service that used to hold the name has been deleted.
 
 The rest of this section describes the intended setup.
 

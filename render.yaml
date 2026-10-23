@@ -15,11 +15,11 @@
 #       name: <credential name>
 services:
   - type: web
-    # The live service's name. It is not plain "rainalert" because an older
-    # service already held that name when this Blueprint was applied, and
-    # Render made this one "rainalert-1-0". The domain points at this
-    # service, so renaming it would mean changing the DNS as well.
-    name: rainalert-1-0
+    # The live service's name. Its onrender.com address is still
+    # rainalert-1-0.onrender.com, because Render fixes the subdomain when the
+    # service is created and a rename does not change it. The domain's CNAME
+    # points at that address, so DNS needs no change.
+    name: rainalert
     runtime: image
     plan: free
     image:

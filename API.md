@@ -538,7 +538,5 @@ asked of that address — the API endpoints, the calendar export, and the
 pages. `https://rainalert.live/api/alert?city=Berlin` answers with the
 alert JSON, and the same paths on a local run answer the same way.
 
-Note that `https://rainalert.onrender.com` is **not** this app — it answers
-with a JSON stub. A `200` from that URL is not "the site is up". The
-app's own address is `https://rainalert.live/`, and `DEPLOY.md` is the
+The app's own address is `https://rainalert.live/`, and `DEPLOY.md` is the
 runbook.

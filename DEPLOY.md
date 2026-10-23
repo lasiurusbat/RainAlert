@@ -26,13 +26,11 @@ State of the world, checked on 2026-10-23:
 - **The donation link is live.** The service runs with `DONATION_URL` set,
   so "Buy me a coffee" appears under the search and in the footer of every
   page.
-- **The service is named `rainalert-1-0`**, because an older service
-  already held the name `rainalert`.
-- **A Render service named `rainalert` answers at
-  <https://rainalert.onrender.com>, and it is not this app.** Its `/`
-  returns the JSON `{"message": "Rain Alert API is running 🌂", "status":
-  "ok"}`; this app's `/` renders the HTML page. It is a minimal service
-  that happens to share the name, and it should be deleted.
+- **The service is named `rainalert`, and its address is still
+  `rainalert-1-0.onrender.com`.** It was created as `rainalert-1-0`
+  because an older stub service held the name; the stub has been deleted
+  and the service renamed. Render fixes the subdomain at creation, so the
+  rename did not change the address and the domain's CNAME is untouched.
 
 The order matters: the image has to exist on Docker Hub before Render can
 pull it, and the domain has to be attached before the workflow's smoke test
@@ -175,8 +173,7 @@ All of the above were checked on 2026-10-22 and again on 2026-10-23, on
 the live domain, and all of it behaves as written — the donation link
 included, and the missing city's page now answers `404` with the title
 "Page not found - Rain Alert" and the site's own canonical link. The only
-thing left is to submit the sitemap to the two search engines, and to
-delete the old stub service.
+thing left is to submit the sitemap to the two search engines.
 
 ## 4. Optional
 
