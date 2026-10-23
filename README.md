@@ -1071,8 +1071,9 @@ too, from `python app.py` or `docker compose up`. Checked on 2026-10-23:
   secret was not set). The second was green on its first attempt, and a
   release is one `git tag`.
 - The Docker Hub repository `lasiurusbat/rainalert` is public and has
-  **two tags**: `1.0` and `1.0.1`, the latter being the image `render.yaml`
-  names and the one the live service is running.
+  **two tags**: `1.0` and `1.0.1`, the latter being the one the live service
+  is running. `render.yaml` already names `1.1.0`, the release in
+  preparation, which exists once the `v1.1.0` tag has been pushed.
 - The Render service is named `rainalert` and answers at
   <https://rainalert-1-0.onrender.com> as well as on the domain; an older
   stub service that used to hold the name has been deleted.
@@ -1085,7 +1086,7 @@ that runs a prebuilt image from Docker Hub:
 ```yaml
 runtime: image
 image:
-  url: docker.io/lasiurusbat/rainalert:1.0.1
+  url: docker.io/lasiurusbat/rainalert:1.1.0
 ```
 
 Render pulls the image; it does not build the Dockerfile. Releases are cut by

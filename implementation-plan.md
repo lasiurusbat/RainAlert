@@ -70,7 +70,7 @@ a page that is missing says so with its status code.
 ### Packaging and delivery
 - [x] Multi-stage `Dockerfile`: non-root user, no system packages, tests included in the image
 - [x] `.dockerignore`, `.gitignore`, `docker-compose.yml` (app plus a `tests` profile)
-- [x] `render.yaml`: free web service running `docker.io/lasiurusbat/rainalert:1.0.1`, user agent naming rainalert.live
+- [x] `render.yaml`: free web service running `docker.io/lasiurusbat/rainalert:1.1.0` (the release in preparation), user agent naming rainalert.live
 - [x] `.github/workflows/ci-cd.yml`: build, test in the image, push on release tag, Render deploy hook, smoke test
 - [x] `.github/dependabot.yml`: weekly updates for Actions, pip and the Docker base image
 - [x] `DEPLOY.md` runbook (image push, Render setup, domain, pipeline, known limits)

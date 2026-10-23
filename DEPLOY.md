@@ -404,8 +404,9 @@ and the forecast is right, and only the styles are old. The rule is
   for that deploy. I could not confirm whether it also changes the service's
   stored default image, so after a release also update the tag in
   `render.yaml` and the service settings so a later manual redeploy or
-  restart does not bring back an older version. `render.yaml` is at `1.0.1`
-  now, which is the build the live service is running; the service's own
+  restart does not bring back an older version. `render.yaml` is at `1.1.0`
+  now, the release in preparation, while the live service runs `1.0.1` until
+  the `v1.1.0` tag is pushed; the service's own
   **Settings → Image** field is worth a look after a release, because a
   manual "Deploy latest reference" pulls the *stored* tag.
 - **The smoke test reads the version, not just the page.** The footer of

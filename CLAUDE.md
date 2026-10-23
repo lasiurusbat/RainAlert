@@ -663,7 +663,10 @@ search form carries the unit in a hidden field, so a new search keeps the
 scale the reader chose.
 
 **Deployment runs a prebuilt image, not a build.** `render.yaml` uses
-`runtime: image` pointing at `docker.io/lasiurusbat/rainalert:1.0.1`. Render
+`runtime: image` pointing at `docker.io/lasiurusbat/rainalert:1.1.0` (the release in
+preparation; the live service runs `1.0.1` until the `v1.1.0` tag has been
+pushed and deployed, and a manual deploy before then has no such image to
+pull). Render
 pulls that image; it never runs the `Dockerfile`. A release is therefore a
 pushed image tag, not a merged commit. The old `runtime: python` shape,
 where Render ran `pip install` and gunicorn itself, is gone — that is the
