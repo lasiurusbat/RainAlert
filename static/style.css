@@ -1193,13 +1193,33 @@ button:focus-visible {
 }
 
 /* The copyright line sits over the photograph, so it is white with a
-   shadow, and the links in it are white like the text around them. */
+   shadow, and the links in it are white like the text around them. The
+   shadow is two layers: a tight one that gives each letter a crisp edge and
+   a wide one that is the halo. */
 .copyright {
+    position: relative;
+    isolation: isolate;
     margin-top: 0.5rem;
     color: #ffffff;
     font-size: 0.8rem;
     text-align: center;
-    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.7);
+    text-shadow: 0 0 2px rgba(0, 0, 0, 0.9), 0 1px 6px rgba(0, 0, 0, 0.8);
+}
+
+/* The photograph under the footer is mid-grey with bright reflections in the
+   wet road, and white type on it blended into it. A soft dark haze behind
+   the footer lines - a fade, not a box - takes the brightness out of the
+   photograph where the words are. It is absolutely positioned, so it costs
+   the panel no height, and it sits behind the text (`isolation` keeps it
+   inside the footer's own stacking context). */
+.copyright::before {
+    content: '';
+    position: absolute;
+    inset: -0.9rem -2.5rem;
+    z-index: -1;
+    pointer-events: none;
+    background: radial-gradient(ellipse at center,
+        rgba(8, 12, 15, 0.8) 0%, rgba(8, 12, 15, 0.6) 45%, rgba(8, 12, 15, 0) 75%);
 }
 
 .copyright a {
