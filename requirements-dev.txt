@@ -10,4 +10,4 @@
 #
 # The suite skips itself when selenium or Chrome is missing, so this file is
 # optional: it is only needed to actually run the browser tests.
-selenium==4.44.0
+selenium==4.51.0
