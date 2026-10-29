@@ -236,7 +236,11 @@ The two files a crawler asks for.
 `robots.txt` says where the crawlers may go:
 
 ```
+User-agent: SemrushBot
+Disallow: /
+
 User-agent: *
+Crawl-delay: 10
 Allow: /
 Disallow: /api/
 Disallow: /calendar.ics
@@ -245,7 +249,10 @@ Sitemap: https://rainalert.live/sitemap.xml
 ```
 
 `/api/` and `/calendar.ics` are kept out of the crawl: they are not pages,
-and fetching either one costs two upstream requests.
+and fetching either one costs two upstream requests. Every city page is an
+upstream request too, and the free forecast service rate-limits by IP address,
+so the crawl is slowed with `Crawl-delay` and SemrushBot, an SEO crawler that
+brings no readers, is shut out.
 
 `sitemap.xml` names the start page, the city index, the release notes and
 every city's page, with today's date as the last modification — the forecast

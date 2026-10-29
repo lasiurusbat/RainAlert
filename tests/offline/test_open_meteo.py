@@ -225,3 +225,88 @@ class TestLoadForecast(unittest.TestCase):
             forecast = open_meteo.load_forecast(51.5, -0.12)
         self.assertEqual(len(forecast.days), 3)
         self.assertEqual(len(forecast.today), 24)
+
+
+class TestForecastCache(unittest.TestCase):
+    """The server keeps a forecast for a while, because the service answers
+    HTTP 429 once an IP address asks for too much."""
+
+    def setUp(self):
+        open_meteo.clear_cache()
+        patcher = mock.patch.object(open_meteo.config,
+                                    "WEATHER_CACHE_SECONDS", 600)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        self.addCleanup(open_meteo.clear_cache)
+
+    def fetch(self, get, lat=51.5, lon=-0.12, unit=None):
+        with mock.patch.object(requests, "get", get):
+            return open_meteo.fetch_payload(lat, lon, unit)
+
+    def test_a_second_request_for_the_same_place_costs_no_call(self):
+        get = mock.Mock(return_value=FakeResponse())
+        self.fetch(get)
+        self.fetch(get)
+        self.assertEqual(get.call_count, 1)
+
+    def test_another_place_or_another_scale_is_its_own_forecast(self):
+        get = mock.Mock(return_value=FakeResponse())
+        self.fetch(get)
+        self.fetch(get, lat=48.85, lon=2.35)
+        self.fetch(get, unit="fahrenheit")
+        self.assertEqual(get.call_count, 3)
+
+    def test_a_forecast_goes_stale(self):
+        get = mock.Mock(return_value=FakeResponse())
+        clock = mock.Mock()
+        with mock.patch.object(open_meteo, "time", clock):
+            clock.monotonic.return_value = 0
+            self.fetch(get)   # stored at 0
+            clock.monotonic.return_value = 599
+            self.fetch(get)   # 599 seconds old: still fresh
+            clock.monotonic.return_value = 601
+            self.fetch(get)   # 601 seconds old: fetched again
+        self.assertEqual(get.call_count, 2)
+
+    def test_a_failure_is_not_kept(self):
+        """A retry has to ask again, or one 429 would last ten minutes."""
+        limited = mock.Mock(return_value=FakeResponse(status_code=429))
+        with self.assertRaises(WeatherUnavailable):
+            self.fetch(limited)
+        recovered = mock.Mock(return_value=FakeResponse())
+        self.fetch(recovered)
+        self.assertEqual(recovered.call_count, 1)
+
+    def test_a_broken_answer_is_not_kept(self):
+        broken = mock.Mock(return_value=FakeResponse(payload=["junk"]))
+        with self.assertRaises(WeatherUnavailable):
+            self.fetch(broken)
+        good = mock.Mock(return_value=FakeResponse())
+        self.fetch(good)
+        self.assertEqual(good.call_count, 1)
+
+    def test_zero_turns_the_cache_off(self):
+        get = mock.Mock(return_value=FakeResponse())
+        with mock.patch.object(open_meteo.config, "WEATHER_CACHE_SECONDS", 0):
+            self.fetch(get)
+            self.fetch(get)
+        self.assertEqual(get.call_count, 2)
+
+    def test_a_caller_cannot_change_the_stored_copy(self):
+        # A copy of the fixture, so clearing it here cannot reach the tests
+        # that share it.
+        payload = json.loads(json.dumps(FORECAST_PAYLOAD))
+        get = mock.Mock(return_value=FakeResponse(payload=payload))
+        first = self.fetch(get)
+        first["daily"]["time"].clear()
+        again = self.fetch(get)
+        self.assertTrue(again["daily"]["time"])
+
+    def test_the_oldest_forecast_goes_when_the_cache_is_full(self):
+        get = mock.Mock(return_value=FakeResponse())
+        with mock.patch.object(open_meteo, "MAX_CACHED_FORECASTS", 2):
+            self.fetch(get, lat=1, lon=1)
+            self.fetch(get, lat=2, lon=2)
+            self.fetch(get, lat=3, lon=3)   # evicts (1, 1)
+            self.fetch(get, lat=1, lon=1)   # fetched again
+        self.assertEqual(get.call_count, 4)

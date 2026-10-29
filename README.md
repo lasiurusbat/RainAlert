@@ -127,7 +127,7 @@ Python 3.14.5.
 ## Running the tests
 
 ```bash
-python -m unittest discover -s tests/offline -t .  # 544 offline tests, no network required
+python -m unittest discover -s tests/offline -t .  # 555 offline tests, no network required
 python -m unittest tests.test_browser               # 128 browser tests, needs Chrome
 python -m unittest tests.test_api                   # 7 live integration tests, hits both APIs
 ```
@@ -270,6 +270,7 @@ in a `.env` file (the app loads one via `python-dotenv`).
 | `NOMINATIM_USER_AGENT` | `RainAlert_App_v1_2026` | Identifies the app to Nominatim, whose usage policy asks callers to do so |
 | `GEOCODER_TIMEOUT` | `10` | Seconds to wait for a geocoding response |
 | `WEATHER_TIMEOUT` | `10` | Seconds to wait for a forecast response |
+| `WEATHER_CACHE_SECONDS` | `600` | How long the server keeps a forecast it fetched, per place and scale. `0` turns it off |
 | `SEVERITY_LOW_MAX` | `30` | Rain chance below which a day is banded *low* |
 | `SEVERITY_MODERATE_MAX` | `60` | Rain chance below which a day is banded *moderate* |
 | `UMBRELLA_THRESHOLD` | `50` | Rain chance at or above which the ☔ icon appears |

@@ -17,6 +17,34 @@ promises a forecast the service does not give.
 
 RELEASES = [
     {
+        "version": "1.1.4",
+        "date": "2026-10-29",
+        "name": "Fewer questions for the weather service",
+        "features": [
+            {
+                "title": "Forecasts are kept for ten minutes",
+                "text": "The forecast service limits how often one address "
+                        "may ask it for weather, and the host this site "
+                        "runs on shares that address with other apps, so "
+                        "at busy times the service refused and the page "
+                        "said it was unavailable. The site now keeps each "
+                        "forecast it fetched for ten minutes, per place and "
+                        "temperature scale, and asks again after that. "
+                        "Your browser still never keeps a forecast, and a "
+                        "failed answer is never kept, so a retry asks "
+                        "again.",
+            },
+            {
+                "title": "A gentler crawl",
+                "text": "The robots file now asks crawlers to wait ten "
+                        "seconds between requests and shuts out an SEO "
+                        "crawler that was fetching city pages one after "
+                        "another and bringing no readers, so the visitors "
+                        "get the allowance instead.",
+            },
+        ],
+    },
+    {
         "version": "1.1.3",
         "date": "2026-10-29",
         "name": "A fresh look at the sky",

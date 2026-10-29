@@ -42,7 +42,7 @@ HSTS on HTTPS, `X-Frame-Options`, `nosniff`, `Referrer-Policy` and
 - [x] Geocoding cache, explicit timeouts, configuration through environment variables
 - [x] City-local dates (`timezone=auto`) and English weekday names
 - [x] Temperature rounding fix (round half up)
-- [x] Offline unit tests (544), browser tests (128) and live API tests (7)
+- [x] Offline unit tests (555), browser tests (128) and live API tests (7)
 - [x] `app.py` split into the `rainalert` package, in layers (`domain`, `present`, `upstream`, `web`), and the tests into `tests/`, one file per module (see `refactor-plan.md`)
 - [x] Comprehensive `README.md` with screenshot, `CLAUDE.md` project notes
 - [x] API reference (`API.md`) and an OpenAPI 3.1 spec (`openapi.yaml`), with tests that keep them in step with the routes

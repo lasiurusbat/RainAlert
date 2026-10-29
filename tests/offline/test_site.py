@@ -340,6 +340,12 @@ class TestSearchEngineOptimisation(AppTestCase):
         self.assertIn("Disallow: /api/", body)
         self.assertIn("Disallow: /calendar.ics", body)
 
+    def test_the_robots_file_slows_the_crawl_and_shuts_out_semrush(self):
+        """Every city page is an upstream call the service rate-limits."""
+        body = self.client.get("/robots.txt").get_data(as_text=True)
+        self.assertIn("User-agent: SemrushBot\nDisallow: /\n", body)
+        self.assertIn("User-agent: *\nCrawl-delay: 10\nAllow: /", body)
+
     def test_the_sitemap_names_the_pages(self):
         response = self.client.get("/sitemap.xml")
         self.assertEqual(response.status_code, 200)

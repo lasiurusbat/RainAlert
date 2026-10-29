@@ -225,7 +225,9 @@ paths:
       description: |
         The alert poll and the calendar export are not pages, and fetching
         either one costs two upstream requests, so they are kept out of the
-        crawl. The sitemap says where the pages are.
+        crawl. Every city page is an upstream request too, so the crawl is
+        slowed with `Crawl-delay: 10` and SemrushBot is shut out. The sitemap
+        says where the pages are.
       responses:
         "200":
           description: The robots file.

@@ -26,9 +26,17 @@ def robots():
     The alert poll and the calendar export are not pages, and fetching them
     costs two upstream requests each, so they are kept out of the crawl. The
     sitemap says where the pages are.
+
+    Every city page is a forecast the app has to fetch from a rate-limited
+    service, so the crawl is slowed down, and SEO crawlers that bring the
+    site no readers are kept out altogether.
     """
     lines = [
+        "User-agent: SemrushBot",
+        "Disallow: /",
+        "",
         "User-agent: *",
+        "Crawl-delay: 10",
         "Allow: /",
         "Disallow: /api/",
         "Disallow: /calendar.ics",

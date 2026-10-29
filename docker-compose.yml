@@ -36,6 +36,7 @@ services:
       NOMINATIM_USER_AGENT: RainAlert_App_v1_2026
       GEOCODER_TIMEOUT: "10"
       WEATHER_TIMEOUT: "10"
+      WEATHER_CACHE_SECONDS: "600"
       # The site's own address, for the canonical links, the social card and
       # the sitemap. It defaults to the real address, so a container and a
       # local run agree; set SITE_URL in the .env file to change it.

@@ -215,3 +215,26 @@ class TestBuildInfo(AppTestCase):
         with mock.patch.object(config, "APP_VERSION", "0.8"):
             body = self.client.get("/").get_data(as_text=True)
         self.assertLess(body.index("OpenStreetMap"), body.index("Version 0.8"))
+
+
+class TestWeatherCacheSetting(unittest.TestCase):
+    """How long the server keeps a forecast: ten minutes unless told."""
+
+    def reload_with(self, value):
+        try:
+            with mock.patch.dict(os.environ, clear=False):
+                if value is None:
+                    os.environ.pop("WEATHER_CACHE_SECONDS", None)
+                else:
+                    os.environ["WEATHER_CACHE_SECONDS"] = value
+                importlib.reload(config)
+                return config.WEATHER_CACHE_SECONDS
+        finally:
+            importlib.reload(config)
+
+    def test_ten_minutes_is_the_default(self):
+        self.assertEqual(self.reload_with(None), 600)
+
+    def test_it_can_be_set_or_turned_off(self):
+        self.assertEqual(self.reload_with("120"), 120)
+        self.assertEqual(self.reload_with("0"), 0)

@@ -29,7 +29,7 @@ Serves on <http://127.0.0.1:5000>. `FLASK_DEBUG=1` enables the reloader and
 debugger.
 
 ```bash
-python -m unittest discover -s tests/offline -t .  # offline suite, 544 tests, no network
+python -m unittest discover -s tests/offline -t .  # offline suite, 555 tests, no network
 python -m unittest tests.test_browser               # browser suite, 128 tests, needs Chrome
 python -m unittest tests.test_api                   # live integration tests, hits both APIs
 ```
@@ -281,6 +281,19 @@ read timeout, which is short enough to fail against a healthy-but-slow
 Nominatim. `GEOCODER_TIMEOUT` and `WEATHER_TIMEOUT` (both default 10s) are
 read from the environment. `requests.get` has no default timeout, so always
 pass one.
+
+**The server keeps a forecast for ten minutes.** Open-Meteo's free tier limits
+requests per IP address and answers `HTTP 429` beyond it; on Render the egress
+IP is shared with other apps, and on 2026-10-29 every forecast on the live site
+failed that way. `fetch_payload()` in `rainalert/upstream/open_meteo.py` keeps
+a good answer for `WEATHER_CACHE_SECONDS` (default 600, `0` turns it off), keyed
+by coordinates and scale, so a crawler or a second visitor costs no upstream
+call. This is the server's own copy only: the browser and the service worker
+still never keep a forecast, and a failure or a broken answer is never stored,
+so a retry asks again. `tests/__init__.py` sets the variable to `0` for the
+suites, because they fake different forecasts for the same coordinates; the
+cache's own tests turn it on. `robots.txt` also sets `Crawl-delay: 10` and shuts
+out SemrushBot, since every crawled city page is an upstream call.
 
 **`timezone=auto` is deliberate.** Open-Meteo returns each date in the
 queried city's local time. A forecast for Tokyo is dated in Tokyo's days.

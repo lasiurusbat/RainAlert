@@ -22,6 +22,12 @@ load_dotenv()
 NOMINATIM_USER_AGENT = os.getenv("NOMINATIM_USER_AGENT", "RainAlert_App_v1_2026")
 GEOCODER_TIMEOUT = int(os.getenv("GEOCODER_TIMEOUT", "10"))
 WEATHER_TIMEOUT = int(os.getenv("WEATHER_TIMEOUT", "10"))
+# How long the server keeps a forecast it fetched, in seconds. Open-Meteo's
+# free tier limits requests per IP address, and on a shared host that limit is
+# shared with every other app there, so a page view, a crawler and the
+# notification poll for a city that was just fetched should cost nothing. 0
+# turns it off.
+WEATHER_CACHE_SECONDS = int(os.getenv("WEATHER_CACHE_SECONDS", "600"))
 
 # Rain severity bands, used to colour-code each day of the forecast. A day
 # under SEVERITY_LOW_MAX is unlikely to be wet, a day up to

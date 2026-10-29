@@ -5,7 +5,10 @@ current hour all come in the same call, in the city's own local time
 (``timezone=auto``). Do not convert those dates to the viewer's timezone.
 """
 
+import copy
 import logging
+import threading
+import time
 
 import requests
 
@@ -30,7 +33,63 @@ DAILY_FIELDS = ("precipitation_probability_max,temperature_2m_max,"
 HOURLY_FIELDS = "precipitation_probability"
 
 
+# The forecasts the server has fetched lately, by place and scale. The free
+# service limits requests per IP address and answers HTTP 429 beyond it, so a
+# forecast fetched a few minutes ago is reused rather than asked for again.
+# This is the server's own copy only: the browser and the service worker
+# still never keep a forecast. Only a good answer is stored, so a failure is
+# always retried.
+_cache = {}
+_cache_lock = threading.Lock()
+MAX_CACHED_FORECASTS = 512
+
+
+def clear_cache():
+    """Forget every stored forecast. The tests use it between cases."""
+    with _cache_lock:
+        _cache.clear()
+
+
+def _cached(key):
+    ttl = config.WEATHER_CACHE_SECONDS
+    if ttl <= 0:
+        return None
+    with _cache_lock:
+        entry = _cache.get(key)
+        if entry is None:
+            return None
+        stored_at, payload = entry
+        if time.monotonic() - stored_at >= ttl:
+            del _cache[key]
+            return None
+    return copy.deepcopy(payload)
+
+
+def _store(key, payload):
+    if config.WEATHER_CACHE_SECONDS <= 0:
+        return
+    with _cache_lock:
+        if len(_cache) >= MAX_CACHED_FORECASTS and key not in _cache:
+            # Dicts keep insertion order, so the first key is the oldest.
+            del _cache[next(iter(_cache))]
+        _cache[key] = (time.monotonic(), copy.deepcopy(payload))
+
+
 def fetch_payload(latitude, longitude, unit=None):
+    """The forecast service's answer, from the server's copy when it is fresh.
+
+    ``WEATHER_CACHE_SECONDS`` says how long a copy stays fresh. A failed or
+    broken answer is never kept, so the next request asks again.
+    """
+    key = (latitude, longitude, unit or config.DEFAULT_TEMPERATURE_UNIT)
+    payload = _cached(key)
+    if payload is None:
+        payload = _request_payload(latitude, longitude, unit)
+        _store(key, payload)
+    return payload
+
+
+def _request_payload(latitude, longitude, unit=None):
     """The forecast service's answer, as the JSON it sent.
 
     The daily and the hourly fields come from a single request: Open-Meteo
