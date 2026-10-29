@@ -130,6 +130,22 @@
                     <div class="hourly">
                         <div class="hourly-head">
                             <h2 class="hourly-title">{{ weather_data[0].hourly_title }}</h2>
+                            <div class="hourly-actions">
+                            <!-- Refresh is a link to this page's own address,
+                                 not a script: it works with no JavaScript, and
+                                 on a page a search form posted, where a reload
+                                 would ask to send the form again. -->
+                            <a class="refresh-link" href="{{ unit_links[unit] }}"
+                               title="Refresh the forecast" aria-label="Refresh the forecast">
+                                <svg class="refresh-icon" viewBox="0 0 16 16"
+                                     width="12" height="12" aria-hidden="true" focusable="false">
+                                    <g fill="none" stroke="currentColor" stroke-width="1.3"
+                                       stroke-linecap="round" stroke-linejoin="round">
+                                        <path d="M13.2 8A5.2 5.2 0 1 1 11.7 4.3"/>
+                                        <path d="M13.4 2.2v2.5h-2.5"/>
+                                    </g>
+                                </svg>
+                            </a>
                             <!-- The notification control. It asks the browser
                                  for permission and then polls the forecast
                                  while the tab is open. It stays hidden until
@@ -151,6 +167,7 @@
                                 </svg>
                                 <span class="notify-text">Notify me</span>
                             </button>
+                            </div>
                         </div>
                         <!-- One strip per day. The reader picks a day out of
                              the week below, and the graph shows that day -

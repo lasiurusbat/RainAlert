@@ -17,6 +17,31 @@ promises a forecast the service does not give.
 
 RELEASES = [
     {
+        "version": "1.1.3",
+        "date": "2026-10-29",
+        "name": "A fresh look at the sky",
+        "features": [
+            {
+                "title": "Refresh the forecast",
+                "text": "A small refresh icon now sits beside \"Notify me\" "
+                        "above the hourly strip. It loads the forecast "
+                        "again for the same city and the same temperature "
+                        "scale, so you can check for a change without "
+                        "searching again. It is a plain link, so it works "
+                        "without JavaScript too.",
+            },
+            {
+                "title": "Failures say why in the log",
+                "text": "When the weather or geocoding service cannot be "
+                        "reached, the site's log now records the reason "
+                        "along with the city, such as a rate limit or a "
+                        "timeout, so a fault can be found instead of "
+                        "guessed at. You still see only the plain "
+                        "\"unavailable right now\" message on the page.",
+            },
+        ],
+    },
+    {
         "version": "1.1.2",
         "date": "2026-10-23",
         "name": "Found by the search engines",

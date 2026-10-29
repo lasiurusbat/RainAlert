@@ -153,6 +153,20 @@ class TestHourlyStrip(AppTestCase):
         self.assertIn("hourly-strip", body)
         self.assertIn("Today, hour by hour", body)
 
+    def test_the_refresh_link_goes_to_the_city_s_own_address(self):
+        """It is a link, so it works with no script, and on a page a form
+        posted it leaves the POST rather than asking to send it again."""
+        body = self._body_for([0] * 24)
+        self.assertIn('class="refresh-link" href="/city/london?unit=celsius"', body)
+        self.assertIn('aria-label="Refresh the forecast"', body)
+
+    def test_the_refresh_link_keeps_the_chosen_unit(self):
+        payload = hourly_payload([0] * 24)
+        self.mock_get.return_value = FakeResponse(payload=payload)
+        body = self.client.post(
+            "/", data={"city": "London", "unit": "fahrenheit"}).get_data(as_text=True)
+        self.assertIn('class="refresh-link" href="/city/london?unit=fahrenheit"', body)
+
     def test_one_bar_per_hour(self):
         body = self._body_for([0] * 24)
         self.assertEqual(body.count('class="hour severity-'), 24)

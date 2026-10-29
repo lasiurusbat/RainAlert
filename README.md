@@ -127,7 +127,7 @@ Python 3.14.5.
 ## Running the tests
 
 ```bash
-python -m unittest discover -s tests/offline -t .  # 540 offline tests, no network required
+python -m unittest discover -s tests/offline -t .  # 544 offline tests, no network required
 python -m unittest tests.test_browser               # 128 browser tests, needs Chrome
 python -m unittest tests.test_api                   # 7 live integration tests, hits both APIs
 ```
@@ -534,8 +534,9 @@ addition, not a requirement.
 
 ## Notifications while the tab is open
 
-Next to the title of the hourly strip there is a small **Notify me**
-button. Turn it on and the page checks the forecast every half hour and
+Next to the title of the hourly strip there is a small refresh icon, which
+loads the forecast again for the same city and scale (a plain link, so it
+works without JavaScript), and beside it a small **Notify me** button. Turn it on and the page checks the forecast every half hour and
 raises a browser notification when there is something worth saying:
 
 - **Rain in the hour you are in.** "Rain likely right now — 80% chance of
@@ -1082,7 +1083,9 @@ Three distinct exceptions separate the failure modes that matter:
 
 The first two must stay separate. Collapsing them into one "not found" path
 means a network blip tells the user their city does not exist. Internal
-exception text is always logged, never rendered on the page.
+exception text is always logged with the city (`Forecast service unavailable
+for 'London': the forecast service returned HTTP 429`), never rendered on the
+page.
 
 ---
 

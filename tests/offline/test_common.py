@@ -10,6 +10,7 @@ import unittest
 from unittest import mock
 
 import requests
+from flask import Flask
 
 from rainalert.errors import CityNotFound, WeatherUnavailable, failure_for
 from rainalert.web import common
@@ -92,6 +93,25 @@ class TestReportFailure(unittest.TestCase):
         self.assertIn("unavailable", failure.page_message)
         self.assertTrue(failure.api_message)
         self.assertTrue(failure.log)
+
+    def test_the_log_says_why_the_forecast_failed(self):
+        """A bare "service unavailable" cannot tell a rate limit from an
+        outage; the exception's text is what can."""
+        app = Flask(__name__)
+        error = WeatherUnavailable("the forecast service returned HTTP 429")
+        with app.app_context(), self.assertLogs(app.logger, "WARNING") as logs:
+            common.report_failure(error, "London")
+        self.assertIn("Forecast service unavailable for 'London'",
+                      logs.output[0])
+        self.assertIn("returned HTTP 429", logs.output[0])
+
+    def test_the_reason_is_logged_and_never_shown(self):
+        app = Flask(__name__)
+        error = WeatherUnavailable("the forecast service returned HTTP 429")
+        with app.app_context(), self.assertLogs(app.logger, "WARNING"):
+            failure = common.report_failure(error, "London")
+        self.assertNotIn("429", failure.page_message)
+        self.assertNotIn("429", failure.api_message)
 
     def test_a_missing_city_is_not_a_broken_service(self):
         """The two are different failures, and they answer differently."""

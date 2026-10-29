@@ -733,6 +733,41 @@ button:focus-visible {
     min-height: 2.7em;
 }
 
+/* The refresh link and the notification button, side by side on the right of
+   the title. */
+.hourly-actions {
+    display: flex;
+    align-items: center;
+    flex: 0 0 auto;
+    gap: 0.35rem;
+}
+
+/* Refresh: an icon-only link, drawn like the notification button beside it
+   so the two read as one pair of controls. */
+.refresh-link {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.15rem 0.35rem;
+    color: var(--mist);
+    border: 1px solid var(--line-lit);
+    border-radius: 6px;
+    line-height: 1.3;
+}
+
+.refresh-link:hover,
+.refresh-link:focus-visible {
+    color: var(--paper);
+    border-color: var(--mist);
+}
+
+.refresh-link:focus-visible {
+    outline: none;
+}
+
+.refresh-icon {
+    display: block;
+}
+
 /* The notification control: a small, quiet button. It belongs next to the
    hourly title because the notification says the same thing the strip
    says, only in the background. */

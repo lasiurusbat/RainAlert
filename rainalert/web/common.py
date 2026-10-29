@@ -18,11 +18,13 @@ def report_failure(error, city):
 
     The messages and the status codes live in one table in
     ``rainalert/errors.py``, so the page, the alert poll and the calendar
-    export say the same thing about the same failure.
+    export say the same thing about the same failure. The exception's own
+    text - "the forecast service returned HTTP 429" - goes to the log with
+    the city, so the log says why; it is never shown to the reader.
     """
     failure = failure_for(error)
     if failure.log:
-        current_app.logger.warning(failure.log, city)
+        current_app.logger.warning(failure.log + ": %s", city, error)
     return failure
 
 
