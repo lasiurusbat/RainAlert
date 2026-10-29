@@ -17,6 +17,37 @@ promises a forecast the service does not give.
 
 RELEASES = [
     {
+        "version": "1.2.0",
+        "date": "2026-10-29",
+        "name": "A second weather service to ask",
+        "features": [
+            {
+                "title": "A backup when the first service says no",
+                "text": "The forecast service this site uses for free "
+                        "limits how many requests one address may make in "
+                        "a day, and the host the site runs on shares that "
+                        "address with other apps. On 29.10.2026 the whole "
+                        "day's allowance was gone and every forecast "
+                        "failed. When that happens, the site now asks a "
+                        "second service, OpenWeather, on an allowance of "
+                        "its own. The week and the hourly strip look the "
+                        "same; the forecast just comes from the other "
+                        "service, and the footer says so.",
+            },
+            {
+                "title": "What the backup does not know",
+                "text": "OpenWeather does not say how long the rain lasts, "
+                        "so that line is left out of a day's panel rather "
+                        "than guessed. It reports the hours only about a "
+                        "day ahead, so the hourly strip for later days "
+                        "says that hourly detail is not available. The "
+                        "hours of today that have already gone, or that "
+                        "it did not report, are shown as unknown, not as "
+                        "dry.",
+            },
+        ],
+    },
+    {
         "version": "1.1.5",
         "date": "2026-10-29",
         "name": "Saying why the weather service said no",

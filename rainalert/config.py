@@ -28,6 +28,11 @@ WEATHER_TIMEOUT = int(os.getenv("WEATHER_TIMEOUT", "10"))
 # notification poll for a city that was just fetched should cost nothing. 0
 # turns it off.
 WEATHER_CACHE_SECONDS = int(os.getenv("WEATHER_CACHE_SECONDS", "600"))
+# The second source of forecasts, used only when Open-Meteo refuses a request.
+# Empty means there is none. OpenWeather bills calls past its free thousand a
+# day, so the calls stop at OPENWEATHER_DAILY_LIMIT, kept under that.
+OPENWEATHER_API_KEY = os.getenv("OPENWEATHER_API_KEY", "").strip()
+OPENWEATHER_DAILY_LIMIT = int(os.getenv("OPENWEATHER_DAILY_LIMIT", "900"))
 
 # Rain severity bands, used to colour-code each day of the forecast. A day
 # under SEVERITY_LOW_MAX is unlikely to be wet, a day up to

@@ -44,6 +44,10 @@ services:
       # Optional donation link. Compose fills this in from the shell or from
       # the .env file next to this file; empty (the default) hides the link.
       DONATION_URL: ${DONATION_URL:-}
+      # The second source of forecasts, used only when Open-Meteo refuses a
+      # request. Empty (the default) means there is none.
+      OPENWEATHER_API_KEY: ${OPENWEATHER_API_KEY:-}
+      OPENWEATHER_DAILY_LIMIT: ${OPENWEATHER_DAILY_LIMIT:-900}
       # The app's own tunables, so a container can be tuned from the .env
       # file rather than by editing this one. The defaults are the app's own
       # (see rainalert/config.py), so a container and a local run agree.

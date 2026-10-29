@@ -15,6 +15,7 @@ import requests
 from rainalert import config
 from rainalert.domain.parse import parse_forecast
 from rainalert.errors import WeatherUnavailable
+from rainalert.upstream import openweather
 
 log = logging.getLogger(__name__)
 
@@ -79,12 +80,24 @@ def fetch_payload(latitude, longitude, unit=None):
     """The forecast service's answer, from the server's copy when it is fresh.
 
     ``WEATHER_CACHE_SECONDS`` says how long a copy stays fresh. A failed or
-    broken answer is never kept, so the next request asks again.
+    broken answer is never kept, so the next request asks again. When
+    Open-Meteo refuses and a second source is set up, the forecast comes from
+    that instead, and is kept the same way.
     """
     key = (latitude, longitude, unit or config.DEFAULT_TEMPERATURE_UNIT)
     payload = _cached(key)
     if payload is None:
-        payload = _request_payload(latitude, longitude, unit)
+        try:
+            payload = _request_payload(latitude, longitude, unit)
+        except WeatherUnavailable as exc:
+            # Open-Meteo has refused, usually because the address it counts
+            # requests against is used up for the day. The second source
+            # answers the page if there is one; if not, the refusal stands.
+            payload = openweather.fallback(latitude, longitude, unit)
+            if payload is None:
+                raise
+            log.warning("Open-Meteo unavailable (%s); the forecast is from "
+                        "OpenWeather", exc)
         _store(key, payload)
     return payload
 

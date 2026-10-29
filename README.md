@@ -127,7 +127,7 @@ Python 3.14.5.
 ## Running the tests
 
 ```bash
-python -m unittest discover -s tests/offline -t .  # 559 offline tests, no network required
+python -m unittest discover -s tests/offline -t .  # 594 offline tests, no network required
 python -m unittest tests.test_browser               # 128 browser tests, needs Chrome
 python -m unittest tests.test_api                   # 7 live integration tests, hits both APIs
 ```
@@ -271,6 +271,8 @@ in a `.env` file (the app loads one via `python-dotenv`).
 | `GEOCODER_TIMEOUT` | `10` | Seconds to wait for a geocoding response |
 | `WEATHER_TIMEOUT` | `10` | Seconds to wait for a forecast response |
 | `WEATHER_CACHE_SECONDS` | `600` | How long the server keeps a forecast it fetched, per place and scale. `0` turns it off |
+| `OPENWEATHER_API_KEY` | empty | An OpenWeather One Call 4.0 key. With one, a forecast Open-Meteo refuses (its free tier limits requests per IP address) is asked of OpenWeather instead; empty means no second source |
+| `OPENWEATHER_DAILY_LIMIT` | `900` | Most OpenWeather calls per UTC day. They are billed past the free thousand, so keep it under that |
 | `SEVERITY_LOW_MAX` | `30` | Rain chance below which a day is banded *low* |
 | `SEVERITY_MODERATE_MAX` | `60` | Rain chance below which a day is banded *moderate* |
 | `UMBRELLA_THRESHOLD` | `50` | Rain chance at or above which the ☔ icon appears |
@@ -749,7 +751,9 @@ features or promotions, you need one of Open-Meteo's paid plans first.
 
 **Credits are required and always shown.** The footer credits Open-Meteo
 (data under CC BY 4.0) and OpenStreetMap (place names come from Nominatim).
-Do not remove them: the Open-Meteo licence requires attribution.
+Do not remove them: the Open-Meteo licence requires attribution. While a
+second source is set up (`OPENWEATHER_API_KEY`), the footer credits OpenWeather
+as well.
 
 **Which build is answering is on the page too.** Under the credits, the
 footer says `Version 1.0 · build 1a2b3c4` on a release build, and
@@ -795,7 +799,8 @@ RainAlert/
 │   │   └── seo.py               # title, description, canonical link, structured data
 │   ├── upstream/
 │   │   ├── geocoding.py         # Nominatim, cached
-│   │   └── open_meteo.py        # Open-Meteo, one request per page
+│   │   ├── open_meteo.py        # Open-Meteo, one request per page, kept for ten minutes
+│   │   └── openweather.py       # OpenWeather, the second source when Open-Meteo refuses
 │   └── web/                     # Flask
 │       ├── __init__.py          # create_app()
 │       ├── pages.py             # the pages

@@ -85,6 +85,19 @@ removing it needs a redeploy of the service but no new image, because the
 image reads it at start-up. Remove the line, or leave it empty, to hide the
 donation link.
 
+`OPENWEATHER_API_KEY` is the second source of forecasts, used only when
+Open-Meteo refuses a request (its free tier limits requests per IP address, and
+Render's address is shared with other apps - on 2026-10-29 the whole day's
+allowance was gone and every forecast failed). It is a secret, so `render.yaml`
+declares it with `sync: false` and the value is entered in the service's
+Environment settings, then the service is redeployed (no new image). Get a key
+for OpenWeather's **One Call API 4.0** (the "One Call API" subscription; 4.0 is
+included only in it), and set the daily call limit in the OpenWeather account to
+1,000 or less: its page says 2,000 a day are set up by default once you
+subscribe, and calls beyond the free thousand are billed. A forecast from the
+fallback is **two calls** (the days and the hours), so the app's own guard,
+`OPENWEATHER_DAILY_LIMIT` (900), allows about 450 of them a day. Without the key the site behaves as before.
+
 `SITE_URL` (the site's own address, used for the canonical link, the social
 card, the sitemap and the structured data) defaults to
 `https://rainalert.live`. Set it explicitly in `render.yaml` if the service
@@ -426,5 +439,5 @@ and the forecast is right, and only the styles are old. The rule is
 - **The test counts drift.** The count appears in **four** documents —
   `CLAUDE.md`, `README.md`, `DEPLOY.md` and `implementation-plan.md` — and
   they are updated together, but a test added without updating all four
-  leaves them disagreeing. The suite has 559 offline tests, 128 browser
+  leaves them disagreeing. The suite has 594 offline tests, 128 browser
   tests and 7 live integration tests.

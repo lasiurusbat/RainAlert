@@ -28,6 +28,8 @@ def inject_site_info():
     """
     return {
         "donation_url": config.DONATION_URL,
+        # Whether the footer has to credit the second source as well.
+        "openweather_enabled": bool(config.OPENWEATHER_API_KEY),
         "app_version": config.APP_VERSION,
         "app_commit": config.APP_COMMIT,
     }

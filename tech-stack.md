@@ -282,6 +282,17 @@ through geopy.
 - **Data under the ODbL**; the footer credits the OpenStreetMap
   contributors, and there is a test that says so.
 
+### OpenWeather One Call 4.0 (the second source)
+
+Used only when Open-Meteo refuses a request, and only with
+`OPENWEATHER_API_KEY` set. The answer is translated into Open-Meteo's shape
+in `rainalert/upstream/openweather.py`, so nothing above it knows which
+service a forecast came from. 4.0 has an endpoint for each timeline
+(`/timeline/1day` and `/timeline/1h`, at most 10 and 20 records a call), so a
+forecast is two calls; the current hour comes from the clock and the offset
+every answer carries. Free to 1,000 calls a day, billed beyond it, so the app
+counts its calls and stops at `OPENWEATHER_DAILY_LIMIT`.
+
 ### Open-Meteo (CC BY 4.0)
 
 The forecast for a pair of coordinates.

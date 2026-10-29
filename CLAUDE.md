@@ -29,7 +29,7 @@ Serves on <http://127.0.0.1:5000>. `FLASK_DEBUG=1` enables the reloader and
 debugger.
 
 ```bash
-python -m unittest discover -s tests/offline -t .  # offline suite, 559 tests, no network
+python -m unittest discover -s tests/offline -t .  # offline suite, 594 tests, no network
 python -m unittest tests.test_browser               # browser suite, 128 tests, needs Chrome
 python -m unittest tests.test_api                   # live integration tests, hits both APIs
 ```
@@ -175,7 +175,8 @@ it is what makes a release a release.
 | `rainalert/present/forecast_view.py` | `Day`s and `Hour`s turned into the dicts the template renders |
 | `rainalert/present/seo.py` | Slugs, the title, the description, the canonical link, the structured data |
 | `rainalert/upstream/geocoding.py` | Nominatim: a city name to coordinates, cached |
-| `rainalert/upstream/open_meteo.py` | Open-Meteo: the one forecast request per page load |
+| `rainalert/upstream/open_meteo.py` | Open-Meteo: the one forecast request per page load, kept for `WEATHER_CACHE_SECONDS` |
+| `rainalert/upstream/openweather.py` | OpenWeather One Call 4.0: the second source (two calls: the days and the hours), used only when Open-Meteo refuses; translated into Open-Meteo's shape |
 | `rainalert/calendar_ics.py` | The iCalendar file, built with no HTTP in it |
 | `rainalert/web/__init__.py` | `create_app()`: the Flask app, its template globals and its routes |
 | `rainalert/web/pages.py` | `/`, `/city/<slug>`, `/cities`, `/release-notes` and `render_forecast_page()` |
@@ -294,6 +295,44 @@ so a retry asks again. `tests/__init__.py` sets the variable to `0` for the
 suites, because they fake different forecasts for the same coordinates; the
 cache's own tests turn it on. `robots.txt` also sets `Crawl-delay: 10` and shuts
 out SemrushBot, since every crawled city page is an upstream call.
+
+**A second source answers when Open-Meteo refuses.** The 429s of 2026-10-29 were
+`Daily API request limit exceeded` for Render's shared IP: an allowance the app
+cannot raise or protect, and a cache cannot help once the whole day is spent. So
+`fetch_payload()` catches the `WeatherUnavailable` from Open-Meteo and, when
+`OPENWEATHER_API_KEY` is set, asks `rainalert/upstream/openweather.py` instead.
+That module **translates OpenWeather's answer into Open-Meteo's shape**, so the
+validator, `parse_forecast()` and everything above never learn which service a
+forecast came from; keep it that way, and never mix the two within one page
+(the probabilities come from different models).
+
+- **It never raises.** `fallback()` returns `None` for every reason there can be
+  no second source (no key, the allowance spent, a refusal, a broken answer), and
+  `fetch_payload()` then re-raises Open-Meteo's own failure, so the log and the
+  503 are about the first source.
+- **A forecast is two calls**, because One Call 4.0 has an endpoint per timeline:
+  `/timeline/1day` (the week) and `/timeline/1h` (at most 20 hours from now). The
+  hours are an addition: if only they fail, the week still makes a page. The
+  current hour is not asked for; it is the clock plus the `timezone_offset` every
+  answer carries. Written from the docs page alone, never run against the real
+  API - the first real fallback is the first real test (the daily `dt`, `rain` and
+  `snow` fields in particular were not shown in its examples).
+- **The calls are counted** and stop at `OPENWEATHER_DAILY_LIMIT` (default 900, per
+  UTC day, in memory; the image runs one gunicorn worker). A forecast that does not
+  fit in what is left is not half made. OpenWeather bills calls
+  past its free thousand a day, so set the same cap in the OpenWeather account too.
+- **The key is in the query string, so nothing logs a URL or an exception's text** -
+  only the status, or the exception's class. A test holds this.
+- **What it cannot give is left unknown, not invented**: the hours of rain in a day
+  (`None`), a day's millimetres when the answer says nothing (`None`, not 0), the
+  hours of the day that are not reported (`None`, so the strip keeps its 24
+  columns), and the hourly strip for the days past the hours the call returned
+  ("Hourly detail is not available for this day.").
+- **The footer credits OpenWeather only while a key is set** (`openweather_enabled`
+  in `inject_site_info()`), so it never credits a source the site is not using. The
+  Open-Meteo and OpenStreetMap credits stay required.
+- **The answer is kept like any other** for `WEATHER_CACHE_SECONDS`, which is what
+  protects the small allowance.
 
 **`timezone=auto` is deliberate.** Open-Meteo returns each date in the
 queried city's local time. A forecast for Tokyo is dated in Tokyo's days.
