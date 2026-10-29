@@ -17,6 +17,24 @@ promises a forecast the service does not give.
 
 RELEASES = [
     {
+        "version": "1.1.5",
+        "date": "2026-10-29",
+        "name": "Saying why the weather service said no",
+        "features": [
+            {
+                "title": "The refusal is written down",
+                "text": "When the forecast service turns a request away, "
+                        "the site's log now records what the service said "
+                        "- which limit was reached, and how long it asks "
+                        "to wait - alongside the status. That tells a "
+                        "short burst from an address that has used up its "
+                        "allowance, which is what decides how the problem "
+                        "is fixed. The page you read still says only that "
+                        "the service is unavailable.",
+            },
+        ],
+    },
+    {
         "version": "1.1.4",
         "date": "2026-10-29",
         "name": "Fewer questions for the weather service",

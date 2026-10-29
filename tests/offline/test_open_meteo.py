@@ -310,3 +310,36 @@ class TestForecastCache(unittest.TestCase):
             self.fetch(get, lat=3, lon=3)   # evicts (1, 1)
             self.fetch(get, lat=1, lon=1)   # fetched again
         self.assertEqual(get.call_count, 4)
+
+
+class TestRefusalIsLogged(unittest.TestCase):
+    """A 429 says which limit was hit; the log has to carry that."""
+
+    def refuse(self, response):
+        with mock.patch.object(requests, "get", return_value=response):
+            with self.assertRaises(WeatherUnavailable) as caught:
+                open_meteo.fetch_payload(51.5, -0.12)
+        return str(caught.exception)
+
+    def test_the_services_reason_is_in_the_message(self):
+        reason = "Hourly API request limit exceeded. Please try again in the next hour."
+        text = self.refuse(FakeResponse(
+            payload={"error": True, "reason": reason}, status_code=429))
+        self.assertIn("HTTP 429", text)
+        self.assertIn(reason, text)
+
+    def test_the_wait_it_asks_for_is_in_the_message(self):
+        response = FakeResponse(status_code=429)
+        response.headers = {"Retry-After": "3600"}
+        self.assertIn("retry after 3600", self.refuse(response))
+
+    def test_an_answer_with_no_json_still_reports_the_status(self):
+        response = FakeResponse(status_code=502)
+        response.json = mock.Mock(side_effect=ValueError("no json"))
+        self.assertEqual(self.refuse(response),
+                         "the forecast service returned HTTP 502")
+
+    def test_a_long_reason_is_cut_short(self):
+        text = self.refuse(FakeResponse(
+            payload={"reason": "x" * 5000}, status_code=429))
+        self.assertLess(len(text), 300)

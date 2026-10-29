@@ -116,7 +116,9 @@ def _request_payload(latitude, longitude, unit=None):
         raise WeatherUnavailable("the forecast request timed out") from exc
     except requests.HTTPError as exc:
         status = exc.response.status_code if exc.response is not None else "?"
-        raise WeatherUnavailable(f"the forecast service returned HTTP {status}") from exc
+        raise WeatherUnavailable(
+            f"the forecast service returned HTTP {status}"
+            f"{_refusal(exc.response)}") from exc
     except requests.RequestException as exc:
         raise WeatherUnavailable(f"the forecast request failed: {exc}") from exc
 
@@ -127,6 +129,29 @@ def _request_payload(latitude, longitude, unit=None):
     if not _is_a_forecast(payload):
         raise WeatherUnavailable("the forecast response was not a forecast")
     return payload
+
+
+def _refusal(response):
+    """What the service said when it refused, for the log: its own reason
+    ("Hourly API request limit exceeded") and how long it asks to wait.
+
+    The reason says which limit was hit - per minute, hour or day - which
+    is the difference between a burst and an address that is used up.
+    """
+    if response is None:
+        return ""
+    parts = []
+    try:
+        body = response.json()
+    except ValueError:
+        body = None
+    reason = body.get("reason") if isinstance(body, dict) else None
+    if isinstance(reason, str) and reason:
+        parts.append(f"reason: {reason[:200]}")
+    retry_after = (getattr(response, "headers", None) or {}).get("Retry-After")
+    if retry_after:
+        parts.append(f"retry after {str(retry_after)[:20]}")
+    return f" ({'; '.join(parts)})" if parts else ""
 
 
 # The fields the daily block carries, and the shape each one has to have.
