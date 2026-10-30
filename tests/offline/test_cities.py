@@ -6,9 +6,15 @@ address back into a name. A mistake in the list is a wrong page at a
 right-looking address, so the list is checked here rather than trusted.
 """
 
+import re
 import unittest
+from unittest import mock
 
-from rainalert.data.cities import (CITY_NAMES, CITY_SLUGS, CURATED_CITIES)
+from markupsafe import escape
+
+from rainalert.data.cities import (CITY_NAMES, CITY_NOTES, CITY_SLUGS,
+                                    CURATED_CITIES)
+from rainalert.upstream import geocoding
 from tests.fixtures import AppTestCase
 
 
@@ -186,3 +192,42 @@ class TestTheIndexPage(AppTestCase):
         self.assertIn(
             '<link rel="canonical" href="https://rainalert.live/cities">',
             body)
+
+
+class TestTheNotes(unittest.TestCase):
+    """Every city on the list says something about its own weather."""
+
+    def test_every_curated_city_has_a_note(self):
+        for slug, name in CURATED_CITIES:
+            with self.subTest(city=name):
+                self.assertTrue(CITY_NOTES.get(slug, "").strip())
+
+    def test_no_note_is_for_a_city_off_the_list(self):
+        slugs = {slug for slug, _ in CURATED_CITIES}
+        self.assertEqual(set(CITY_NOTES), slugs)
+
+    def test_no_note_carries_a_figure(self):
+        """A note is words about the usual weather; a number in it would be
+        a claim the page cannot back up for every week."""
+        for slug, note in CITY_NOTES.items():
+            with self.subTest(city=slug):
+                self.assertFalse(re.search(r"\d", note))
+
+
+class TestTheNoteOnThePage(AppTestCase):
+    """The note is on a city's own page, under its forecast, and nowhere else."""
+
+    def test_a_city_page_carries_its_note(self):
+        body = self.client.get("/city/london").get_data(as_text=True)
+        note = escape(CITY_NOTES["london"])
+        self.assertIn(f'<p class="city-note">{note}</p>', body)
+
+    def test_the_start_page_carries_no_note(self):
+        body = self.client.get("/").get_data(as_text=True)
+        self.assertNotIn("city-note", body)
+
+    def test_a_missing_city_carries_no_note(self):
+        with mock.patch.object(geocoding.geolocator, "geocode", return_value=None):
+            response = self.client.get("/city/nowhereville")
+        self.assertEqual(response.status_code, 404)
+        self.assertNotIn("city-note", response.get_data(as_text=True))

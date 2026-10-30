@@ -8,6 +8,7 @@ from flask import (Response, current_app, make_response, render_template,
                    send_from_directory)
 
 from rainalert.data.cities import CURATED_CITIES
+from rainalert.data.releases import RELEASES
 from rainalert.present.seo import (NOT_FOUND_DESCRIPTION, NOT_FOUND_TITLE,
                                    canonical_url, page_meta)
 
@@ -51,25 +52,28 @@ def sitemap():
     """The pages of the site, for the crawlers.
 
     The home page and the city index are here, and so is every city that
-    has a page of its own. The dates are today's, because the forecast on
-    every one of these pages changes.
+    has a page of its own. A city's forecast changes every day, so its date
+    is today's. The other pages change only when a release ships, so they
+    carry the date of the last release: a date that moved every day would
+    tell a crawler nothing.
     """
     today = date.today().isoformat()
+    released = RELEASES[0]["date"]
     urls = [
-        ("/", "1.0", "daily"),
-        ("/cities", "0.8", "weekly"),
-        ("/release-notes", "0.4", "monthly"),
+        ("/", "1.0", "daily", released),
+        ("/cities", "0.8", "weekly", released),
+        ("/release-notes", "0.4", "monthly", released),
     ]
     for slug, _name in CURATED_CITIES:
-        urls.append((f"/city/{slug}", "0.7", "daily"))
+        urls.append((f"/city/{slug}", "0.7", "daily", today))
 
     body = ['<?xml version="1.0" encoding="UTF-8"?>',
             '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">']
-    for path, priority, changefreq in urls:
+    for path, priority, changefreq, modified in urls:
         body.extend([
             "  <url>",
             f"    <loc>{canonical_url(path)}</loc>",
-            f"    <lastmod>{today}</lastmod>",
+            f"    <lastmod>{modified}</lastmod>",
             f"    <changefreq>{changefreq}</changefreq>",
             f"    <priority>{priority}</priority>",
             "  </url>",

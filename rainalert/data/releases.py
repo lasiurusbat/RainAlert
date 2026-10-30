@@ -17,6 +17,40 @@ promises a forecast the service does not give.
 
 RELEASES = [
     {
+        "version": "1.2.3",
+        "date": "2026-10-30",
+        "name": "A word about each city",
+        "features": [
+            {
+                "title": "A line about each city's weather",
+                "text": "Under the city's name, every city with a page of "
+                        "its own now says a little about its usual weather: "
+                        "when the rain tends to fall, and in what kind of "
+                        "spell. It describes the climate in general, not "
+                        "this week's forecast, which is still the answer "
+                        "below it. To make room, the spacing around the "
+                        "forecast is a little tighter.",
+            },
+            {
+                "title": "Eight more cities",
+                "text": "Sarajevo, Mostar, Banja Luka, Beograd, Zagreb, "
+                        "Ljubljana, Podgorica and Dubrovnik now have pages "
+                        "of their own and are listed in the city index, "
+                        "which brings it to 100 cities. Any other city can "
+                        "still be searched for.",
+            },
+            {
+                "title": "Better for search engines and shared links",
+                "text": "The site's map for search engines now dates the "
+                        "start page, the city index and these release notes "
+                        "by the last release, instead of by the day they "
+                        "were asked for. A link to an address that is not "
+                        "on the site now shows the same card as the rest "
+                        "of the site when it is shared.",
+            },
+        ],
+    },
+    {
         "version": "1.2.2",
         "date": "2026-10-30",
         "name": "A footer that fits a phone",

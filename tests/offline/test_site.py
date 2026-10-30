@@ -4,10 +4,11 @@ crawl rules and the page metadata.
 
 import json
 import re
+from datetime import date
 
 import requests
 
-from rainalert.data import cities
+from rainalert.data import cities, releases
 from tests.fixtures import AppTestCase, FORECAST_PAYLOAD
 
 
@@ -359,6 +360,35 @@ class TestSearchEngineOptimisation(AppTestCase):
         for slug, _name in cities.CURATED_CITIES:
             self.assertIn(f"<loc>https://rainalert.live/city/{slug}</loc>",
                           body)
+
+    def test_the_static_pages_are_dated_by_the_last_release(self):
+        """They change only when a release ships, so they carry its date,
+        not the date of the request that fetched the sitemap."""
+        body = self.body("/sitemap.xml")
+        released = releases.RELEASES[0]["date"]
+        for path in ("/", "/cities", "/release-notes"):
+            block = re.search(
+                rf"<loc>https://rainalert\.live{re.escape(path)}</loc>\s*"
+                r"<lastmod>([^<]+)</lastmod>", body)
+            self.assertIsNotNone(block, path)
+            self.assertEqual(block.group(1), released, path)
+
+    def test_a_city_is_dated_today(self):
+        """A city's forecast changes every day, so its date is today's."""
+        body = self.body("/sitemap.xml")
+        today = date.today().isoformat()
+        block = re.search(r"<loc>https://rainalert\.live/city/london</loc>\s*"
+                          r"<lastmod>([^<]+)</lastmod>", body)
+        self.assertEqual(block.group(1), today)
+
+    def test_a_missing_address_shares_the_same_social_card(self):
+        """The site's own 404 page carries the card like every other page, so a
+        shared link to a missing address does not show a bare title."""
+        response = self.client.get("/no-such-page")
+        self.assertEqual(response.status_code, 404)
+        body = response.get_data(as_text=True)
+        self.assertIn('<meta property="og:image:width"', body)
+        self.assertIn('<meta name="twitter:card" content="summary_large_image">', body)
 
     def test_the_endpoints_that_are_not_pages_are_kept_out_of_the_results(self):
         for path in ("/api/alert?city=London", "/calendar.ics?city=London"):

@@ -127,7 +127,7 @@ Python 3.14.5.
 ## Running the tests
 
 ```bash
-python -m unittest discover -s tests/offline -t .  # 595 offline tests, no network required
+python -m unittest discover -s tests/offline -t .  # 604 offline tests, no network required
 python -m unittest tests.test_browser               # 128 browser tests, needs Chrome
 python -m unittest tests.test_api                   # 7 live integration tests, hits both APIs
 ```
@@ -697,7 +697,7 @@ Five things make it work:
   `X-Robots-Tag: noindex` and are kept out of `robots.txt`. Crawling them
   would cost two upstream requests each and put a JSON blob in the results.
 
-The list of cities on `/cities` is curated and short — 92 of them, in
+The list of cities on `/cities` is curated and short — 100 of them, in
 `rainalert/data/cities.py`. The geocoder is rate-limited and every address in the list is a
 forecast the app has to fetch, so a short list of the cities people actually
 look up is better than an endless index.

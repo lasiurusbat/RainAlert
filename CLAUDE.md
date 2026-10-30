@@ -28,7 +28,7 @@ Serves on <http://127.0.0.1:5000>. `FLASK_DEBUG=1` enables the reloader and
 debugger.
 
 ```bash
-python -m unittest discover -s tests/offline -t .  # offline suite, 595 tests, no network
+python -m unittest discover -s tests/offline -t .  # offline suite, 604 tests, no network
 python -m unittest tests.test_browser               # browser suite, 128 tests, needs Chrome
 python -m unittest tests.test_api                   # live integration tests, hits both APIs
 ```
@@ -533,7 +533,7 @@ carries a canonical link to it, and everything else is sent there.
   from it would be `/city/paris-france` for `/city/paris`. The reader asked
   for a city, so the city is what the address carries.
 - **A curated city keeps the slug the list gives it.** `rainalert/data/cities.py` is the
-  list of the 92 cities that have a page; `CITY_NAMES` and `CITY_SLUGS` map
+  list of the 100 cities that have a page; `CITY_NAMES` and `CITY_SLUGS` map
   between the names and the slugs, so the address in the city index, the
   address in the sitemap and the address the page claims for itself are the
   same one. Only "Washington, D.C." does not slug to its own name, and the

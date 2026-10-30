@@ -11,7 +11,7 @@ from flask import (abort, make_response, redirect, render_template,
 
 from rainalert import config
 from rainalert.calendar_ics import calendar_days
-from rainalert.data.cities import CURATED_CITIES
+from rainalert.data.cities import CITY_NOTES, CURATED_CITIES
 from rainalert.data.releases import RELEASES
 from rainalert.domain.alerts import forecast_headline, tab_alert
 from rainalert.errors import FORECAST_ERRORS, MISSING_CITY
@@ -162,6 +162,13 @@ def render_forecast_page(city, unit, city_page=False, error=None, status=200):
     # the site itself, and so is a page that is not there.
     canonical_path = "/" if missing else (city_path(city) if city else "/")
 
+    # The note about a city's climate, under its forecast. Only a city's own
+    # page that has a forecast on it has one: an error or the start page has
+    # no city to describe.
+    city_note = None
+    if weather_data and canonical_path.startswith("/city/"):
+        city_note = CITY_NOTES.get(canonical_path[len("/city/"):])
+
     # The name the page calls the city by: the city on its own, without the
     # state and the country the geocoder adds.
     page_city = short_city_name(city, display_city)
@@ -192,6 +199,7 @@ def render_forecast_page(city, unit, city_page=False, error=None, status=200):
         unit=unit,
         temperature_units=config.TEMPERATURE_UNITS,
         unit_links=unit_links,
+        city_note=city_note,
         robots=robots,
         **page_meta(title, description, canonical_path, page_city,
                     weather_data),

@@ -152,7 +152,7 @@ page:
 
 - Check `https://rainalert.live/robots.txt` and
   `https://rainalert.live/sitemap.xml` in a browser. The sitemap should
-  list the start page, `/cities` and one `/city/<slug>` for each of the 92
+  list the start page, `/cities` and one `/city/<slug>` for each of the 100
   curated cities.
 - Open `https://rainalert.live/city/london` and look at the page source: the
   canonical link, the Open Graph image and the JSON-LD should all point at
@@ -439,5 +439,5 @@ and the forecast is right, and only the styles are old. The rule is
 - **The test counts drift.** The count appears in **four** documents —
   `CLAUDE.md`, `README.md`, `DEPLOY.md` and `implementation-plan.md` — and
   they are updated together, but a test added without updating all four
-  leaves them disagreeing. The suite has 595 offline tests, 128 browser
+  leaves them disagreeing. The suite has 604 offline tests, 128 browser
   tests and 7 live integration tests.

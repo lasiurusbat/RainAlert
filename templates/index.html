@@ -123,6 +123,7 @@
                             </div>
                         </div>
                     </div>
+                    {% if city_note %}<p class="city-note">{{ city_note }}</p>{% endif %}
                     {% if headline %}
                     <p class="headline severity-{{ headline.severity }}">{{ headline.text }}</p>
                     {% endif %}
