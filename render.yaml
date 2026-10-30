@@ -23,7 +23,7 @@ services:
     runtime: image
     plan: free
     image:
-      url: docker.io/lasiurusbat/rainalert:1.2.0
+      url: docker.io/lasiurusbat/rainalert:1.2.1
     # The image is deployed by the hook, which names the tag it wants. Left
     # on, auto-deploy would redeploy the service with the image stored above
     # - the fallback tag - as soon as any image was pushed, which is how an

@@ -314,9 +314,11 @@ forecast came from; keep it that way, and never mix the two within one page
   `/timeline/1day` (the week) and `/timeline/1h` (at most 20 hours from now). The
   hours are an addition: if only they fail, the week still makes a page. The
   current hour is not asked for; it is the clock plus the `timezone_offset` every
-  answer carries. Written from the docs page alone, never run against the real
-  API - the first real fallback is the first real test (the daily `dt`, `rain` and
-  `snow` fields in particular were not shown in its examples).
+  answer carries. Written from the docs page alone, then run against the real
+  API on 2026-10-30 (both calls, London): the days and the hours parse as expected.
+  The daily `rain` came as a plain number, not the docs' `{"1h": mm/h}` rate, and the
+  daily `snow` has not been seen; `/timeline/1day` hung for a while that morning and
+  then recovered.
 - **The calls are counted** and stop at `OPENWEATHER_DAILY_LIMIT` (default 900, per
   UTC day, in memory; the image runs one gunicorn worker). A forecast that does not
   fit in what is left is not half made. OpenWeather bills calls

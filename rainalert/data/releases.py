@@ -17,6 +17,32 @@ promises a forecast the service does not give.
 
 RELEASES = [
     {
+        "version": "1.2.1",
+        "date": "2026-10-30",
+        "name": "The backup, tried for real",
+        "features": [
+            {
+                "title": "The second service has answered a real request",
+                "text": "The backup forecast from OpenWeather, added in "
+                        "1.2.0, had been written from its documentation "
+                        "alone. It has now been run against the live "
+                        "service: the week, the chances and the "
+                        "temperatures, and the hours of today and "
+                        "tomorrow, all came back as the site expects. "
+                        "Nothing on the page changes with this release.",
+            },
+            {
+                "title": "Rain in millimetres is left out rather than guessed",
+                "text": "OpenWeather's documentation describes the amount "
+                        "of rain as a rate per hour, which a day's total "
+                        "cannot be made from. In practice it sent a plain "
+                        "figure for at least one day. A figure is shown "
+                        "as millimetres; anything else is left out of the "
+                        "day's panel rather than worked out from a rate.",
+            },
+        ],
+    },
+    {
         "version": "1.2.0",
         "date": "2026-10-29",
         "name": "A second weather service to ask",
