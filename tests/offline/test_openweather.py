@@ -137,6 +137,15 @@ class TestTranslation(KeyedTestCase):
         # third: that is not the same as dry.
         self.assertEqual(amounts[:3], [3.2, 1.1, None])
 
+    def test_the_documented_rate_shape_leaves_the_amount_unknown(self):
+        # The docs give rain and snow as {"1h": mm/h}, a rate and not a
+        # day's total, so no millimetres are invented from it.
+        body = days_body()
+        body["data"][0]["rain"] = {"1h": 0.5}
+        body["data"][1]["snow"] = {"1h": 0.2}
+        payload = openweather._translate(body, None)
+        self.assertEqual(payload["daily"]["precipitation_sum"][:2], [None, None])
+
     def test_how_long_the_rain_lasts_is_not_invented(self):
         daily = self.translate()["daily"]
         self.assertEqual(set(daily["precipitation_hours"]), {None})

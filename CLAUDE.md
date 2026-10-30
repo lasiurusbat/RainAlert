@@ -29,7 +29,7 @@ Serves on <http://127.0.0.1:5000>. `FLASK_DEBUG=1` enables the reloader and
 debugger.
 
 ```bash
-python -m unittest discover -s tests/offline -t .  # offline suite, 594 tests, no network
+python -m unittest discover -s tests/offline -t .  # offline suite, 595 tests, no network
 python -m unittest tests.test_browser               # browser suite, 128 tests, needs Chrome
 python -m unittest tests.test_api                   # live integration tests, hits both APIs
 ```
