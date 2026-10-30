@@ -19,10 +19,10 @@ State of the world, checked on 2026-10-23:
   "Known limits" below.
 - **The Docker Hub repository `lasiurusbat/rainalert` is public and has
   five tags**: `1.0` (pushed 2026-10-22), then `1.0.1`, `1.1.0`, `1.1.1` and `1.1.2`
-  (pushed 2026-10-23), then later releases up to `1.2.1`, the image the live service is running.
-  `render.yaml` points at `1.2.2`, which is in preparation.
+  (pushed 2026-10-23), then later releases up to `1.2.2`, the image the live service is running.
+  `render.yaml` points at `1.2.2` too.
 - **The app answers at <https://rainalert.live/>** — the real page, on the
-  `1.2.1` image, with the footer reading "Version 1.2.1".
+  `1.2.2` image, with the footer reading "Version 1.2.2".
   `http://` redirects to `https://`.
 - **The donation link is live.** The service runs with `DONATION_URL` set,
   so "Buy me a coffee" appears under the search and in the footer of every
@@ -427,7 +427,7 @@ and the forecast is right, and only the styles are old. The rule is
   stored default image, so after a release also update the tag in
   `render.yaml` and the service settings so a later manual redeploy or
   restart does not bring back an older version. `render.yaml` is at `1.2.2`
-  now (the release in preparation; the live service runs `1.2.1`); the service's own
+  now, which is what the live service runs; the service's own
   **Settings → Image** field is worth a look after a release, because a
   manual "Deploy latest reference" pulls the *stored* tag.
 - **The smoke test reads the version, not just the page.** The footer of

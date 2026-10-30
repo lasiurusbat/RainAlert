@@ -9,9 +9,9 @@ Both APIs are free, keyless, and need no signup. There is no database and no
 user account system.
 
 **The app is deployed and live at <https://rainalert.live/>.** It runs
-from the `1.2.1` image on Docker Hub, on a Render service, and the domain
+from the `1.2.2` image on Docker Hub, on a Render service, and the domain
 is attached to it: `http://` redirects to `https://`, and every route
-answers. Release tags have been cut from `v1.0` on 2026-10-22 up to `v1.2.1` on 2026-10-30 — the images they built were pushed, and the
+answers. Release tags have been cut from `v1.0` on 2026-10-22 up to `v1.2.2` on 2026-10-30 — the images they built were pushed, and the
 workflow's deploy hook has deployed them. It
 also runs locally, from `python app.py` or `docker compose up`. `DEPLOY.md`
 is the runbook, and the "Still to do" section below is the list of what is
@@ -77,7 +77,7 @@ gets none of them, because the offline suite asserts the app's own defaults.
   `gcp-us-west1-1.origin.onrender.com`, resolving to `216.24.57.16` and
   `216.24.57.18`. `http://` answers `301` to `https://`; `https://` answers
   `200` with the real page, and a city's page with a live forecast from
-  both upstreams. The footer reads "Version 1.2.1" and the commit the `v1.2.1` tag
+  both upstreams. The footer reads "Version 1.2.2" and the commit the `v1.2.2` tag
   points at, so the build that is answering is
   the build that was released.
 - **Every route answers on the live domain**: the start page, `/cities`,
@@ -87,9 +87,9 @@ gets none of them, because the offline suite asserts the app's own defaults.
   link is its own address under `https://rainalert.live/`, which is what
   `SITE_URL` says.
 - **The image is on Docker Hub.** `lasiurusbat/rainalert` has a tag per release, from
-  `1.0` (2026-10-22) to `1.2.1` (2026-10-30). The last one is what the live
+  `1.0` (2026-10-22) to `1.2.2` (2026-10-30). The last one is what the live
   service is running; `1.1.2` added the Google and Bing ownership files and
-  `1.1.1` the security headers. `1.2.2` (the footer) is prepared, not tagged.
+  `1.1.1` the security headers. `1.2.2` is the footer redesign.
 - **The donation link is on the live page.** The service runs with
   `DONATION_URL` set, so "Buy me a coffee" appears under the search and
   in the footer of every page. The variable is read at start-up, so
@@ -735,7 +735,7 @@ search form carries the unit in a hidden field, so a new search keeps the
 scale the reader chose.
 
 **Deployment runs a prebuilt image, not a build.** `render.yaml` uses
-`runtime: image` pointing at `docker.io/lasiurusbat/rainalert:1.2.1` (the release that is
+`runtime: image` pointing at `docker.io/lasiurusbat/rainalert:1.2.2` (the release that is
 live; when the next release is in preparation, the file may name a tag that
 is not pushed yet, and a manual deploy before then has no such image to
 pull). Render

@@ -13,7 +13,7 @@ Both APIs are free, keyless, and need no signup. There is no database, no
 user accounts, and nothing to configure before running it.
 
 > **The site is live at <https://rainalert.live/>** — the real page, on the
-> `1.2.1` image, with every route answering. The app also runs locally —
+> `1.2.2` image, with every route answering. The app also runs locally —
 > see [Quick start](#quick-start). `DEPLOY.md` is the runbook.
 
 ![Rain Alert showing a 7-day forecast for London](docs/screenshot.png)
@@ -1114,7 +1114,7 @@ page.
 too, from `python app.py` or `docker compose up`. Checked on 2026-10-23:
 
 - The app answers at <https://rainalert.live/> — the real page, on the
-  `1.2.1` image, with the footer reading "Version 1.2.1".
+  `1.2.2` image, with the footer reading "Version 1.2.2".
   `http://` redirects to `https://`, and every route answers.
 - Four release tags have been cut (`v1.0`, `v1.0.1`, `v1.1.0`, `v1.1.1` and
   `v1.1.2`, all on `main`), so the push-and-deploy half of the CI workflow has
@@ -1125,8 +1125,8 @@ too, from `python app.py` or `docker compose up`. Checked on 2026-10-23:
   secret was not set). The later ones were green on their first attempt, and
   a release is one `git tag`.
 - The Docker Hub repository `lasiurusbat/rainalert` is public and has
-  tags from `1.0` to `1.2.1`, the last being the one the live
-  service is running. `render.yaml` names `1.2.2`, the release in preparation.
+  tags from `1.0` to `1.2.2`, the last being the one the live
+  service is running. `render.yaml` names `1.2.2` too.
 - The Render service is named `rainalert` and answers at
   <https://rainalert-1-0.onrender.com> as well as on the domain; an older
   stub service that used to hold the name has been deleted.
