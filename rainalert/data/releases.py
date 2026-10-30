@@ -17,6 +17,40 @@ promises a forecast the service does not give.
 
 RELEASES = [
     {
+        "version": "1.2.2",
+        "date": "2026-10-30",
+        "name": "A footer that fits a phone",
+        "features": [
+            {
+                "title": "The footer is tidier",
+                "text": "The notice, the data credits and the build are now "
+                        "three short lines, centred, on a plate of dark "
+                        "glass that lets the photograph show through while "
+                        "the words stay readable. The two credits are set "
+                        "apart by a thin line, and when the backup weather "
+                        "service is in use, the sentence about it starts a "
+                        "row of its own instead of leaving one word alone.",
+            },
+            {
+                "title": "Easier to use on a phone",
+                "text": "On a narrow screen each credit has a line to "
+                        "itself, and \"Release notes\" and \"Install app\" "
+                        "are large enough to touch without missing. The "
+                        "footer keeps clear of the home bar on an iPhone, "
+                        "and its links show a clear outline when reached "
+                        "with a keyboard.",
+            },
+            {
+                "title": "A clearer way to say thanks",
+                "text": "\"Buy me a coffee\" is now a small light button, "
+                        "the one bright shape in the footer, so it is found "
+                        "without being pushed. It is still a single link to "
+                        "a one-off donation, and the credits to Open-Meteo "
+                        "and OpenStreetMap are unchanged.",
+            },
+        ],
+    },
+    {
         "version": "1.2.1",
         "date": "2026-10-30",
         "name": "The backup, tried for real",

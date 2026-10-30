@@ -9,10 +9,9 @@ Both APIs are free, keyless, and need no signup. There is no database and no
 user account system.
 
 **The app is deployed and live at <https://rainalert.live/>.** It runs
-from the `1.1.2` image on Docker Hub, on a Render service, and the domain
+from the `1.2.1` image on Docker Hub, on a Render service, and the domain
 is attached to it: `http://` redirects to `https://`, and every route
-answers. Five release tags have been cut — `v1.0` on 2026-10-22,
-`v1.0.1`, `v1.1.0`, `v1.1.1` and `v1.1.2` on 2026-10-23 — the images they built were pushed, and the
+answers. Release tags have been cut from `v1.0` on 2026-10-22 up to `v1.2.1` on 2026-10-30 — the images they built were pushed, and the
 workflow's deploy hook has deployed them. It
 also runs locally, from `python app.py` or `docker compose up`. `DEPLOY.md`
 is the runbook, and the "Still to do" section below is the list of what is
@@ -78,7 +77,7 @@ gets none of them, because the offline suite asserts the app's own defaults.
   `gcp-us-west1-1.origin.onrender.com`, resolving to `216.24.57.16` and
   `216.24.57.18`. `http://` answers `301` to `https://`; `https://` answers
   `200` with the real page, and a city's page with a live forecast from
-  both upstreams. The footer reads "Version 1.1.2" and the commit the `v1.1.2` tag
+  both upstreams. The footer reads "Version 1.2.1" and the commit the `v1.2.1` tag
   points at, so the build that is answering is
   the build that was released.
 - **Every route answers on the live domain**: the start page, `/cities`,
@@ -87,10 +86,10 @@ gets none of them, because the offline suite asserts the app's own defaults.
   a `404` for an address that is not on the site. Each page's canonical
   link is its own address under `https://rainalert.live/`, which is what
   `SITE_URL` says.
-- **The image is on Docker Hub.** `lasiurusbat/rainalert` has five tags:
-  `1.0`, pushed on 2026-10-22, `1.0.1`, `1.1.0`, `1.1.1` and `1.1.2`, pushed on
-  2026-10-23. The last one is what the live service is running, and it
-  added the Google and Bing ownership files; `1.1.1` added the security headers.
+- **The image is on Docker Hub.** `lasiurusbat/rainalert` has a tag per release, from
+  `1.0` (2026-10-22) to `1.2.1` (2026-10-30). The last one is what the live
+  service is running; `1.1.2` added the Google and Bing ownership files and
+  `1.1.1` the security headers. `1.2.2` (the footer) is prepared, not tagged.
 - **The donation link is on the live page.** The service runs with
   `DONATION_URL` set, so "Buy me a coffee" appears under the search and
   in the footer of every page. The variable is read at start-up, so
@@ -658,6 +657,18 @@ tag in `render.yaml`.
 - **There is no amber on it.** The lamp means rain on the forecast page,
   and a colour that means one thing on one page must not mean nothing on
   the next. The release notes are set in paper and mist only.
+- **The footer is three tiers on its own plate.** The notice with the
+  donation link, the credits and the build line are centred on a measure of
+  about 40em, on a translucent dark plate (`backdrop-filter` blur, hairline
+  edge) that keeps the white type readable over the photograph; it replaced
+  a radial shadow (`.copyright::before`) that looked bad, so do not put one
+  back. "Buy me a coffee" (`.coffee-link`) is a filled paper chip - paper,
+  never amber, because the lamp means rain. Each credit is a `.credit` that
+  wraps whole, and the OpenWeather clause after the comma is
+  `.credit-fallback`, always on its own row, so no word is left alone. Below
+  560px each credit takes a line and the build line's links are about 44px
+  touch targets. Keep `href` first in the donation anchor: a test finds it
+  by that prefix.
 - **The footer is one macro.** `templates/_footer.html` holds the footer,
   and every page calls `{{ site_footer() }}` — so the version, the credits
   and the release-notes link cannot drift apart between pages. The release
@@ -724,7 +735,7 @@ search form carries the unit in a hidden field, so a new search keeps the
 scale the reader chose.
 
 **Deployment runs a prebuilt image, not a build.** `render.yaml` uses
-`runtime: image` pointing at `docker.io/lasiurusbat/rainalert:1.1.2` (the release that is
+`runtime: image` pointing at `docker.io/lasiurusbat/rainalert:1.2.1` (the release that is
 live; when the next release is in preparation, the file may name a tag that
 is not pushed yet, and a manual deploy before then has no such image to
 pull). Render
@@ -1105,8 +1116,9 @@ because the app works without it.
   a failed *search* there is not a missing *page*, so it stays `200`.
 - **The page is a `.page` flex wrapper around `.container` plus the
   copyright footer.** `margin: auto` lives on `.page`, not on `.container`.
-  The footer sits over the background photo, so it is white text with a
-  shadow rather than inside the panel. Adding vertical space to the panel
+  The footer sits over the background photo, so it is white text on a
+  plate of its own (translucent dark, blurred, hairline edge) rather than
+  inside the panel. Adding vertical space to the panel
   or footer can push the document past `100vh` and reintroduce a scrollbar
   on a standard desktop view — measure `scrollHeight - clientHeight` after
   changing it.

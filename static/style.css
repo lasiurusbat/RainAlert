@@ -1245,23 +1245,6 @@ button:focus-visible {
     text-shadow: 0 0 2px rgba(0, 0, 0, 0.9), 0 1px 6px rgba(0, 0, 0, 0.8);
 }
 
-/* The photograph under the footer is mid-grey with bright reflections in the
-   wet road, and white type on it blended into it. A soft dark haze behind
-   the footer lines - a fade, not a box - takes the brightness out of the
-   photograph where the words are. It is absolutely positioned, so it costs
-   the panel no height, and it sits behind the text (`isolation` keeps it
-   inside the footer's own stacking context). It stays inside the footer's
-   width: a haze that hangs out sideways makes a narrow page scroll. */
-.copyright::before {
-    content: '';
-    position: absolute;
-    inset: -0.9rem 0;
-    z-index: -1;
-    pointer-events: none;
-    background: radial-gradient(ellipse farthest-side at center,
-        rgba(8, 12, 15, 0.8) 0%, rgba(8, 12, 15, 0.6) 65%, rgba(8, 12, 15, 0) 100%);
-}
-
 .copyright a {
     color: inherit;
     text-decoration: underline;
@@ -1272,21 +1255,121 @@ button:focus-visible {
     text-decoration-thickness: 2px;
 }
 
-/* The data credits (Open-Meteo requires attribution) are a second line
-   under the copyright notice. */
-.credits {
-    display: block;
-    margin-top: 0.15rem;
-    font-size: 0.8rem;
+/* The footer is three quiet tiers on a measure of about 40em, so no line is
+   longer than a reader can follow: the notice, the credits, the build.
+   Everything is centred, because the page above it is. */
+.copyright {
+    box-sizing: border-box;
+    width: fit-content;
+    max-width: min(40em, calc(100% - 1.5rem));
+    margin-inline: auto;
+    padding: 0.4rem 1rem;
+    line-height: 1.5;
 }
 
-/* Which build this is, under the credits. It is the same size as the
-   copyright line above it: it answers "which version is this?", and that
-   is a line of the footer, not a caption. */
-.build-info {
+/* The photograph under the footer is mid-grey with bright reflections in the
+   wet road, and white type on it blended into it. The footer therefore sits
+   on a small plate of its own - the same dark glass as the panel above it,
+   with a hairline edge - instead of a fade behind the words. It is the
+   plate's own background, so it costs no extra element, and the blur takes
+   the sharp reflections out of the photograph where the words are. */
+.copyright {
+    background: rgba(13, 18, 22, 0.55);
+    border: 1px solid rgba(233, 239, 242, 0.12);
+    border-radius: 12px;
+    -webkit-backdrop-filter: blur(8px);
+    backdrop-filter: blur(8px);
+}
+
+.legal {
+    margin-right: 0.4rem;
+}
+
+/* The donation link is the one thing here a reader may want to act on, so
+   it is set as a small filled chip rather than as one more underlined
+   word: asphalt type on paper, the only light shape in the footer. Paper,
+   never amber: the lamp means rain. */
+.copyright .coffee-link {
+    display: inline-block;
+    padding: 0 0.7rem;
+    border: 1px solid var(--paper);
+    border-radius: 999px;
+    background: var(--paper);
+    color: var(--asphalt);
+    font-weight: 600;
+    text-shadow: none;
+    text-decoration: none;
+    white-space: nowrap;
+    line-height: 1.45;
+}
+
+.copyright .coffee-link:hover,
+.copyright .coffee-link:focus-visible {
+    background: #ffffff;
+    border-color: #ffffff;
+    text-decoration: none;
+}
+
+.copyright a:focus-visible,
+.install-link:focus-visible {
+    outline: 2px solid #ffffff;
+    outline-offset: 2px;
+    border-radius: 3px;
+}
+
+/* The data credits (Open-Meteo requires attribution) are the second tier.
+   They are slightly smaller and a shade softer than the notice, and a
+   hairline sits between the two credits instead of a typed dot. */
+.credits {
     display: block;
-    margin-top: 0.15rem;
-    font-size: 0.8rem;
+    margin-top: 0.3rem;
+    font-size: 0.75rem;
+    color: #dbe4e9;
+}
+
+.credit {
+    display: inline-block;
+    vertical-align: top;
+}
+
+/* What comes after the comma - "or OpenWeather when Open-Meteo is
+   unavailable" - always starts its own row, so the sentence never leaves one
+   word alone on a line. */
+.credit-fallback {
+    display: block;
+}
+
+.credit + .credit::before {
+    content: '';
+    display: inline-block;
+    width: 1px;
+    height: 0.8em;
+    margin: 0 0.6rem;
+    vertical-align: -0.05em;
+    background: rgba(255, 255, 255, 0.4);
+}
+
+/* Which build this is, the third tier. It answers "which version is this?",
+   so it stays on the page, but it is the quietest line. The items are a
+   flex row so the links get a comfortable touch target without making the
+   line any taller on a desktop. */
+.build-info {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    margin-top: 0.3rem;
+    font-size: 0.75rem;
+    color: #dbe4e9;
+}
+
+.install-offer {
+    display: inline-flex;
+    align-items: center;
+}
+
+.install-offer[hidden] {
+    display: none;
 }
 
 /* The release notes link, after the build. The separator is a pipe rather
@@ -1294,7 +1377,8 @@ button:focus-visible {
    which build is answering, the other is a page to read. The link itself
    is styled like every other link in the footer. */
 .build-sep {
-    margin: 0 0.35rem;
+    margin: 0 0.5rem;
+    opacity: 0.6;
 }
 
 /* The install link, after the release notes. A button in the markup because
@@ -1574,6 +1658,44 @@ button:focus-visible {
 
     .hour-value {
         font-size: 0.47rem;
+    }
+
+    /* The footer: the notice and the chip stack, each credit gets its own
+       line with no hairline, and the links in the build line grow to a
+       touch target of about 44px without a visible box. */
+    .copyright {
+        margin-bottom: env(safe-area-inset-bottom, 0px);
+    }
+
+    .legal {
+        display: block;
+        margin: 0 0 0.4rem;
+    }
+
+    .copyright .coffee-link {
+        padding: 0.45rem 1rem;
+    }
+
+    .credit {
+        display: block;
+    }
+
+    .credit + .credit {
+        margin-top: 0.2rem;
+    }
+
+    .credit + .credit::before {
+        display: none;
+    }
+
+    .build-info {
+        margin-top: 0.2rem;
+    }
+
+    .release-link,
+    .install-link {
+        display: inline-block;
+        padding: 0.7rem 0.35rem;
     }
 }
 

@@ -13,7 +13,7 @@ Both APIs are free, keyless, and need no signup. There is no database, no
 user accounts, and nothing to configure before running it.
 
 > **The site is live at <https://rainalert.live/>** — the real page, on the
-> `1.1.2` image, with every route answering. The app also runs locally —
+> `1.2.1` image, with every route answering. The app also runs locally —
 > see [Quick start](#quick-start). `DEPLOY.md` is the runbook.
 
 ![Rain Alert showing a 7-day forecast for London](docs/screenshot.png)
@@ -753,7 +753,20 @@ features or promotions, you need one of Open-Meteo's paid plans first.
 (data under CC BY 4.0) and OpenStreetMap (place names come from Nominatim).
 Do not remove them: the Open-Meteo licence requires attribution. While a
 second source is set up (`OPENWEATHER_API_KEY`), the footer credits OpenWeather
-as well.
+as well. When the backup is named, the sentence about it ("or OpenWeather when
+Open-Meteo is unavailable") starts a row of its own, so it never leaves a single
+word alone on a line.
+
+**The footer is three short tiers on a plate of its own.** The notice (with the
+donation link), the data credits and the build line are centred on a measure of
+about 40em, on a translucent dark plate with a blur and a hairline edge. The
+plate keeps the white type readable over the photograph's bright road
+reflections, and replaces an earlier radial shadow. "Buy me a coffee" is a small
+filled paper-white button, the one light shape in the footer; it is paper, never
+amber, because the lamp means rain. Below 560px each credit takes a line, the
+links in the build line grow to a touch target of about 44px, and the footer
+clears the iPhone home bar. Any change to `style.css` needs `CACHE_VERSION` in
+`static/service-worker.js` bumped.
 
 **Which build is answering is on the page too.** Under the credits, the
 footer says `Version 1.0 · build 1a2b3c4` on a release build, and
@@ -1101,7 +1114,7 @@ page.
 too, from `python app.py` or `docker compose up`. Checked on 2026-10-23:
 
 - The app answers at <https://rainalert.live/> — the real page, on the
-  `1.1.2` image, with the footer reading "Version 1.1.2".
+  `1.2.1` image, with the footer reading "Version 1.2.1".
   `http://` redirects to `https://`, and every route answers.
 - Four release tags have been cut (`v1.0`, `v1.0.1`, `v1.1.0`, `v1.1.1` and
   `v1.1.2`, all on `main`), so the push-and-deploy half of the CI workflow has
@@ -1112,8 +1125,8 @@ too, from `python app.py` or `docker compose up`. Checked on 2026-10-23:
   secret was not set). The later ones were green on their first attempt, and
   a release is one `git tag`.
 - The Docker Hub repository `lasiurusbat/rainalert` is public and has
-  tags `1.0`, `1.0.1`, `1.1.0`, `1.1.1` and `1.1.2`, the last being the one the live
-  service is running. `render.yaml` names `1.1.2` too.
+  tags from `1.0` to `1.2.1`, the last being the one the live
+  service is running. `render.yaml` names `1.2.2`, the release in preparation.
 - The Render service is named `rainalert` and answers at
   <https://rainalert-1-0.onrender.com> as well as on the domain; an older
   stub service that used to hold the name has been deleted.
