@@ -196,9 +196,10 @@ def _translate_unchecked(days_body, hours_body):
         lows.append(record["temp"]["min"])
         # Rain and snow are millimetres of water either way. A day that
         # reports neither has not said it is dry, so its amount is unknown.
-        # The documented shape is {"1h": mm/h}, a rate: a day's total cannot
-        # be made from it, so it is not a number here and the amount stays
-        # unknown rather than invented.
+        # The docs give {"1h": mm/h}, a rate, but the real daily answer
+        # (checked 2026-10-30) sent a plain number. A number is taken as
+        # millimetres; an object is a rate, a day's total cannot be made from
+        # it, so the amount stays unknown rather than invented.
         rain, snow = _number(record.get("rain")), _number(record.get("snow"))
         amounts.append(None if rain is None and snow is None
                        else round((rain or 0) + (snow or 0), 1))

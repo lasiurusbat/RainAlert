@@ -139,7 +139,8 @@ class TestTranslation(KeyedTestCase):
 
     def test_the_documented_rate_shape_leaves_the_amount_unknown(self):
         # The docs give rain and snow as {"1h": mm/h}, a rate and not a
-        # day's total, so no millimetres are invented from it.
+        # day's total, so no millimetres are invented from it. (The real
+        # daily answer sent a plain number, which the test above covers.)
         body = days_body()
         body["data"][0]["rain"] = {"1h": 0.5}
         body["data"][1]["snow"] = {"1h": 0.2}
