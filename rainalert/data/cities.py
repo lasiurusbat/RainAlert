@@ -129,6 +129,53 @@ CURATED_CITIES = (
 CITY_NAMES = {name.lower(): slug for slug, name in CURATED_CITIES}
 CITY_SLUGS = {slug: name for slug, name in CURATED_CITIES}
 
+# Other names for a city on the list. A city has one address, so a second
+# name for the same place is sent to the listed city's address rather than
+# getting a page of its own: "Frankfurt am Main" is the city "Frankfurt", and
+# "Belgrade" is "Beograd". The key is the name as ``alias_key()`` writes it:
+# lower case, no accents, the words separated by single spaces - so "Zürich"
+# and "zurich" are the same key, and an accented spelling needs no entry.
+# Only names that are not a spelling of the listed one need an entry.
+CITY_ALIASES = {
+    "athina": "athens",
+    "peking": "beijing",
+    "belgrade": "beograd",
+    "bruxelles": "brussels",
+    "brussel": "brussels",
+    "bucuresti": "bucharest",
+    "kaapstad": "cape-town",
+    "kobenhavn": "copenhagen",
+    "new delhi": "delhi",
+    "frankfurt am main": "frankfurt",
+    "geneve": "geneva",
+    "genf": "geneva",
+    "helsingfors": "helsinki",
+    "ha noi": "hanoi",
+    "hongkong": "hong-kong",
+    "joburg": "johannesburg",
+    "lisboa": "lisbon",
+    "mexico df": "mexico-city",
+    "ciudad de mexico": "mexico-city",
+    "cdmx": "mexico-city",
+    "milano": "milan",
+    "bombay": "mumbai",
+    "munchen": "munich",
+    "muenchen": "munich",
+    "nyc": "new-york",
+    "new york city": "new-york",
+    "praha": "prague",
+    "rio": "rio-de-janeiro",
+    "roma": "rome",
+    "santiago de chile": "santiago",
+    "tel aviv yafo": "tel-aviv",
+    "wien": "vienna",
+    "warszawa": "warsaw",
+    "washington d c": "washington-dc",
+    "banjaluka": "banja-luka",
+    "sarajewo": "sarajevo",
+    "zuerich": "zurich",
+}
+
 # One short, general sentence about each city's climate, shown under its
 # forecast. Every city's page has the same forecast in the same form, so
 # this is what makes one city's page different from the next, for a reader

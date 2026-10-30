@@ -17,6 +17,30 @@ promises a forecast the service does not give.
 
 RELEASES = [
     {
+        "version": "1.2.4",
+        "date": "2026-10-30",
+        "name": "One city, one page",
+        "features": [
+            {
+                "title": "Other names for a city find the same page",
+                "text": "A city that is known by another name now goes to "
+                        "its own page instead of getting a second one. "
+                        "\"Frankfurt am Main\" finds Frankfurt, \"Wien\" "
+                        "finds Vienna, \"Belgrade\" finds Beograd, "
+                        "\"Sarajewo\" finds Sarajevo, and so on for 33 "
+                        "other names. The line about the city's weather "
+                        "is on the page they land on.",
+            },
+            {
+                "title": "Accents and capitals do not matter",
+                "text": "\"München\", \"munchen\" and \"MUNCHEN\" are "
+                        "the same search, and so are \"București\" and "
+                        "\"Bucuresti\". For the cities in the index, a name with "
+                        "its accents left off finds the same page.",
+            },
+        ],
+    },
+    {
         "version": "1.2.3",
         "date": "2026-10-30",
         "name": "A word about each city",

@@ -12,7 +12,7 @@ import re
 import unicodedata
 
 from rainalert import config
-from rainalert.data.cities import CITY_NAMES, CITY_SLUGS
+from rainalert.data.cities import CITY_ALIASES, CITY_NAMES, CITY_SLUGS
 
 
 # The title says "Rain tomorrow" and not the day's date: a tab title is
@@ -42,6 +42,17 @@ def city_slug(value):
     text = unicodedata.normalize("NFKD", str(value or ""))
     text = "".join(char for char in text if not unicodedata.combining(char))
     return re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-")[:60]
+
+
+def alias_key(value):
+    """The form of a name an alias is looked up by: "Frankfurt am Main" ->
+    "frankfurt am main", "București" -> "bucuresti".
+
+    It is the slug with its dashes turned back into spaces, so an alias is
+    matched whatever the case, the accents or the punctuation of the name
+    that was typed.
+    """
+    return city_slug(value).replace("-", " ")
 
 
 def city_from_slug(slug):
@@ -84,7 +95,7 @@ def city_path(city_name):
     gets a slug of its own.
     """
     name = str(city_name or "").strip()
-    slug = CITY_NAMES.get(name.lower())
+    slug = CITY_NAMES.get(name.lower()) or CITY_ALIASES.get(alias_key(name))
     if not slug:
         slug = city_slug(name)
     if not slug:
@@ -106,6 +117,8 @@ def short_city_name(city, display_city=None):
     name = str(city or "").strip()
     if name.lower() in CITY_NAMES:
         return name
+    if alias_key(name) in CITY_ALIASES:
+        return CITY_SLUGS[CITY_ALIASES[alias_key(name)]]
     if display_city:
         first = str(display_city).split(",")[0].strip()
         if first:

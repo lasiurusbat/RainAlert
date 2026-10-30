@@ -12,8 +12,9 @@ from unittest import mock
 
 from markupsafe import escape
 
-from rainalert.data.cities import (CITY_NAMES, CITY_NOTES, CITY_SLUGS,
-                                    CURATED_CITIES)
+from rainalert.data.cities import (CITY_ALIASES, CITY_NAMES, CITY_NOTES,
+                                    CITY_SLUGS, CURATED_CITIES)
+from rainalert.present.seo import alias_key
 from rainalert.upstream import geocoding
 from tests.fixtures import AppTestCase
 
@@ -231,3 +232,73 @@ class TestTheNoteOnThePage(AppTestCase):
             response = self.client.get("/city/nowhereville")
         self.assertEqual(response.status_code, 404)
         self.assertNotIn("city-note", response.get_data(as_text=True))
+
+
+class TestAliases(unittest.TestCase):
+    """A second name for a listed city is that city, not a new page."""
+
+    def test_every_alias_points_at_a_listed_city(self):
+        for alias, slug in CITY_ALIASES.items():
+            with self.subTest(alias=alias):
+                self.assertIn(slug, CITY_SLUGS)
+
+    def test_an_alias_is_not_also_a_listed_name(self):
+        for alias in CITY_ALIASES:
+            with self.subTest(alias=alias):
+                self.assertNotIn(alias, CITY_NAMES)
+
+    def test_every_alias_is_written_the_way_it_is_looked_up(self):
+        for alias in CITY_ALIASES:
+            with self.subTest(alias=alias):
+                self.assertEqual(alias_key(alias), alias)
+
+    def test_no_alias_is_the_address_of_a_listed_city(self):
+        """An alias that is also a listed slug would be a page twice."""
+        for alias in CITY_ALIASES:
+            with self.subTest(alias=alias):
+                self.assertNotIn(alias.replace(" ", "-"), CITY_SLUGS)
+
+    def test_an_accent_or_a_capital_makes_no_difference(self):
+        self.assertEqual(alias_key("București"), "bucuresti")
+        self.assertEqual(alias_key("Frankfurt am Main"), "frankfurt am main")
+        self.assertEqual(alias_key("Washington, D.C."), "washington d c")
+
+
+class TestAliasesOnThePages(AppTestCase):
+    def test_the_longer_address_goes_to_the_listed_one(self):
+        response = self.client.get("/city/frankfurt-am-main")
+        self.assertEqual(response.status_code, 301)
+        self.assertEqual(response.headers["Location"], "/city/frankfurt")
+
+    def test_a_search_for_the_longer_name_goes_to_the_listed_address(self):
+        response = self.client.get("/?city=Frankfurt am Main")
+        self.assertEqual(response.status_code, 301)
+        self.assertEqual(response.headers["Location"], "/city/frankfurt")
+
+    def test_every_alias_goes_to_its_listed_city(self):
+        for alias, slug in CITY_ALIASES.items():
+            with self.subTest(alias=alias):
+                response = self.client.get("/city/" + alias.replace(" ", "-"))
+                self.assertEqual(response.status_code, 301)
+                self.assertEqual(response.headers["Location"], f"/city/{slug}")
+
+    def test_every_alias_searched_for_goes_to_its_listed_city(self):
+        for alias, slug in CITY_ALIASES.items():
+            with self.subTest(alias=alias):
+                response = self.client.get("/", query_string={"city": alias})
+                self.assertEqual(response.status_code, 301)
+                self.assertEqual(response.headers["Location"], f"/city/{slug}")
+
+    def test_an_accented_name_finds_its_alias(self):
+        response = self.client.get("/", query_string={"city": "București"})
+        self.assertEqual(response.headers["Location"], "/city/bucharest")
+
+    def test_a_posted_search_shows_the_note_at_the_listed_address(self):
+        body = self.client.post(
+            "/", data={"city": "Frankfurt am Main"}).get_data(as_text=True)
+        self.assertIn('<link rel="canonical" href="https://rainalert.live/city/frankfurt">', body)
+        self.assertIn(escape(CITY_NOTES["frankfurt"]), body)
+
+    def test_the_alias_has_no_page_in_the_sitemap(self):
+        body = self.client.get("/sitemap.xml").get_data(as_text=True)
+        self.assertNotIn("frankfurt-am-main", body)

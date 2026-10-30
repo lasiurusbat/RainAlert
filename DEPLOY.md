@@ -439,5 +439,5 @@ and the forecast is right, and only the styles are old. The rule is
 - **The test counts drift.** The count appears in **four** documents —
   `CLAUDE.md`, `README.md`, `DEPLOY.md` and `implementation-plan.md` — and
   they are updated together, but a test added without updating all four
-  leaves them disagreeing. The suite has 604 offline tests, 128 browser
+  leaves them disagreeing. The suite has 616 offline tests, 128 browser
   tests and 7 live integration tests.

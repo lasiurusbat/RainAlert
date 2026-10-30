@@ -28,7 +28,7 @@ Serves on <http://127.0.0.1:5000>. `FLASK_DEBUG=1` enables the reloader and
 debugger.
 
 ```bash
-python -m unittest discover -s tests/offline -t .  # offline suite, 604 tests, no network
+python -m unittest discover -s tests/offline -t .  # offline suite, 616 tests, no network
 python -m unittest tests.test_browser               # browser suite, 128 tests, needs Chrome
 python -m unittest tests.test_api                   # live integration tests, hits both APIs
 ```
@@ -538,6 +538,15 @@ carries a canonical link to it, and everything else is sent there.
   address in the sitemap and the address the page claims for itself are the
   same one. Only "Washington, D.C." does not slug to its own name, and the
   map handles it.
+  **A second name for a listed city is an alias, not a page.** `CITY_ALIASES`
+  in the same file maps another name for a listed city ("frankfurt am main",
+  "belgrade", "wien") to the listed slug, and `city_path()` uses it, so
+  `/city/frankfurt-am-main` and a search for "Belgrade" are sent with a `301`
+  to `/city/frankfurt` and `/city/beograd`. The key is written by
+  `alias_key()` - lower case, no accents, words split by single spaces - so
+  "München" and "munchen" are one entry and an accented spelling needs none.
+  An alias must not be the listed city's own slug (a test holds it). Without
+  aliases a second name got a second address and no note.
 - **`GET /?city=X` answers `301`.** The redirect is worked out before the
   forecast is fetched, so the extra hop asks the server for no more than a
   header. A `POST` renders the page where it is and points its canonical
