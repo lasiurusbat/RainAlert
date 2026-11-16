@@ -12,7 +12,7 @@
 # exactly right.
 
 # --- Build stage --------------------------------------------------------------
-FROM python:3.14-slim AS builder
+FROM python:3.15-slim AS builder
 
 ENV PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1
@@ -25,7 +25,7 @@ RUN pip wheel --wheel-dir /wheels -r requirements.txt
 
 
 # --- Runtime stage ------------------------------------------------------------
-FROM python:3.14-slim AS runtime
+FROM python:3.15-slim AS runtime
 
 # The container's clock is UTC, on purpose. The forecast's dates and hours
 # come from the API in the queried city's own time, so the container's
